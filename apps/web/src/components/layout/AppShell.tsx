@@ -9,7 +9,7 @@ export function AppShell() {
     <div className="flex h-full bg-slate-50 text-slate-900">
       <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white p-4 md:flex">
         <Link to="/app" className="mb-6 inline-flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-sky-600" />
+          <img src="/favicon.svg" alt="OPAA" className="h-8 w-8" />
           <div className="leading-tight">
             <div className="text-sm font-semibold">OPAA</div>
             <div className="text-xs text-slate-500">Satisfação & CRM</div>

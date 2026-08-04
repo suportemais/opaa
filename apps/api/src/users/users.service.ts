@@ -46,4 +46,14 @@ export class UsersService {
       },
     });
   }
+
+  findManyByEmail(email: string) {
+    const emailNormalized = normalizeEmail(email);
+    return this.prisma.user.findMany({
+      where: { emailNormalized },
+      include: {
+        tenant: { select: { id: true, tradeName: true, legalName: true } },
+      },
+    });
+  }
 }

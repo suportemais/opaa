@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import { ApiError } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { setAccessToken, setTenantId } from '../lib/auth-store';
 
+type TenantOption = { tenantId: string; tradeName?: string | null; legalName?: string | null };
+
 export function LoginPage() {
   const navigate = useNavigate();
-  const [tenantId, setTenantIdInput] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [tenantOptions, setTenantOptions] = useState<TenantOption[] | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,13 +25,26 @@ export function LoginPage() {
     try {
       const result = await apiFetch<{ accessToken: string; tenantId: string; userId: string }>('/auth/login', {
         method: 'POST',
-        json: { tenantId, email, password },
+        json:
+          tenantOptions && selectedTenantId
+            ? { tenantId: selectedTenantId, email, password }
+            : { email, password },
       });
       setAccessToken(result.accessToken);
       setTenantId(result.tenantId);
       navigate('/app');
     } catch (err) {
-      setError('Não foi possível autenticar. Verifique tenant, e-mail e senha.');
+      if (err instanceof ApiError) {
+        const body = err.body as any;
+        const message = body?.message ?? body;
+        if (err.status === 409 && message?.code === 'multiple_tenants' && Array.isArray(message?.tenants)) {
+          setTenantOptions(message.tenants);
+          setSelectedTenantId(message.tenants?.[0]?.tenantId ?? '');
+          setError('Selecione a empresa para continuar.');
+          return;
+        }
+      }
+      setError('Não foi possível autenticar. Verifique e-mail e senha.');
     } finally {
       setLoading(false);
     }
@@ -37,17 +54,29 @@ export function LoginPage() {
     <div className="flex h-full items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-sky-600" />
+          <img src="/favicon.svg" alt="OPAA" className="mx-auto mb-3 h-10 w-10" />
           <div className="text-lg font-semibold text-slate-900">Entrar</div>
-          <div className="text-sm text-slate-600">Acesse o painel do seu tenant</div>
+          <div className="text-sm text-slate-600">Acesse o painel</div>
         </div>
 
         <Card>
           <form className="flex flex-col gap-3" onSubmit={onSubmit}>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Tenant ID</div>
-              <Input value={tenantId} onChange={(e) => setTenantIdInput(e.target.value)} placeholder="UUID do tenant" />
-            </div>
+            {tenantOptions && (
+              <div>
+                <div className="mb-1 text-sm font-medium text-slate-700">Empresa</div>
+                <select
+                  value={selectedTenantId}
+                  onChange={(e) => setSelectedTenantId(e.target.value)}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                >
+                  {tenantOptions.map((t) => (
+                    <option key={t.tenantId} value={t.tenantId}>
+                      {t.tradeName ?? t.legalName ?? t.tenantId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
               <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@empresa.com" />
@@ -72,4 +101,3 @@ export function LoginPage() {
     </div>
   );
 }
-

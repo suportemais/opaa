@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import argon2 from 'argon2';
@@ -51,24 +51,82 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  async login(params: { tenantId: string; email: string; password: string; req?: Request }) {
-    const user = await this.users.findByEmailInTenant(params.tenantId, params.email);
-    if (!user || user.status !== 'active') {
-      throw new UnauthorizedException();
-    }
+  async login(params: { tenantId?: string; email: string; password: string; req?: Request }) {
+    if (params.tenantId) {
+      const user = await this.users.findByEmailInTenant(params.tenantId, params.email);
+      if (!user || user.status !== 'active') {
+        throw new UnauthorizedException();
+      }
 
-    const ok = await argon2.verify(user.passwordHash, params.password);
-    if (!ok) {
+      const ok = await argon2.verify(user.passwordHash, params.password);
+      if (!ok) {
+        await this.audit.log({
+          tenantId: user.tenantId,
+          actorType: 'system',
+          action: 'auth.login_failed',
+          entity: 'User',
+          entityId: user.id,
+          req: params.req,
+        });
+        throw new UnauthorizedException();
+      }
+
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
       await this.audit.log({
         tenantId: user.tenantId,
-        actorType: 'system',
-        action: 'auth.login_failed',
+        actorType: 'user',
+        actorUserId: user.id,
+        action: 'auth.login',
         entity: 'User',
         entityId: user.id,
         req: params.req,
       });
+
+      const tokens = await this.issueTokens({ userId: user.id, tenantId: user.tenantId });
+      return { userId: user.id, tenantId: user.tenantId, ...tokens };
+    }
+
+    const candidates = await this.users.findManyByEmail(params.email);
+    const activeCandidates = candidates.filter((u) => u.status === 'active');
+
+    const matches: typeof activeCandidates = [];
+    for (const candidate of activeCandidates) {
+      if (await argon2.verify(candidate.passwordHash, params.password)) {
+        matches.push(candidate);
+      }
+    }
+
+    if (matches.length === 0) {
+      if (activeCandidates.length === 1) {
+        const user = activeCandidates[0];
+        await this.audit.log({
+          tenantId: user.tenantId,
+          actorType: 'system',
+          action: 'auth.login_failed',
+          entity: 'User',
+          entityId: user.id,
+          req: params.req,
+        });
+      }
       throw new UnauthorizedException();
     }
+
+    if (matches.length > 1) {
+      throw new ConflictException({
+        code: 'multiple_tenants',
+        tenants: matches.map((u) => ({
+          tenantId: u.tenantId,
+          tradeName: u.tenant.tradeName,
+          legalName: u.tenant.legalName,
+        })),
+      });
+    }
+
+    const user = matches[0];
 
     await this.prisma.user.update({
       where: { id: user.id },
