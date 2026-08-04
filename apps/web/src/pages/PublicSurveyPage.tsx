@@ -135,14 +135,13 @@ export function PublicSurveyPage() {
         }
       }
 
-      const customer =
-        survey.data?.survey.collectCustomer && identify
-          ? {
-              name: customerName.trim() || undefined,
-              email: customerEmail.trim() || undefined,
-              phone: customerPhone.trim() || undefined,
-            }
-          : undefined;
+      const customer = identify
+        ? {
+            name: customerName.trim() || undefined,
+            email: customerEmail.trim() || undefined,
+            phone: customerPhone.trim() || undefined,
+          }
+        : undefined;
 
       const hasCustomerField = Boolean(customer?.name || customer?.email || customer?.phone);
 
@@ -405,7 +404,7 @@ export function PublicSurveyPage() {
         )}
       </div>
 
-      {survey.data.survey.collectCustomer && !submitted && (
+      {!submitted && (
         <div className="fixed bottom-4 left-1/2 w-[min(640px,calc(100%-2rem))] -translate-x-1/2">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
             <div className="flex items-center justify-between gap-3">
@@ -421,7 +420,7 @@ export function PublicSurveyPage() {
                 ].join(' ')}
                 onClick={() => setIdentify((v) => !v)}
               >
-                {identify ? 'Vou me identificar' : 'Quero me identificar'}
+                {identify ? 'Não quero me identificar' : 'Quero me identificar'}
               </button>
             </div>
 
