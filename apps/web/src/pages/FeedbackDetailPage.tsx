@@ -13,6 +13,12 @@ type Detail = {
   npsClass: string | null;
   mainComment: string | null;
   customerId: string | null;
+  customer: null | {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
   answers: Array<{ id: string; question: { title: string; type: string }; value: unknown }>;
   feedbackCase: null | {
     id: string;
@@ -58,6 +64,12 @@ export function FeedbackDetailPage() {
   const [notes, setNotes] = useState('');
 
   const canLogInteraction = useMemo(() => Boolean(detail.data?.customerId), [detail.data?.customerId]);
+  const customer = detail.data?.customer ?? null;
+  const customerName = customer?.name?.trim() ? customer.name.trim() : 'Cliente';
+  const customerEmail = customer?.email?.trim() ? customer.email.trim() : '';
+  const customerPhone = customer?.phone?.trim() ? customer.phone.trim() : '';
+  const customerPhoneDigits = customerPhone.replace(/\D+/g, '');
+  const hasCustomer = Boolean(detail.data?.customerId && customer);
 
   const initialCaseState = useMemo(() => {
     const c = detail.data?.feedbackCase;
@@ -151,6 +163,50 @@ export function FeedbackDetailPage() {
           <Card title="Ocorrência">
             {detail.data.feedbackCase ? (
               <div className="grid gap-2 text-sm">
+                <div className="rounded-md border border-slate-200 bg-white p-3">
+                  <div className="mb-2 text-xs font-medium text-slate-600">Cliente</div>
+                  {!hasCustomer && <div className="text-sm text-slate-700">Resposta sem identificação.</div>}
+                  {hasCustomer && (
+                    <div className="grid gap-1 text-sm">
+                      <div className="font-medium text-slate-900">{customerName}</div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-700">
+                        <div>
+                          <span className="text-slate-500">E-mail: </span>
+                          {customerEmail ? (
+                            <a className="text-sky-700 hover:underline" href={`mailto:${customerEmail}`}>
+                              {customerEmail}
+                            </a>
+                          ) : (
+                            '—'
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Telefone: </span>
+                          {customerPhone ? (
+                            <span className="inline-flex flex-wrap gap-2">
+                              <a className="text-sky-700 hover:underline" href={`tel:${customerPhoneDigits || customerPhone}`}>
+                                {customerPhone}
+                              </a>
+                              {customerPhoneDigits ? (
+                                <a
+                                  className="text-sky-700 hover:underline"
+                                  href={`https://wa.me/${customerPhoneDigits}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  WhatsApp
+                                </a>
+                              ) : null}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="text-slate-600">Status</div>
                   <div className="font-medium">{feedbackCaseStatusLabel(detail.data.feedbackCase.status)}</div>
@@ -200,42 +256,47 @@ export function FeedbackDetailPage() {
                     Cliente não identificado. Para registrar contato, é necessário que o cliente se identifique na pesquisa.
                   </div>
                 )}
-                {canLogInteraction && (
-                  <div className="grid gap-2">
-                    <div className="grid gap-2 md:grid-cols-[160px_1fr]">
-                      <div>
-                        <select
-                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                          value={channel}
-                          onChange={(e) => setChannel(e.target.value)}
-                        >
-                          <option value="whatsapp">WhatsApp</option>
-                          <option value="phone">Telefone</option>
-                          <option value="email">E-mail</option>
-                          <option value="sms">SMS</option>
-                          <option value="in_person">Presencial</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="Resultado (opcional)" />
-                      </div>
+                <div className="grid gap-2">
+                  <div className="grid gap-2 md:grid-cols-[160px_1fr]">
+                    <div>
+                      <select
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-400"
+                        value={channel}
+                        onChange={(e) => setChannel(e.target.value)}
+                        disabled={!canLogInteraction}
+                      >
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="phone">Telefone</option>
+                        <option value="email">E-mail</option>
+                        <option value="sms">SMS</option>
+                        <option value="in_person">Presencial</option>
+                      </select>
                     </div>
-                    <textarea
-                      className="min-h-20 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Notas do contato (opcional)"
-                    />
-                    <div className="flex items-center justify-end">
-                      <Button disabled={createInteraction.isPending} onClick={() => createInteraction.mutate()}>
-                        {createInteraction.isPending ? 'Registrando...' : 'Registrar contato'}
-                      </Button>
+                    <div>
+                      <Input
+                        value={outcome}
+                        onChange={(e) => setOutcome(e.target.value)}
+                        placeholder="Resultado (opcional)"
+                        disabled={!canLogInteraction}
+                      />
                     </div>
-                    {createInteraction.isError && (
-                      <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao registrar contato</div>
-                    )}
                   </div>
-                )}
+                  <textarea
+                    className="min-h-20 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 disabled:bg-slate-50 disabled:text-slate-400"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Notas do contato (opcional)"
+                    disabled={!canLogInteraction}
+                  />
+                  <div className="flex items-center justify-end">
+                    <Button disabled={createInteraction.isPending || !canLogInteraction} onClick={() => createInteraction.mutate()}>
+                      {createInteraction.isPending ? 'Registrando...' : 'Registrar contato'}
+                    </Button>
+                  </div>
+                  {createInteraction.isError && (
+                    <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao registrar contato</div>
+                  )}
+                </div>
 
                 <div className="text-slate-600">Eventos</div>
                 <div className="divide-y divide-slate-200 rounded-md border border-slate-200">
