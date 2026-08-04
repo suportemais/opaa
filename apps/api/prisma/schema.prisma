@@ -1,0 +1,749 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  trial
+  active
+  suspended
+  delinquent
+  cancelled
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum SurveyStatus {
+  draft
+  published
+  paused
+  closed
+  archived
+}
+
+enum SurveyResponseStatus {
+  started
+  completed
+  abandoned
+  invalidated
+}
+
+enum NpsClass {
+  detractor
+  passive
+  promoter
+}
+
+enum FeedbackCaseStatus {
+  new
+  viewed
+  in_progress
+  waiting_customer
+  resolved
+  closed
+  dismissed
+}
+
+enum CouponCampaignStatus {
+  draft
+  active
+  paused
+  finished
+}
+
+enum CouponStatus {
+  generated
+  sent
+  viewed
+  redeemed
+  expired
+  cancelled
+}
+
+enum AuditActorType {
+  user
+  system
+  support
+}
+
+model Tenant {
+  id            String       @id @default(uuid()) @db.Uuid
+  legalName     String
+  tradeName     String
+  document      String?
+  email         String
+  phone         String?
+  segment       String?
+  logoAssetId   String?      @db.Uuid
+  primaryColor  String?
+  secondaryColor String?
+  status        TenantStatus @default(trial)
+  createdAt     DateTime     @default(now())
+  activatedAt   DateTime?
+  suspendedAt   DateTime?
+  cancelledAt   DateTime?
+  settings      Json?
+  limits        Json?
+
+  logoAsset     FileAsset?   @relation("TenantLogoAsset", fields: [logoAssetId], references: [id])
+  users         User[]
+  units         Unit[]
+  employees     Employee[]
+  surveys       Survey[]
+  surveyVersions SurveyVersion[]
+  surveySections SurveySection[]
+  questions      Question[]
+  conditionalRules ConditionalRule[]
+  surveyDistributions SurveyDistribution[]
+  surveyResponses SurveyResponse[]
+  answers       Answer[]
+  customers     Customer[]
+  customerConsents CustomerConsent[]
+  customerInteractions CustomerInteraction[]
+  feedbackCases FeedbackCase[]
+  feedbackCaseEvents FeedbackCaseEvent[]
+  alerts        AlertRule[]
+  notifications Notification[]
+  couponCampaigns CouponCampaign[]
+  coupons       Coupon[]
+  couponRedemptions CouponRedemption[]
+  fileAssets    FileAsset[]  @relation("TenantFileAssets")
+  auditLogs     AuditLog[]
+
+  @@unique([email])
+  @@index([status])
+  @@map("tenants")
+}
+
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  tenantId          String     @db.Uuid
+  email             String
+  emailNormalized   String
+  name              String
+  passwordHash      String
+  status            UserStatus @default(active)
+  lastLoginAt       DateTime?
+  refreshTokenHash  String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  roles             UserRole[]
+  unitAccess        UserUnitAccess[]
+  assignedFeedbackCases FeedbackCase[] @relation("FeedbackCaseAssignee")
+  feedbackCaseEventsCreated FeedbackCaseEvent[] @relation("FeedbackCaseEventCreatedBy")
+  customerInteractionsCreated CustomerInteraction[] @relation("CustomerInteractionCreatedBy")
+  auditLogs         AuditLog[]
+
+  @@unique([tenantId, emailNormalized])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Role {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String? @db.Uuid
+  code      String
+  name      String
+  createdAt DateTime @default(now())
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+model Permission {
+  id        String  @id @default(uuid()) @db.Uuid
+  code      String  @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  roles     RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Unit {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @db.Uuid
+  name        String
+  internalCode String?
+  phone       String?
+  email       String?
+  address     String?
+  managerName String?
+  timeZone    String?
+  status      String  @default("active")
+  settings    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id])
+  employees   Employee[]
+  userAccess  UserUnitAccess[]
+  surveys     SurveyUnit[]
+  distributions SurveyDistribution[]
+  responses   SurveyResponse[]
+  customers   Customer[]
+  feedbackCases FeedbackCase[]
+  couponRedemptions CouponRedemption[]
+  reviewLinks PublicReviewLink[]
+  customerInteractions CustomerInteraction[] @relation("CustomerInteractionUnit")
+
+  @@index([tenantId])
+  @@map("units")
+}
+
+model UserUnitAccess {
+  userId String @db.Uuid
+  unitId String @db.Uuid
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit   Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@id([userId, unitId])
+  @@map("user_unit_access")
+}
+
+model Employee {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @db.Uuid
+  unitId      String  @db.Uuid
+  name        String
+  code        String?
+  roleTitle   String?
+  status      String  @default("active")
+  photoAssetId String? @db.Uuid
+  hiredAt     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id])
+  unit        Unit   @relation(fields: [unitId], references: [id])
+  photoAsset  FileAsset? @relation("EmployeePhotoAsset", fields: [photoAssetId], references: [id])
+  distributions SurveyDistribution[]
+  responses     SurveyResponse[]
+
+  @@unique([tenantId, unitId, code])
+  @@index([tenantId, unitId])
+  @@map("employees")
+}
+
+model Survey {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  name         String
+  description  String?
+  status       SurveyStatus @default(draft)
+  startsAt     DateTime?
+  endsAt       DateTime?
+  introMessage String?
+  outroMessage String?
+  anonymousAllowed Boolean @default(true)
+  collectCustomer Boolean  @default(false)
+  enablePublicReputation Boolean @default(false)
+  enableCoupon Boolean @default(false)
+  publishedVersionId String? @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  units        SurveyUnit[]
+  versions     SurveyVersion[]
+  publishedVersion SurveyVersion? @relation("PublishedSurveyVersion", fields: [publishedVersionId], references: [id])
+  distributions SurveyDistribution[]
+  responses    SurveyResponse[]
+
+  @@index([tenantId, status])
+  @@map("surveys")
+}
+
+model SurveyUnit {
+  surveyId String @db.Uuid
+  unitId   String @db.Uuid
+
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  unit     Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@id([surveyId, unitId])
+  @@map("survey_units")
+}
+
+model SurveyVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  surveyId    String   @db.Uuid
+  version     Int
+  status      SurveyStatus @default(draft)
+  snapshot    Json
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id])
+  survey      Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  sections    SurveySection[]
+  questions   Question[]
+  responses   SurveyResponse[]
+  rules       ConditionalRule[]
+  publishedBySurveys Survey[] @relation("PublishedSurveyVersion")
+
+  @@unique([surveyId, version])
+  @@index([tenantId, surveyId])
+  @@map("survey_versions")
+}
+
+model SurveySection {
+  id            String @id @default(uuid()) @db.Uuid
+  tenantId      String @db.Uuid
+  surveyVersionId String @db.Uuid
+  title         String
+  description   String?
+  order         Int
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id])
+  surveyVersion SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  questions     Question[]
+
+  @@unique([surveyVersionId, order])
+  @@map("survey_sections")
+}
+
+model Question {
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @db.Uuid
+  surveyVersionId String @db.Uuid
+  sectionId      String? @db.Uuid
+  title          String
+  description    String?
+  type           String
+  required       Boolean @default(false)
+  order          Int
+  category       String?
+  config         Json?
+  helpText       String?
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  surveyVersion  SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  section        SurveySection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  options        QuestionOption[]
+  answers        Answer[]
+
+  @@unique([surveyVersionId, order])
+  @@index([tenantId, surveyVersionId])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id         String @id @default(uuid()) @db.Uuid
+  questionId String @db.Uuid
+  label      String
+  value      String
+  order      Int
+
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, order])
+  @@map("question_options")
+}
+
+model ConditionalRule {
+  id            String @id @default(uuid()) @db.Uuid
+  tenantId      String @db.Uuid
+  surveyVersionId String @db.Uuid
+  rule          Json
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id])
+  surveyVersion SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, surveyVersionId])
+  @@map("conditional_rules")
+}
+
+model SurveyDistribution {
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @db.Uuid
+  surveyId    String @db.Uuid
+  unitId      String? @db.Uuid
+  employeeId  String? @db.Uuid
+  channel     String
+  campaign    String?
+  publicToken String @unique
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id])
+  survey      Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  unit        Unit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  employee    Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  responses   SurveyResponse[]
+
+  @@index([tenantId, surveyId])
+  @@map("survey_distributions")
+}
+
+model SurveyResponse {
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @db.Uuid
+  surveyId       String @db.Uuid
+  surveyVersionId String @db.Uuid
+  distributionId String? @db.Uuid
+  unitId         String? @db.Uuid
+  employeeId     String? @db.Uuid
+  customerId     String? @db.Uuid
+  channel        String
+  campaign       String?
+  status         SurveyResponseStatus @default(started)
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  durationMs     Int?
+  npsScore       Int?
+  npsClass       NpsClass?
+  satisfactionAvg Float?
+  mainComment    String?
+  consents       Json?
+  metadata       Json?
+  idempotencyKey String
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  survey         Survey @relation(fields: [surveyId], references: [id])
+  surveyVersion  SurveyVersion @relation(fields: [surveyVersionId], references: [id])
+  distribution   SurveyDistribution? @relation(fields: [distributionId], references: [id], onDelete: SetNull)
+  unit           Unit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  employee       Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  answers        Answer[]
+  feedbackCase   FeedbackCase?
+
+  @@unique([tenantId, surveyId, idempotencyKey])
+  @@index([tenantId, surveyId, startedAt])
+  @@map("survey_responses")
+}
+
+model Answer {
+  id            String @id @default(uuid()) @db.Uuid
+  tenantId      String @db.Uuid
+  surveyResponseId String @db.Uuid
+  questionId    String @db.Uuid
+  value         Json
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id])
+  surveyResponse SurveyResponse @relation(fields: [surveyResponseId], references: [id], onDelete: Cascade)
+  question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyResponseId, questionId])
+  @@index([tenantId])
+  @@map("answers")
+}
+
+model Customer {
+  id              String @id @default(uuid()) @db.Uuid
+  tenantId        String @db.Uuid
+  name            String?
+  phone           String?
+  phoneNormalized String?
+  email           String?
+  emailNormalized String?
+  birthDate       DateTime?
+  originUnitId    String? @db.Uuid
+  firstInteractionAt DateTime?
+  lastInteractionAt DateTime?
+  totalResponses  Int @default(0)
+  satisfactionAvg Float?
+  lastNpsScore    Int?
+  npsClass        NpsClass?
+  status          String @default("active")
+  doNotContact    Boolean @default(false)
+  doNotContactAt  DateTime?
+  doNotContactReason String?
+  tags            Json?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant @relation(fields: [tenantId], references: [id])
+  originUnit      Unit? @relation(fields: [originUnitId], references: [id], onDelete: SetNull)
+  consents        CustomerConsent[]
+  responses       SurveyResponse[]
+  interactions    CustomerInteraction[]
+  coupons         Coupon[]
+  feedbackCases   FeedbackCase[]
+  couponRedemptions CouponRedemption[]
+
+  @@index([tenantId])
+  @@map("customers")
+}
+
+model CustomerInteraction {
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @db.Uuid
+  customerId     String @db.Uuid
+  feedbackCaseId String? @db.Uuid
+  unitId         String? @db.Uuid
+  createdByUserId String? @db.Uuid
+  channel        String
+  direction      String @default("outbound")
+  outcome        String?
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  feedbackCase   FeedbackCase? @relation("CustomerInteractionFeedbackCase", fields: [feedbackCaseId], references: [id], onDelete: SetNull)
+  unit           Unit? @relation("CustomerInteractionUnit", fields: [unitId], references: [id], onDelete: SetNull)
+  createdByUser  User? @relation("CustomerInteractionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, feedbackCaseId])
+  @@map("customer_interactions")
+}
+
+model CustomerConsent {
+  id            String @id @default(uuid()) @db.Uuid
+  tenantId      String @db.Uuid
+  customerId    String @db.Uuid
+  purpose       String
+  text          String
+  textVersion   String
+  status        String
+  grantedAt     DateTime @default(now())
+  source        String
+  revokedAt     DateTime?
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id])
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId])
+  @@map("customer_consents")
+}
+
+model FeedbackCase {
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @db.Uuid
+  surveyResponseId String @unique @db.Uuid
+  unitId         String? @db.Uuid
+  customerId     String? @db.Uuid
+  priority       String @default("normal")
+  assigneeUserId String? @db.Uuid
+  status         FeedbackCaseStatus @default(new)
+  dueAt          DateTime?
+  description    String?
+  rootCause      String?
+  correctiveAction String?
+  resolution     String?
+  firstViewedAt  DateTime?
+  firstActionAt  DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  surveyResponse SurveyResponse @relation(fields: [surveyResponseId], references: [id], onDelete: Cascade)
+  unit           Unit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignee       User? @relation("FeedbackCaseAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  events         FeedbackCaseEvent[]
+  customerInteractions CustomerInteraction[] @relation("CustomerInteractionFeedbackCase")
+
+  @@index([tenantId, status])
+  @@map("feedback_cases")
+}
+
+model FeedbackCaseEvent {
+  id            String @id @default(uuid()) @db.Uuid
+  tenantId      String @db.Uuid
+  feedbackCaseId String @db.Uuid
+  type          String
+  data          Json?
+  createdAt     DateTime @default(now())
+  createdByUserId String? @db.Uuid
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id])
+  feedbackCase  FeedbackCase @relation(fields: [feedbackCaseId], references: [id], onDelete: Cascade)
+  createdBy     User? @relation("FeedbackCaseEventCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, feedbackCaseId])
+  @@map("feedback_case_events")
+}
+
+model AlertRule {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @db.Uuid
+  name       String
+  active     Boolean @default(true)
+  rule       Json
+  createdAt  DateTime @default(now())
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("alert_rules")
+}
+
+model Notification {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @db.Uuid
+  type       String
+  channel    String
+  to         String?
+  payload    Json
+  status     String @default("queued")
+  error      String?
+  createdAt  DateTime @default(now())
+  sentAt     DateTime?
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@map("notifications")
+}
+
+model CouponCampaign {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @db.Uuid
+  name         String
+  description  String?
+  benefit      String
+  prefix       String?
+  startsAt     DateTime?
+  endsAt       DateTime?
+  totalLimit   Int?
+  perCustomerLimit Int?
+  criteria     Json?
+  status       CouponCampaignStatus @default(draft)
+  message      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  coupons      Coupon[]
+
+  @@index([tenantId, status])
+  @@map("coupon_campaigns")
+}
+
+model Coupon {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @db.Uuid
+  campaignId   String @db.Uuid
+  code         String
+  status       CouponStatus @default(generated)
+  customerId   String? @db.Uuid
+  generatedAt  DateTime @default(now())
+  sentAt       DateTime?
+  redeemedAt   DateTime?
+  expiresAt    DateTime?
+  cancelledAt  DateTime?
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  campaign     CouponCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  redemptions  CouponRedemption[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @db.Uuid
+  couponId    String @db.Uuid
+  customerId  String? @db.Uuid
+  unitId      String? @db.Uuid
+  redeemedAt  DateTime @default(now())
+  metadata    Json?
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id])
+  coupon      Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  unit        Unit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, redeemedAt])
+  @@map("coupon_redemptions")
+}
+
+model PublicReviewLink {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  unitId   String @db.Uuid
+  channel  String
+  url      String
+  createdAt DateTime @default(now())
+
+  unit     Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([unitId, channel])
+  @@map("public_review_links")
+}
+
+model FileAsset {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String? @db.Uuid
+  key       String @unique
+  mimeType  String
+  sizeBytes Int
+  originalName String?
+  createdAt DateTime @default(now())
+
+  tenant      Tenant?    @relation("TenantFileAssets", fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantLogos Tenant[]   @relation("TenantLogoAsset")
+  employeePhotos Employee[] @relation("EmployeePhotoAsset")
+
+  @@index([tenantId])
+  @@map("file_assets")
+}
+
+model AuditLog {
+  id            String @id @default(uuid()) @db.Uuid
+  tenantId      String? @db.Uuid
+  actorType     AuditActorType
+  actorUserId   String? @db.Uuid
+  action        String
+  entity        String
+  entityId      String?
+  summary       Json?
+  occurredAt    DateTime @default(now())
+  ip            String?
+  userAgent     String?
+  correlationId String
+
+  actorUser     User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  tenant        Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, occurredAt])
+  @@index([correlationId])
+  @@map("audit_logs")
+}

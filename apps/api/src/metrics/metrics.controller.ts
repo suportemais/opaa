@@ -1,0 +1,40 @@
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthUser } from '../auth/auth.types';
+import { PermissionsGuard } from '../rbac/permissions.guard';
+import { RequirePermissions } from '../rbac/require-permissions.decorator';
+import { PermissionCodes } from '../rbac/permission-codes';
+import { MetricsService } from './metrics.service';
+import { NpsQueryDto } from './dto/nps-query.dto';
+import { CasesQueryDto } from './dto/cases-query.dto';
+
+@Controller('metrics')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class MetricsController {
+  constructor(private readonly metrics: MetricsService) {}
+
+  @Get('nps/summary')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  npsSummary(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
+    return this.metrics.npsSummary(user, query);
+  }
+
+  @Get('nps/by-day')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  npsByDay(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
+    return this.metrics.npsByDay(user, query);
+  }
+
+  @Get('nps/by-unit')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  npsByUnit(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
+    return this.metrics.npsByUnit(user, query);
+  }
+
+  @Get('cases/summary')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  casesSummary(@CurrentUser() user: AuthUser, @Query() query: CasesQueryDto) {
+    return this.metrics.casesSummary(user, query);
+  }
+}

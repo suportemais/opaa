@@ -1,0 +1,50 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppShell } from './components/layout/AppShell';
+import { LoginPage } from './pages/LoginPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { UnitsPage } from './pages/UnitsPage';
+import { SurveysPage } from './pages/SurveysPage';
+import { FeedbacksPage } from './pages/FeedbacksPage';
+import { FeedbackDetailPage } from './pages/FeedbackDetailPage';
+import { PublicSurveyPage } from './pages/PublicSurveyPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { CustomerDetailPage } from './pages/CustomerDetailPage';
+import { KanbanPage } from './pages/KanbanPage';
+import { getAccessToken } from './lib/auth-store';
+
+function RequireAuth(props: { children: React.ReactNode }) {
+  const token = getAccessToken();
+  if (!token) return <Navigate to="/login" replace />;
+  return <>{props.children}</>;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/public/:token" element={<PublicSurveyPage />} />
+
+      <Route
+        path="/app"
+        element={
+          <RequireAuth>
+            <AppShell />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<DashboardPage />} />
+        <Route path="units" element={<UnitsPage />} />
+        <Route path="surveys" element={<SurveysPage />} />
+        <Route path="customers" element={<CustomersPage />} />
+        <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="feedbacks" element={<FeedbacksPage />} />
+        <Route path="feedbacks/kanban" element={<KanbanPage />} />
+        <Route path="feedbacks/:id" element={<FeedbackDetailPage />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/app" replace />} />
+    </Routes>
+  );
+}
