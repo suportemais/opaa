@@ -107,6 +107,18 @@ export function SurveysPage() {
     },
   });
 
+  const archiveSurvey = useMutation({
+    mutationFn: (surveyId: string) =>
+      apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(surveyId)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: async () => {
+      setActiveSurveyId(null);
+      await qc.invalidateQueries({ queryKey: ['surveys'] });
+      await qc.invalidateQueries({ queryKey: ['surveyDistributions'] });
+    },
+  });
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
@@ -271,6 +283,19 @@ export function SurveysPage() {
                   >
                     Links
                   </Button>
+                  {s.status !== 'archived' && (
+                    <Button
+                      variant="ghost"
+                      disabled={archiveSurvey.isPending}
+                      onClick={() => {
+                        const ok = window.confirm(`Arquivar a pesquisa "${s.name}"? Os links públicos serão desativados.`);
+                        if (!ok) return;
+                        archiveSurvey.mutate(s.id);
+                      }}
+                    >
+                      Arquivar
+                    </Button>
+                  )}
                   <div className="text-xs font-mono text-slate-500">{s.id}</div>
                 </div>
               </div>

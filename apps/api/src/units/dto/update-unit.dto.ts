@@ -16,5 +16,8 @@ export class UpdateUnitDto {
   @IsOptional()
   @IsString()
   address?: string;
-}
 
+  @IsOptional()
+  @IsString()
+  googleBusinessUrl?: string;
+}

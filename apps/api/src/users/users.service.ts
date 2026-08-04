@@ -210,4 +210,15 @@ export class UsersService {
     });
     return { ok: true };
   }
+
+  async disableInTenant(user: AuthUser, userId: string) {
+    const target = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, tenantId: true } });
+    if (!target || target.tenantId !== user.tenantId) throw new NotFoundException();
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { status: 'disabled', refreshTokenHash: null },
+    });
+    return { ok: true };
+  }
 }

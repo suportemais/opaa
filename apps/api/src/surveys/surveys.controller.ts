@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -43,5 +43,11 @@ export class SurveysController {
   @RequirePermissions(PermissionCodes.SurveyManage)
   publish(@CurrentUser() user: AuthUser, @Param('id') id: string, @Req() req: Request) {
     return this.surveys.publish(user, id, req);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PermissionCodes.SurveyManage)
+  archive(@CurrentUser() user: AuthUser, @Param('id') id: string, @Req() req: Request) {
+    return this.surveys.archive(user, id, req);
   }
 }

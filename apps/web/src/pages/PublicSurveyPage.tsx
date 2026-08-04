@@ -19,6 +19,7 @@ type PublicQuestion = {
 };
 type PublicSurvey = {
   settings?: { badScoreThreshold?: number };
+  unit?: { id: string; name: string; googleBusinessUrl: string | null } | null;
   survey: {
     name: string;
     description: string | null;
@@ -101,8 +102,8 @@ export function PublicSurveyPage() {
   const submit = useMutation({
     mutationFn: async () => {
       if (!npsQuestion) throw new Error('missing_nps');
-      const idempotencyKey = localStorage.getItem(`opaa_pub_${token}`) ?? randomId(16);
-      localStorage.setItem(`opaa_pub_${token}`, idempotencyKey);
+      const idempotencyKey = sessionStorage.getItem(`opaa_pub_${token}`) ?? randomId(16);
+      sessionStorage.setItem(`opaa_pub_${token}`, idempotencyKey);
 
       const outAnswers: Array<{ questionId: string; value: unknown }> = [];
       const nextAnswers: Record<string, unknown> = { ...answers };
@@ -160,6 +161,7 @@ export function PublicSurveyPage() {
     onSuccess: () => {
       setFormError(null);
       setSubmitted(true);
+      sessionStorage.removeItem(`opaa_pub_${token}`);
     },
   });
 
@@ -210,6 +212,25 @@ export function PublicSurveyPage() {
         {submitted ? (
           <Card title="Obrigado!" description="Sua resposta foi registrada.">
             <div className="text-sm text-slate-700">{survey.data.survey.outroMessage ?? 'Você pode fechar esta página.'}</div>
+            {typeof selectedNps === 'number' &&
+              selectedNps > badScoreThreshold &&
+              survey.data.unit?.googleBusinessUrl &&
+              survey.data.unit.googleBusinessUrl.trim().length > 0 && (
+                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="text-sm font-semibold text-emerald-900">Nos ajude com um comentário no Google</div>
+                  <div className="mt-1 text-sm text-emerald-800">
+                    Se você teve uma boa experiência, deixe um comentário no Google Meu Negócio da unidade.
+                  </div>
+                  <a
+                    className="mt-3 inline-flex h-10 items-center justify-center rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
+                    href={survey.data.unit.googleBusinessUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Avaliar no Google
+                  </a>
+                </div>
+              )}
           </Card>
         ) : (
           <Card>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
@@ -38,5 +38,11 @@ export class UsersController {
   setPassword(@CurrentUser() user: AuthUser, @Param('id') userId: string, @Body() dto: SetUserPasswordDto) {
     return this.users.setPasswordInTenant(user, userId, dto.password);
   }
-}
 
+  @Delete(':id')
+  @RequirePermissions(PermissionCodes.UserManage)
+  disable(@CurrentUser() user: AuthUser, @Param('id') userId: string) {
+    if (userId === user.userId) throw new BadRequestException('cannot_disable_self');
+    return this.users.disableInTenant(user, userId);
+  }
+}

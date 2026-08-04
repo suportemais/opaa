@@ -5,7 +5,14 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 
-type Unit = { id: string; name: string; timeZone: string | null; internalCode: string | null; address: string | null };
+type Unit = {
+  id: string;
+  name: string;
+  timeZone: string | null;
+  internalCode: string | null;
+  address: string | null;
+  googleBusinessUrl: string | null;
+};
 
 export function UnitsPage() {
   const qc = useQueryClient();
@@ -17,18 +24,29 @@ export function UnitsPage() {
   const [name, setName] = useState('');
   const [timeZone, setTimeZone] = useState('America/Sao_Paulo');
   const [address, setAddress] = useState('');
+  const [googleBusinessUrl, setGoogleBusinessUrl] = useState('');
 
   const [editingId, setEditingId] = useState<string>('');
   const [editName, setEditName] = useState('');
   const [editTimeZone, setEditTimeZone] = useState('America/Sao_Paulo');
   const [editAddress, setEditAddress] = useState('');
+  const [editGoogleBusinessUrl, setEditGoogleBusinessUrl] = useState('');
 
   const create = useMutation({
     mutationFn: () =>
-      apiFetch<Unit>('/units', { method: 'POST', json: { name, timeZone, address: address.trim() || undefined } }),
+      apiFetch<Unit>('/units', {
+        method: 'POST',
+        json: {
+          name,
+          timeZone,
+          address: address.trim() || undefined,
+          googleBusinessUrl: googleBusinessUrl.trim() || undefined,
+        },
+      }),
     onSuccess: async () => {
       setName('');
       setAddress('');
+      setGoogleBusinessUrl('');
       await qc.invalidateQueries({ queryKey: ['units'] });
     },
   });
@@ -41,6 +59,7 @@ export function UnitsPage() {
           name: editName.trim() || undefined,
           timeZone: editTimeZone.trim() || undefined,
           address: editAddress.trim() || undefined,
+          googleBusinessUrl: editGoogleBusinessUrl.trim() || undefined,
         },
       });
     },
@@ -49,6 +68,7 @@ export function UnitsPage() {
       setEditName('');
       setEditTimeZone('America/Sao_Paulo');
       setEditAddress('');
+      setEditGoogleBusinessUrl('');
       await qc.invalidateQueries({ queryKey: ['units'] });
     },
   });
@@ -74,6 +94,14 @@ export function UnitsPage() {
             <div className="md:col-span-3">
               <div className="mb-1 text-sm font-medium text-slate-700">Endereço</div>
               <Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Endereço (opcional)" />
+            </div>
+            <div className="md:col-span-3">
+              <div className="mb-1 text-sm font-medium text-slate-700">Google Meu Negócio (link)</div>
+              <Input
+                value={editGoogleBusinessUrl}
+                onChange={(e) => setEditGoogleBusinessUrl(e.target.value)}
+                placeholder="https://g.page/r/..."
+              />
             </div>
             <div className="md:col-span-3 flex items-center justify-end gap-2">
               <Button variant="secondary" onClick={() => setEditingId('')} disabled={update.isPending}>
@@ -102,6 +130,13 @@ export function UnitsPage() {
             <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço (opcional)" />
           </div>
           <div className="md:col-span-3">
+            <Input
+              value={googleBusinessUrl}
+              onChange={(e) => setGoogleBusinessUrl(e.target.value)}
+              placeholder="Link do Google Meu Negócio (opcional)"
+            />
+          </div>
+          <div className="md:col-span-3">
             <Button disabled={!name || create.isPending} onClick={() => create.mutate()}>
               {create.isPending ? 'Criando...' : 'Criar'}
             </Button>
@@ -121,6 +156,7 @@ export function UnitsPage() {
                   <div className="text-sm font-medium">{u.name}</div>
                   <div className="text-xs text-slate-500">{u.timeZone ?? '—'}</div>
                   <div className="text-xs text-slate-500">{u.address ?? '—'}</div>
+                  <div className="text-xs text-slate-500">{u.googleBusinessUrl ?? '—'}</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Button
@@ -130,6 +166,7 @@ export function UnitsPage() {
                       setEditName(u.name);
                       setEditTimeZone(u.timeZone ?? 'America/Sao_Paulo');
                       setEditAddress(u.address ?? '');
+                      setEditGoogleBusinessUrl(u.googleBusinessUrl ?? '');
                     }}
                   >
                     Editar

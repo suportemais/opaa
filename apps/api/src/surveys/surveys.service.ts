@@ -212,4 +212,32 @@ export class SurveysService {
 
     return distribution;
   }
+
+  async archive(user: AuthUser, surveyId: string, req?: Request) {
+    const survey = await this.getAccessibleSurvey(user, surveyId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.surveyDistribution.updateMany({
+        where: { tenantId: user.tenantId, surveyId: survey.id },
+        data: { active: false },
+      });
+      await tx.survey.update({
+        where: { id: survey.id },
+        data: { status: 'archived' },
+      });
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      actorType: 'user',
+      actorUserId: user.userId,
+      action: 'survey.archived',
+      entity: 'Survey',
+      entityId: survey.id,
+      summary: { name: survey.name } as any,
+      req,
+    });
+
+    return { ok: true };
+  }
 }

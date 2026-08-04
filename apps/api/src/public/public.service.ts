@@ -6,6 +6,7 @@ import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { normalizeEmail, normalizePhone } from '../common/normalize';
 import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
 import { badScoreThresholdFromSettings } from '../common/tenant-settings';
+import { googleBusinessUrlFromSettings } from '../common/unit-settings';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -44,6 +45,7 @@ export class PublicService {
       where: { publicToken },
       include: {
         tenant: { select: { tradeName: true, settings: true } },
+        unit: { select: { id: true, name: true, settings: true } },
         survey: {
           include: {
             publishedVersion: {
@@ -78,6 +80,13 @@ export class PublicService {
       settings: {
         badScoreThreshold: badScoreThresholdFromSettings(distribution.tenant.settings),
       },
+      unit: distribution.unit
+        ? {
+            id: distribution.unit.id,
+            name: distribution.unit.name,
+            googleBusinessUrl: googleBusinessUrlFromSettings(distribution.unit.settings),
+          }
+        : null,
       survey: {
         name: survey.name,
         description: survey.description,

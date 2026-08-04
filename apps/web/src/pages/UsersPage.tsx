@@ -92,6 +92,16 @@ export function UsersPage() {
     },
   });
 
+  const disableUser = useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<{ ok: boolean }>(`/users/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+
   return (
     <div className="grid gap-6">
       <div>
@@ -320,6 +330,19 @@ export function UsersPage() {
                     >
                       Editar
                     </Button>
+                    {u.status === 'active' && (
+                      <Button
+                        variant="ghost"
+                        disabled={disableUser.isPending}
+                        onClick={() => {
+                          const ok = window.confirm(`Desativar o usuário "${u.name}"?`);
+                          if (!ok) return;
+                          disableUser.mutate(u.id);
+                        }}
+                      >
+                        Desativar
+                      </Button>
+                    )}
                     <div className="text-xs font-mono text-slate-500">{u.id}</div>
                   </div>
                 </div>
