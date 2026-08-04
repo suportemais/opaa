@@ -236,7 +236,15 @@ export function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {byUnit.data.units.map((row) => (
-                    <tr key={row.unitId ?? 'none'}>
+                    <tr
+                      key={row.unitId ?? 'none'}
+                      className={row.unitId ? 'cursor-pointer hover:bg-slate-50' : ''}
+                      onClick={() => {
+                        if (!row.unitId) return;
+                        setUnitId(row.unitId);
+                        setFiltersOpen(true);
+                      }}
+                    >
                       <td className="py-2 pr-3">{row.unitName ?? '—'}</td>
                       <td className="py-2 pr-3">{row.total}</td>
                       <td className="py-2 pr-3">{typeof row.nps === 'number' ? row.nps : '—'}</td>
