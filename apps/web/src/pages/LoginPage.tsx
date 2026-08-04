@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
-import { ApiError } from '../lib/api';
+import { ApiError, apiFetch } from '../lib/api';
+import { env } from '../lib/env';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { setAccessToken, setTenantId } from '../lib/auth-store';
 
-type TenantOption = { tenantId: string; tradeName?: string | null; legalName?: string | null };
+type TenantOption = { tenantId: string; tenantSlug?: string | null; tradeName?: string | null; legalName?: string | null };
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const baseDomain = env.appBaseDomain;
+  const isRootDomain = !!baseDomain && hostname === baseDomain;
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [tenantOptions, setTenantOptions] = useState<TenantOption[] | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const [company, setCompany] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,6 +28,17 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
+      if (isRootDomain) {
+        const slug = company.trim().toLowerCase();
+        if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) {
+          setError('Informe o subdomínio da empresa (ex.: minha-empresa).');
+          return;
+        }
+        const protocol = window.location.protocol || 'https:';
+        window.location.href = `${protocol}//${slug}.${baseDomain}/login`;
+        return;
+      }
+
       const result = await apiFetch<{ accessToken: string; tenantId: string; userId: string }>('/auth/login', {
         method: 'POST',
         json:
@@ -61,30 +77,49 @@ export function LoginPage() {
 
         <Card>
           <form className="flex flex-col gap-3" onSubmit={onSubmit}>
-            {tenantOptions && (
+            {isRootDomain ? (
               <div>
                 <div className="mb-1 text-sm font-medium text-slate-700">Empresa</div>
-                <select
-                  value={selectedTenantId}
-                  onChange={(e) => setSelectedTenantId(e.target.value)}
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                >
-                  {tenantOptions.map((t) => (
-                    <option key={t.tenantId} value={t.tenantId}>
-                      {t.tradeName ?? t.legalName ?? t.tenantId}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="minha-empresa" />
+                  <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">
+                    .{baseDomain}
+                  </div>
+                </div>
               </div>
+            ) : (
+              <>
+                {tenantOptions && (
+                  <div>
+                    <div className="mb-1 text-sm font-medium text-slate-700">Empresa</div>
+                    <select
+                      value={selectedTenantId}
+                      onChange={(e) => setSelectedTenantId(e.target.value)}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                    >
+                      {tenantOptions.map((t) => (
+                        <option key={t.tenantId} value={t.tenantId}>
+                          {t.tradeName ?? t.legalName ?? t.tenantId}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@empresa.com" />
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-slate-700">Senha</div>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+              </>
             )}
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@empresa.com" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Senha</div>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-            </div>
 
             {error && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
 

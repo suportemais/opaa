@@ -25,6 +25,7 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       APP_BASE_URL: https://opaa.devmais.com
+      APP_BASE_DOMAIN: opaa.devmais.com
       API_BASE_PATH: /api
       COOKIE_SECURE: "true"
       PORT: 3000
@@ -41,7 +42,8 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_BASE_URL: https://opaa.devmais.com/api
+        VITE_API_BASE_URL: /api
+        VITE_APP_BASE_DOMAIN: opaa.devmais.com
     depends_on:
       - api
     networks:

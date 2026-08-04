@@ -52,7 +52,7 @@ export class UsersService {
     return this.prisma.user.findMany({
       where: { emailNormalized },
       include: {
-        tenant: { select: { id: true, tradeName: true, legalName: true } },
+        tenant: { select: { id: true, slug: true, tradeName: true, legalName: true } },
       },
     });
   }

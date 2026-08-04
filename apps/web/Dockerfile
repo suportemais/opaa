@@ -16,6 +16,9 @@ COPY apps/web apps/web
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
+ARG VITE_APP_BASE_DOMAIN
+ENV VITE_APP_BASE_DOMAIN=$VITE_APP_BASE_DOMAIN
+
 RUN pnpm --filter web build
 
 FROM nginx:stable-alpine AS runtime
@@ -24,4 +27,3 @@ COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 
 EXPOSE 80
-

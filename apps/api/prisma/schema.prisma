@@ -74,6 +74,7 @@ enum AuditActorType {
 
 model Tenant {
   id            String       @id @default(uuid()) @db.Uuid
+  slug          String
   legalName     String
   tradeName     String
   document      String?
@@ -117,6 +118,7 @@ model Tenant {
   auditLogs     AuditLog[]
 
   @@unique([email])
+  @@unique([slug])
   @@index([status])
   @@map("tenants")
 }

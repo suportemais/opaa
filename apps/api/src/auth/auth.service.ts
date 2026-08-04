@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { sha256 } from '../common/crypto';
 import { AuditService } from '../audit/audit.service';
+import { baseDomain, requestHost, tenantSlugFromHost } from '../common/tenant-host';
 import type { Request } from 'express';
 
 @Injectable()
@@ -52,6 +53,19 @@ export class AuthService {
   }
 
   async login(params: { tenantId?: string; email: string; password: string; req?: Request }) {
+    if (!params.tenantId && params.req) {
+      const host = requestHost(params.req);
+      const base = baseDomain();
+      if (host && base) {
+        const slug = tenantSlugFromHost(host, base);
+        if (slug) {
+          const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+          if (!tenant) throw new UnauthorizedException();
+          params.tenantId = tenant.id;
+        }
+      }
+    }
+
     if (params.tenantId) {
       const user = await this.users.findByEmailInTenant(params.tenantId, params.email);
       if (!user || user.status !== 'active') {
@@ -120,6 +134,7 @@ export class AuthService {
         code: 'multiple_tenants',
         tenants: matches.map((u) => ({
           tenantId: u.tenantId,
+          tenantSlug: u.tenant.slug,
           tradeName: u.tenant.tradeName,
           legalName: u.tenant.legalName,
         })),

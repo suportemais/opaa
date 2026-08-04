@@ -8,6 +8,17 @@ import { randomToken } from '../src/common/crypto';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
+function slugify(value: string) {
+  const raw = (value ?? '').trim();
+  const ascii = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const normalized = ascii
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const sliced = normalized.slice(0, 48);
+  return sliced || 'tenant';
+}
+
 async function ensureGlobalPermissions() {
   for (const code of AllPermissionCodes) {
     await prisma.permission.upsert({
@@ -70,9 +81,11 @@ async function createTenant(params: {
   adminName: string;
   password: string;
 }) {
+  const slug = slugify(params.tradeName);
   const tenant = await prisma.tenant.upsert({
     where: { email: params.email },
     create: {
+      slug,
       legalName: params.legalName,
       tradeName: params.tradeName,
       email: params.email,

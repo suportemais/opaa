@@ -1,20 +1,36 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
+import { env } from '../lib/env';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 
-type Result = { tenantId: string; adminUserId: string; unitId: string };
+type Result = { tenantId: string; tenantSlug: string; adminUserId: string; unitId: string };
+
+function slugify(value: string) {
+  const raw = (value ?? '').trim();
+  const ascii = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const normalized = ascii
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const sliced = normalized.slice(0, 48);
+  return sliced || 'tenant';
+}
 
 export function OnboardingPage() {
   const navigate = useNavigate();
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const baseDomain = env.appBaseDomain ?? hostname;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
 
   const [legalName, setLegalName] = useState('Minha Empresa LTDA');
   const [tradeName, setTradeName] = useState('Minha Marca');
+  const [tenantSlug, setTenantSlug] = useState(slugify('Minha Marca'));
+  const [tenantSlugTouched, setTenantSlugTouched] = useState(false);
   const [email, setEmail] = useState('contato@empresa.com');
   const [phone, setPhone] = useState('');
   const [segment, setSegment] = useState('restaurante');
@@ -35,6 +51,7 @@ export function OnboardingPage() {
       const created = await apiFetch<Result>('/onboarding/tenant', {
         method: 'POST',
         json: {
+          tenantSlug: tenantSlug || undefined,
           legalName,
           tradeName,
           email,
@@ -81,18 +98,27 @@ export function OnboardingPage() {
         </div>
 
         {result ? (
-          <Card title="Tenant criado" description="Use o Tenant ID para entrar.">
+          <Card title="Tenant criado" description="Acesse pelo subdomínio da sua empresa.">
             <div className="grid gap-2 text-sm">
               <div className="rounded-md bg-slate-50 p-3">
-                <div className="text-slate-500">Tenant ID</div>
-                <div className="font-mono text-slate-900">{result.tenantId}</div>
+                <div className="text-slate-500">URL</div>
+                <div className="font-mono text-slate-900">
+                  https://{result.tenantSlug}.{baseDomain}
+                </div>
               </div>
               <div className="rounded-md bg-slate-50 p-3">
                 <div className="text-slate-500">Admin</div>
                 <div className="text-slate-900">{adminEmail}</div>
               </div>
               <div className="pt-2">
-                <Button onClick={() => navigate('/login')}>Ir para login</Button>
+                <Button
+                  onClick={() => {
+                    const protocol = window.location.protocol || 'https:';
+                    window.location.href = `${protocol}//${result.tenantSlug}.${baseDomain}/login`;
+                  }}
+                >
+                  Ir para login
+                </Button>
               </div>
             </div>
           </Card>
@@ -106,7 +132,30 @@ export function OnboardingPage() {
                 </div>
                 <div className="md:col-span-2">
                   <div className="mb-1 text-sm font-medium text-slate-700">Nome fantasia</div>
-                  <Input value={tradeName} onChange={(e) => setTradeName(e.target.value)} />
+                  <Input
+                    value={tradeName}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setTradeName(next);
+                      if (!tenantSlugTouched) setTenantSlug(slugify(next));
+                    }}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <div className="mb-1 text-sm font-medium text-slate-700">Subdomínio</div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={tenantSlug}
+                      onChange={(e) => {
+                        setTenantSlugTouched(true);
+                        setTenantSlug(e.target.value.toLowerCase());
+                      }}
+                      placeholder="minha-empresa"
+                    />
+                    <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">
+                      .{baseDomain}
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
