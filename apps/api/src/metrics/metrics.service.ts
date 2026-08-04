@@ -61,7 +61,7 @@ export class MetricsService {
           ? { unitId: scope.unitId }
           : scope.canSeeAllUnits
             ? {}
-            : { unitId: { in: scope.unitIds! } }),
+            : { OR: [{ unitId: { in: scope.unitIds! } }, { unitId: null }] }),
       },
       select: { npsScore: true },
     });
@@ -84,7 +84,7 @@ export class MetricsService {
           ? { unitId: scope.unitId }
           : scope.canSeeAllUnits
             ? {}
-            : { unitId: { in: scope.unitIds! } }),
+            : { OR: [{ unitId: { in: scope.unitIds! } }, { unitId: null }] }),
       },
       select: { npsScore: true, completedAt: true, startedAt: true },
       orderBy: { startedAt: 'asc' },
@@ -127,7 +127,7 @@ export class MetricsService {
           ? { unitId: scope.unitId }
           : scope.canSeeAllUnits
             ? {}
-            : { unitId: { in: scope.unitIds! } }),
+            : { OR: [{ unitId: { in: scope.unitIds! } }, { unitId: null }] }),
       },
       select: { npsScore: true, unitId: true },
     });
@@ -157,7 +157,7 @@ export class MetricsService {
       ? { unitId: scope.unitId }
       : scope.canSeeAllUnits
         ? {}
-        : { unitId: { in: scope.unitIds! } };
+        : { OR: [{ unitId: { in: scope.unitIds! } }, { unitId: null }] };
 
     const openStatuses = ['new', 'viewed', 'in_progress', 'waiting_customer'] as const;
     const closedStatuses = ['resolved', 'closed', 'dismissed'] as const;

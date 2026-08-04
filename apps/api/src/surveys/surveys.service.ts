@@ -163,10 +163,17 @@ export class SurveysService {
       },
     });
 
+    const defaultUnit = await this.prisma.surveyUnit.findFirst({
+      where: { surveyId: survey.id },
+      select: { unitId: true },
+      orderBy: { unitId: 'asc' },
+    });
+
     const distribution = await this.prisma.surveyDistribution.create({
       data: {
         tenantId: user.tenantId,
         surveyId: survey.id,
+        unitId: defaultUnit?.unitId,
         channel: 'qrcode',
         publicToken: randomToken(16),
         active: true,

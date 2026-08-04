@@ -11,7 +11,9 @@ export class FeedbacksService {
 
   private unitWhere(user: AuthUser) {
     const canSeeAll = user.permissionCodes.includes(PermissionCodes.UnitManage);
-    return canSeeAll ? {} : { unitId: { in: user.unitIds.length ? user.unitIds : ['__none__'] } };
+    if (canSeeAll) return {};
+    const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
+    return { OR: [{ unitId: { in: allowed } }, { unitId: null }] };
   }
 
   list(
