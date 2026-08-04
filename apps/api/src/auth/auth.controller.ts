@@ -10,6 +10,17 @@ import type { AuthUser } from './auth.types';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  private cookieSettings() {
+    const basePath = process.env.API_BASE_PATH ?? '';
+    const normalizedBase = basePath ? `/${basePath.replace(/^\/+|\/+$/g, '')}` : '';
+    const path = `${normalizedBase}/auth/refresh` || '/auth/refresh';
+
+    const secure =
+      (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.APP_BASE_URL ?? '').startsWith('https://');
+
+    return { path, secure };
+  }
+
   @Post('login')
   async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.login({
@@ -19,11 +30,12 @@ export class AuthController {
       req,
     });
 
+    const cookie = this.cookieSettings();
     res.cookie('rt', result.refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: false,
-      path: '/auth/refresh',
+      secure: cookie.secure,
+      path: cookie.path,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
@@ -37,11 +49,12 @@ export class AuthController {
 
     const result = await this.auth.refresh({ refreshToken, req });
 
+    const cookie = this.cookieSettings();
     res.cookie('rt', result.refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: false,
-      path: '/auth/refresh',
+      secure: cookie.secure,
+      path: cookie.path,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
