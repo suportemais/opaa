@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
@@ -8,6 +8,29 @@ import type { CreateCaseInteractionDto } from './dto/create-case-interaction.dto
 @Injectable()
 export class FeedbacksService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private startOfUtcDay(d: Date) {
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+  }
+
+  private endOfUtcDay(d: Date) {
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+  }
+
+  private resolveRange(params: { from?: string; to?: string }) {
+    if (!params.from && !params.to) return null;
+
+    const toInput = params.to ? new Date(params.to) : new Date();
+    if (Number.isNaN(toInput.getTime())) throw new BadRequestException('invalid_to');
+
+    const fromInput = params.from ? new Date(params.from) : new Date(toInput.getTime() - 29 * 24 * 60 * 60 * 1000);
+    if (Number.isNaN(fromInput.getTime())) throw new BadRequestException('invalid_from');
+
+    const from = this.startOfUtcDay(fromInput);
+    const to = this.endOfUtcDay(toInput);
+    if (from.getTime() > to.getTime()) throw new BadRequestException('invalid_range');
+    return { from, to };
+  }
 
   private unitWhere(user: AuthUser) {
     const canSeeAll = user.permissionCodes.includes(PermissionCodes.UnitManage);
@@ -24,10 +47,28 @@ export class FeedbacksService {
       caseFilter?: string;
       assignee?: string;
       due?: string;
+      npsClass?: string;
+      from?: string;
+      to?: string;
+      unitId?: string;
     },
   ) {
     const take = Math.min(Math.max(params.take ?? 20, 1), 50);
-    const unitWhere = this.unitWhere(user);
+    const canSeeAll = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    if (params.unitId && !canSeeAll) {
+      if (!user.unitIds.includes(params.unitId)) throw new ForbiddenException();
+    }
+    const unitWhere = params.unitId ? { unitId: params.unitId } : this.unitWhere(user);
+
+    const range = this.resolveRange(params);
+
+    let npsClass: 'detractor' | 'passive' | 'promoter' | undefined;
+    if (params.npsClass === 'detractor' || params.npsClass === 'passive' || params.npsClass === 'promoter') {
+      npsClass = params.npsClass;
+    } else if (params.npsClass === 'any' || !params.npsClass) {
+    } else {
+      throw new BadRequestException('invalid_nps_class');
+    }
 
     const openStatuses = ['new', 'viewed', 'in_progress', 'waiting_customer'];
 
@@ -83,6 +124,8 @@ export class FeedbacksService {
         tenantId: user.tenantId,
         status: 'completed',
         ...unitWhere,
+        ...(npsClass ? { npsClass } : {}),
+        ...(range ? { completedAt: { gte: range.from, lte: range.to } } : {}),
         ...(feedbackCaseFilter ? { feedbackCase: feedbackCaseFilter } : {}),
       },
       orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],

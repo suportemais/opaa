@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { feedbackCaseStatusLabel } from '../lib/labels';
 import { Card } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
 
 type Feedback = {
   id: string;
@@ -43,19 +44,54 @@ function dueBadge(dueAt: string | null) {
   return { label: `Vence ${formatDate(dueAt)}`, cls: 'bg-slate-100 text-slate-700' };
 }
 
+type Unit = { id: string; name: string };
+
 export function FeedbacksPage() {
-  const [caseFilter, setCaseFilter] = useState<'open' | 'with' | 'none' | 'all'>('open');
-  const [assignee, setAssignee] = useState<'any' | 'me' | 'unassigned'>('any');
-  const [due, setDue] = useState<'any' | 'overdue' | 'today' | 'next7'>('any');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [caseFilter, setCaseFilter] = useState<'open' | 'with' | 'none' | 'all'>(() => {
+    const v = searchParams.get('case');
+    if (v === 'open' || v === 'with' || v === 'none' || v === 'all') return v;
+    return 'open';
+  });
+  const [assignee, setAssignee] = useState<'any' | 'me' | 'unassigned'>(() => {
+    const v = searchParams.get('assignee');
+    if (v === 'any' || v === 'me' || v === 'unassigned') return v;
+    return 'any';
+  });
+  const [due, setDue] = useState<'any' | 'overdue' | 'today' | 'next7'>(() => {
+    const v = searchParams.get('due');
+    if (v === 'any' || v === 'overdue' || v === 'today' || v === 'next7') return v;
+    return 'any';
+  });
+  const [npsClass, setNpsClass] = useState<'any' | 'promoter' | 'passive' | 'detractor'>(() => {
+    const v = searchParams.get('npsClass');
+    if (v === 'any' || v === 'promoter' || v === 'passive' || v === 'detractor') return v;
+    return 'any';
+  });
+  const [from, setFrom] = useState(searchParams.get('from') ?? '');
+  const [to, setTo] = useState(searchParams.get('to') ?? '');
+  const [unitId, setUnitId] = useState(searchParams.get('unitId') ?? '');
+
+  const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (caseFilter !== 'all') params.set('case', caseFilter);
     if (assignee !== 'any') params.set('assignee', assignee);
     if (due !== 'any') params.set('due', due);
+    if (npsClass !== 'any') params.set('npsClass', npsClass);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (unitId) params.set('unitId', unitId);
     const qs = params.toString();
     return qs ? `?${qs}` : '';
-  }, [assignee, caseFilter, due]);
+  }, [assignee, caseFilter, due, from, npsClass, to, unitId]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(queryString.replace(/^\?/, ''));
+    setSearchParams(next, { replace: true });
+  }, [queryString, setSearchParams]);
 
   const feedbacks = useQuery({
     queryKey: ['feedbacks', queryString],
@@ -75,7 +111,7 @@ export function FeedbacksPage() {
       </div>
 
       <Card title="Fila" description="Filtre ocorrências abertas e priorize por vencimento e responsável">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <div>
             <div className="mb-1 text-xs font-medium text-slate-600">Ocorrências</div>
             <select
@@ -112,6 +148,43 @@ export function FeedbacksPage() {
               <option value="overdue">Vencidas</option>
               <option value="today">Vencendo hoje</option>
               <option value="next7">Próx. 7 dias</option>
+            </select>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">NPS</div>
+            <select
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={npsClass}
+              onChange={(e) => setNpsClass(e.target.value as any)}
+            >
+              <option value="any">Todos</option>
+              <option value="promoter">Promotores</option>
+              <option value="passive">Passivos</option>
+              <option value="detractor">Detratores</option>
+            </select>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">De</div>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">Até</div>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <div className="mb-1 text-xs font-medium text-slate-600">Unidade</div>
+            <select
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={unitId}
+              onChange={(e) => setUnitId(e.target.value)}
+              disabled={units.isLoading}
+            >
+              <option value="">Todas</option>
+              {units.data?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>

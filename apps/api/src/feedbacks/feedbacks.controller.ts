@@ -23,6 +23,10 @@ export class FeedbacksController {
     @Query('case') caseFilter?: string,
     @Query('assignee') assignee?: string,
     @Query('due') due?: string,
+    @Query('npsClass') npsClass?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('unitId') unitId?: string,
   ) {
     return this.feedbacks.list(user, {
       cursor,
@@ -30,6 +34,10 @@ export class FeedbacksController {
       caseFilter,
       assignee,
       due,
+      npsClass,
+      from,
+      to,
+      unitId,
     });
   }
 

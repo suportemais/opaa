@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { useNavigate } from 'react-router-dom';
 
 type Unit = { id: string; name: string };
 type NpsSummary = { total: number; promoters: number; passives: number; detractors: number; nps: number | null };
@@ -23,6 +24,7 @@ function toIsoDate(d: Date) {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const [rangeDays, setRangeDays] = useState(30);
   const [unitId, setUnitId] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -69,6 +71,27 @@ export function DashboardPage() {
     queryFn: () => apiFetch<NpsByUnit>(`/metrics/nps/by-unit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     enabled: !unitId,
   });
+
+  function goFeedbacks(extra?: Record<string, string>) {
+    const params = new URLSearchParams();
+    params.set('case', 'all');
+    params.set('from', from);
+    params.set('to', to);
+    if (unitId) params.set('unitId', unitId);
+    for (const [k, v] of Object.entries(extra ?? {})) {
+      if (v) params.set(k, v);
+    }
+    navigate(`/app/feedbacks?${params.toString()}`);
+  }
+
+  function goKanban(extra?: Record<string, string>) {
+    const params = new URLSearchParams();
+    params.set('case', 'open');
+    for (const [k, v] of Object.entries(extra ?? {})) {
+      if (v) params.set(k, v);
+    }
+    navigate(`/app/feedbacks/kanban?${params.toString()}`);
+  }
 
   return (
     <div className="grid gap-6">
@@ -126,43 +149,66 @@ export function DashboardPage() {
         <Card title="Unidades" description="Acesso por permissão e vínculo">
           <div className="text-2xl font-semibold">{units.data?.length ?? 0}</div>
         </Card>
-        <Card title="Respostas" description={`${from} → ${to}`}>
-          <div className="text-2xl font-semibold">{summary.data?.total ?? 0}</div>
-        </Card>
+        <button type="button" className="text-left" onClick={() => goFeedbacks()}>
+          <Card title="Respostas" description={`${from} → ${to}`}>
+            <div className="text-2xl font-semibold">{summary.data?.total ?? 0}</div>
+          </Card>
+        </button>
         <Card title="NPS" description="Promotores - Detratores">
           <div className="text-2xl font-semibold">{typeof summary.data?.nps === 'number' ? summary.data.nps : '—'}</div>
         </Card>
-        <Card title="Casos abertos" description="Ocorrências em andamento">
-          <div className="text-2xl font-semibold">{casesSummary.data?.totals.open ?? 0}</div>
-        </Card>
+        <button type="button" className="text-left" onClick={() => goKanban()}>
+          <Card title="Casos abertos" description="Ocorrências em andamento">
+            <div className="text-2xl font-semibold">{casesSummary.data?.totals.open ?? 0}</div>
+          </Card>
+        </button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card title="Vencidos" description="Casos abertos com prazo estourado">
-          <div className="text-2xl font-semibold">{casesSummary.data?.due.overdue ?? 0}</div>
-        </Card>
-        <Card title="Vencem hoje" description="Casos abertos com prazo hoje">
-          <div className="text-2xl font-semibold">{casesSummary.data?.due.today ?? 0}</div>
-        </Card>
-        <Card title="Próx. 7 dias" description="Casos abertos vencendo em breve">
-          <div className="text-2xl font-semibold">{casesSummary.data?.due.next7 ?? 0}</div>
-        </Card>
-        <Card title="Sem responsável" description="Casos abertos não atribuídos">
-          <div className="text-2xl font-semibold">{casesSummary.data?.assignees.unassigned ?? 0}</div>
-        </Card>
+        <button type="button" className="text-left" onClick={() => goKanban({ due: 'overdue' })}>
+          <Card title="Vencidos" description="Casos abertos com prazo estourado">
+            <div className="text-2xl font-semibold">{casesSummary.data?.due.overdue ?? 0}</div>
+          </Card>
+        </button>
+        <button type="button" className="text-left" onClick={() => goKanban({ due: 'today' })}>
+          <Card title="Vencem hoje" description="Casos abertos com prazo hoje">
+            <div className="text-2xl font-semibold">{casesSummary.data?.due.today ?? 0}</div>
+          </Card>
+        </button>
+        <button type="button" className="text-left" onClick={() => goKanban({ due: 'next7' })}>
+          <Card title="Próx. 7 dias" description="Casos abertos vencendo em breve">
+            <div className="text-2xl font-semibold">{casesSummary.data?.due.next7 ?? 0}</div>
+          </Card>
+        </button>
+        <button type="button" className="text-left" onClick={() => goKanban({ assignee: 'unassigned' })}>
+          <Card title="Sem responsável" description="Casos abertos não atribuídos">
+            <div className="text-2xl font-semibold">{casesSummary.data?.assignees.unassigned ?? 0}</div>
+          </Card>
+        </button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Tendência de NPS" description={`${from} → ${to}`}>
           {byDay.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
           {byDay.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-          {byDay.data && <NpsLine points={byDay.data.points} />}
+          {byDay.data && (
+            <button type="button" className="block w-full text-left" onClick={() => goFeedbacks()}>
+              <NpsLine points={byDay.data.points} />
+            </button>
+          )}
         </Card>
 
         <Card title="Distribuição NPS" description="Promotores / Passivos / Detratores">
           {summary.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
           {summary.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-          {summary.data && <NpsDistribution summary={summary.data} />}
+          {summary.data && (
+            <NpsDistribution
+              summary={summary.data}
+              onSelect={(cls) => {
+                goFeedbacks({ npsClass: cls });
+              }}
+            />
+          )}
         </Card>
 
         <Card title="Fila operacional" description="Atribuição e prazos">
@@ -251,7 +297,7 @@ function NpsLine(props: { points: NpsByDayPoint[] }) {
   );
 }
 
-function NpsDistribution(props: { summary: NpsSummary }) {
+function NpsDistribution(props: { summary: NpsSummary; onSelect?: (npsClass: 'promoter' | 'passive' | 'detractor') => void }) {
   const total = props.summary.total || 0;
   const p = props.summary.promoters;
   const pa = props.summary.passives;
@@ -262,17 +308,17 @@ function NpsDistribution(props: { summary: NpsSummary }) {
   return (
     <div className="grid gap-3">
       <div className="grid gap-2">
-        <BarRow label="Promotores" value={p} percent={pct(p)} colorClass="bg-emerald-500" />
-        <BarRow label="Passivos" value={pa} percent={pct(pa)} colorClass="bg-slate-500" />
-        <BarRow label="Detratores" value={d} percent={pct(d)} colorClass="bg-rose-500" />
+        <BarRow label="Promotores" value={p} percent={pct(p)} colorClass="bg-emerald-500" onClick={props.onSelect ? () => props.onSelect!('promoter') : undefined} />
+        <BarRow label="Passivos" value={pa} percent={pct(pa)} colorClass="bg-slate-500" onClick={props.onSelect ? () => props.onSelect!('passive') : undefined} />
+        <BarRow label="Detratores" value={d} percent={pct(d)} colorClass="bg-rose-500" onClick={props.onSelect ? () => props.onSelect!('detractor') : undefined} />
       </div>
       <div className="text-xs text-slate-500">Total: {total}</div>
     </div>
   );
 }
 
-function BarRow(props: { label: string; value: number; percent: number; colorClass: string }) {
-  return (
+function BarRow(props: { label: string; value: number; percent: number; colorClass: string; onClick?: () => void }) {
+  const content = (
     <div className="grid gap-1">
       <div className="flex items-center justify-between gap-3 text-sm">
         <div className="font-medium text-slate-900">{props.label}</div>
@@ -284,6 +330,14 @@ function BarRow(props: { label: string; value: number; percent: number; colorCla
         <div className={['h-full', props.colorClass].join(' ')} style={{ width: `${props.percent}%` }} />
       </div>
     </div>
+  );
+
+  if (!props.onClick) return content;
+
+  return (
+    <button type="button" className="text-left" onClick={props.onClick}>
+      {content}
+    </button>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { apiFetch } from '../lib/api';
 import { feedbackCasePriorityLabel, feedbackCaseStatusLabel, npsClassLabel } from '../lib/labels';
@@ -54,9 +54,19 @@ function dueBadge(dueAt: string | null) {
 export function KanbanPage() {
   const qc = useQueryClient();
 
-  const [assignee, setAssignee] = useState<'any' | 'me' | 'unassigned'>('any');
-  const [due, setDue] = useState<'any' | 'overdue' | 'today' | 'next7'>('any');
-  const [showClosed, setShowClosed] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [assignee, setAssignee] = useState<'any' | 'me' | 'unassigned'>(() => {
+    const v = searchParams.get('assignee');
+    if (v === 'any' || v === 'me' || v === 'unassigned') return v;
+    return 'any';
+  });
+  const [due, setDue] = useState<'any' | 'overdue' | 'today' | 'next7'>(() => {
+    const v = searchParams.get('due');
+    if (v === 'any' || v === 'overdue' || v === 'today' || v === 'next7') return v;
+    return 'any';
+  });
+  const [showClosed, setShowClosed] = useState(() => searchParams.get('case') === 'with');
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -66,6 +76,11 @@ export function KanbanPage() {
     const qs = params.toString();
     return qs ? `?${qs}` : '';
   }, [assignee, due, showClosed]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(queryString.replace(/^\?/, ''));
+    setSearchParams(next, { replace: true });
+  }, [queryString, setSearchParams]);
 
   const data = useQuery({
     queryKey: ['kanban', queryString],
@@ -246,4 +261,3 @@ export function KanbanPage() {
     </div>
   );
 }
-
