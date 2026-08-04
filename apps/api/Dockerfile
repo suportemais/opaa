@@ -27,9 +27,9 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/node_modules /app/apps/api/node_modules
 COPY --from=build /app/apps/api/dist /app/apps/api/dist
 COPY --from=build /app/apps/api/prisma /app/apps/api/prisma
+COPY --from=build /app/apps/api/prisma.config.ts /app/apps/api/prisma.config.ts
 COPY --from=build /app/apps/api/package.json /app/apps/api/package.json
 
 EXPOSE 3000
 
 CMD ["node", "apps/api/dist/main.js"]
-
