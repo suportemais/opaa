@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { classifyNps } from '../domain/metrics/nps';
 import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { normalizeEmail, normalizePhone } from '../common/normalize';
+import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -23,6 +24,19 @@ function isQuestionVisible(q: { config: unknown }, ctx: { npsScore?: number }) {
 @Injectable()
 export class PublicService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async isAllowedDomain(domain: string) {
+    const base = baseDomain();
+    if (!base) return true;
+
+    const normalized = domain.toLowerCase().replace(/:\d+$/, '');
+    if (normalized === base) return true;
+    const slug = tenantSlugFromHost(normalized, base);
+    if (!slug) return false;
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    return Boolean(tenant);
+  }
 
   async getPublishedSurvey(publicToken: string) {
     const distribution = await this.prisma.surveyDistribution.findUnique({
