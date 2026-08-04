@@ -12,7 +12,9 @@ services:
         "apps/api/node_modules/.bin/prisma migrate deploy --config apps/api/prisma.config.ts",
       ]
     networks:
-      - web
+      web:
+        aliases:
+          - opaa-migrate
 
   api:
     build:
@@ -30,7 +32,9 @@ services:
       migrate:
         condition: service_completed_successfully
     networks:
-      - web
+      web:
+        aliases:
+          - opaa-api
 
   web:
     build:
@@ -38,12 +42,12 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         VITE_API_BASE_URL: https://opaa.devmais.com/api
-    ports:
-      - "3000:80"
     depends_on:
       - api
     networks:
-      - web
+      web:
+        aliases:
+          - opaa-web
 
 networks:
   web:
