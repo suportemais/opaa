@@ -9,7 +9,7 @@ services:
       [
         "sh",
         "-lc",
-        "apps/api/node_modules/.bin/prisma --schema apps/api/prisma/schema.prisma migrate deploy && node -r ./apps/api/node_modules/ts-node/register apps/api/prisma/seed.ts",
+        "apps/api/node_modules/.bin/prisma migrate deploy --schema apps/api/prisma/schema.prisma && node -r ./apps/api/node_modules/ts-node/register apps/api/prisma/seed.ts",
       ]
     networks:
       - web
