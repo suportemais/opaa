@@ -32,4 +32,4 @@ COPY --from=build /app/apps/api/package.json /app/apps/api/package.json
 
 EXPOSE 3000
 
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["node", "apps/api/dist/src/main.js"]
