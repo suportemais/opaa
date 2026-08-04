@@ -30,6 +30,10 @@ export class SubmitResponseDto {
   @IsString()
   idempotencyKey!: string;
 
+  @IsOptional()
+  @IsString()
+  complaint?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

@@ -8,6 +8,7 @@ import { sha256 } from '../common/crypto';
 import { AuditService } from '../audit/audit.service';
 import { baseDomain, requestHost, tenantSlugFromHost } from '../common/tenant-host';
 import type { Request } from 'express';
+import type { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -210,5 +211,31 @@ export class AuthService {
       entityId: params.userId,
       req: params.req,
     });
+  }
+
+  async changePassword(user: { userId: string; tenantId: string }, dto: ChangePasswordDto) {
+    const current = await this.prisma.user.findUniqueOrThrow({ where: { id: user.userId } });
+    if (current.tenantId !== user.tenantId || current.status !== 'active') throw new ForbiddenException();
+
+    const ok = await argon2.verify(current.passwordHash, dto.currentPassword);
+    if (!ok) throw new UnauthorizedException();
+
+    const passwordHash = await argon2.hash(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id: current.id },
+      data: { passwordHash, refreshTokenHash: null },
+    });
+
+    await this.audit.log({
+      tenantId: current.tenantId,
+      actorType: 'user',
+      actorUserId: current.id,
+      action: 'auth.password_changed',
+      entity: 'User',
+      entityId: current.id,
+    });
+
+    return { ok: true };
   }
 }

@@ -53,6 +53,14 @@ export class SurveysService {
   }
 
   async create(user: AuthUser, dto: CreateSurveyDto, req?: Request) {
+    const npsIndex = dto.questions.findIndex((q) => q.type === 'nps');
+    if (npsIndex !== 0) {
+      throw new BadRequestException('nps_required_first');
+    }
+    if (dto.questions.filter((q) => q.type === 'nps').length !== 1) {
+      throw new BadRequestException('nps_required_single');
+    }
+
     const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
     if (!canSeeAllUnits) {
       for (const unitId of dto.unitIds) {

@@ -14,6 +14,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { FeedbacksModule } from './feedbacks/feedbacks.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { CustomersModule } from './customers/customers.module';
+import { TenantModule } from './tenant/tenant.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { CustomersModule } from './customers/customers.module';
     FeedbacksModule,
     MetricsModule,
     CustomersModule,
+    TenantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

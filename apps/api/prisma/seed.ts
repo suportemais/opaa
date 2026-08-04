@@ -174,7 +174,7 @@ async function createTenant(params: {
             data: [
               {
                 tenantId: tenant.id,
-                title: 'De 0 a 10, o quanto você nos recomendaria?',
+                title: 'De 1 a 10, o quanto você nos recomendaria?',
                 type: 'nps',
                 required: true,
                 order: 1,

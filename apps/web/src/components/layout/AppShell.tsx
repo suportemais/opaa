@@ -1,9 +1,20 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { setAccessToken } from '../../lib/auth-store';
+import { apiFetch } from '../../lib/api';
+
+type AuthMe = {
+  permissionCodes: string[];
+};
 
 export function AppShell() {
   const navigate = useNavigate();
+  const me = useQuery({ queryKey: ['authMe'], queryFn: () => apiFetch<AuthMe>('/auth/me') });
+
+  const permissionCodes = me.data?.permissionCodes ?? [];
+  const canManageTenant = permissionCodes.includes('tenant:settings:manage');
+  const canManageUsers = permissionCodes.includes('user:manage');
 
   return (
     <div className="flex h-full bg-slate-50 text-slate-900">
@@ -29,6 +40,19 @@ export function AppShell() {
           >
             Dashboard
           </NavLink>
+          {canManageTenant && (
+            <NavLink
+              to="/app/company"
+              className={({ isActive }) =>
+                [
+                  'rounded-md px-3 py-2 text-sm',
+                  isActive ? 'bg-slate-100 font-medium text-slate-900' : 'text-slate-600 hover:bg-slate-50',
+                ].join(' ')
+              }
+            >
+              Empresa
+            </NavLink>
+          )}
           <NavLink
             to="/app/units"
             className={({ isActive }) =>
@@ -40,6 +64,19 @@ export function AppShell() {
           >
             Unidades
           </NavLink>
+          {canManageUsers && (
+            <NavLink
+              to="/app/users"
+              className={({ isActive }) =>
+                [
+                  'rounded-md px-3 py-2 text-sm',
+                  isActive ? 'bg-slate-100 font-medium text-slate-900' : 'text-slate-600 hover:bg-slate-50',
+                ].join(' ')
+              }
+            >
+              Usuários
+            </NavLink>
+          )}
           <NavLink
             to="/app/surveys"
             className={({ isActive }) =>

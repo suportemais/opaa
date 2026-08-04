@@ -5,6 +5,7 @@ import { classifyNps } from '../domain/metrics/nps';
 import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { normalizeEmail, normalizePhone } from '../common/normalize';
 import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
+import { badScoreThresholdFromSettings } from '../common/tenant-settings';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -42,6 +43,7 @@ export class PublicService {
     const distribution = await this.prisma.surveyDistribution.findUnique({
       where: { publicToken },
       include: {
+        tenant: { select: { tradeName: true, settings: true } },
         survey: {
           include: {
             publishedVersion: {
@@ -72,7 +74,10 @@ export class PublicService {
       surveyId: survey.id,
       surveyVersionId: survey.publishedVersion.id,
       distributionId: distribution.id,
-      tradeName: undefined,
+      tradeName: distribution.tenant.tradeName,
+      settings: {
+        badScoreThreshold: badScoreThresholdFromSettings(distribution.tenant.settings),
+      },
       survey: {
         name: survey.name,
         description: survey.description,
@@ -97,6 +102,7 @@ export class PublicService {
     const distribution = await this.prisma.surveyDistribution.findUnique({
       where: { publicToken: dto.publicToken },
       include: {
+        tenant: { select: { settings: true } },
         survey: {
           include: {
             publishedVersion: {
@@ -111,6 +117,8 @@ export class PublicService {
     const survey = distribution.survey;
     const version = survey.publishedVersion;
     if (!version || survey.status !== 'published') throw new NotFoundException();
+
+    const badScoreThreshold = badScoreThresholdFromSettings(distribution.tenant.settings);
 
     const questionById = new Map(version.questions.map((q) => [q.id, q]));
 
@@ -127,13 +135,15 @@ export class PublicService {
 
     let npsScore: number | undefined;
     let npsClass: NpsClass | undefined;
+    let isBadScore = false;
     if (npsQuestion) {
       const score = typeof npsAnswer?.value === 'number' ? npsAnswer.value : NaN;
-      if (!Number.isFinite(score) || score < 0 || score > 10) {
+      if (!Number.isFinite(score) || score < 1 || score > 10) {
         throw new BadRequestException('invalid_nps');
       }
       npsScore = score;
       npsClass = classifyNps(score);
+      isBadScore = score <= badScoreThreshold;
     }
 
     const visibleCtx = { npsScore };
@@ -166,9 +176,14 @@ export class PublicService {
         return a.order - b.order;
       });
 
-    const mainComment = rankedTextQuestions
+    const derivedComment = rankedTextQuestions
       .map((q) => dto.answers.find((a) => a.questionId === q.id)?.value)
       .find((v) => typeof v === 'string' && v.trim().length > 0) as string | undefined;
+
+    const complaint =
+      typeof dto.complaint === 'string' && dto.complaint.trim().length > 0 ? dto.complaint.trim() : undefined;
+
+    const mainComment = complaint && isBadScore ? complaint : derivedComment;
 
     const response = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.surveyResponse.findUnique({
@@ -283,7 +298,8 @@ export class PublicService {
         })),
       });
 
-      if (created.npsClass === NpsClass.detractor) {
+      const shouldCreateCase = typeof created.npsScore === 'number' && created.npsScore <= badScoreThreshold;
+      if (shouldCreateCase) {
         await tx.feedbackCase.create({
           data: {
             tenantId: distribution.tenantId,
@@ -298,7 +314,7 @@ export class PublicService {
                 {
                   tenantId: distribution.tenantId,
                   type: 'case.created_by_rule',
-                  data: { trigger: 'nps_detractor', npsScore: created.npsScore },
+                  data: { trigger: 'nps_bad_score', npsScore: created.npsScore, badScoreThreshold },
                 },
               ],
             },

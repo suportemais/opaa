@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
@@ -18,6 +18,7 @@ type PublicQuestion = {
   config?: unknown;
 };
 type PublicSurvey = {
+  settings?: { badScoreThreshold?: number };
   survey: {
     name: string;
     description: string | null;
@@ -45,8 +46,13 @@ export function PublicSurveyPage() {
 
   const questions = useMemo(() => (survey.data?.survey.questions ?? []).slice().sort((a, b) => a.order - b.order), [survey.data]);
   const npsQuestion = useMemo(() => questions.find((q) => q.type === 'nps') ?? null, [questions]);
+  const badScoreThreshold = useMemo(() => {
+    const v = survey.data?.settings?.badScoreThreshold;
+    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
+  }, [survey.data]);
 
   const [answers, setAnswers] = useState<Record<string, unknown>>(() => ({}));
+  const [complaint, setComplaint] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [identify, setIdentify] = useState(false);
@@ -54,23 +60,43 @@ export function PublicSurveyPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
-  const effectiveNps = useMemo(() => {
-    if (!npsQuestion) return 10;
+  const selectedNps = useMemo(() => {
+    if (!npsQuestion) return null;
     const v = answers[npsQuestion.id];
     if (typeof v === 'number' && Number.isFinite(v)) return v;
-    return 10;
+    return null;
   }, [answers, npsQuestion]);
+
+  const effectiveNpsForVisibility = selectedNps ?? 10;
 
   const visibleQuestions = useMemo(() => {
     return questions.filter((q) => {
       const cfg = q.config as QuestionConfig | null | undefined;
       const when = cfg?.when;
       if (!when) return true;
-      if (typeof when.npsMin === 'number' && effectiveNps < when.npsMin) return false;
-      if (typeof when.npsMax === 'number' && effectiveNps > when.npsMax) return false;
+      if (typeof when.npsMin === 'number' && effectiveNpsForVisibility < when.npsMin) return false;
+      if (typeof when.npsMax === 'number' && effectiveNpsForVisibility > when.npsMax) return false;
       return true;
     });
-  }, [questions, effectiveNps]);
+  }, [questions, effectiveNpsForVisibility]);
+
+  const otherVisibleQuestions = useMemo(() => {
+    return visibleQuestions.filter((q) => (npsQuestion ? q.id !== npsQuestion.id : true));
+  }, [visibleQuestions, npsQuestion]);
+
+  const steps = useMemo(() => {
+    const out: Array<{ key: string; type: 'nps' | 'complaint' | 'question'; question?: PublicQuestion }> = [];
+    if (npsQuestion) out.push({ key: `nps:${npsQuestion.id}`, type: 'nps', question: npsQuestion });
+    if (typeof selectedNps === 'number' && selectedNps <= badScoreThreshold) out.push({ key: 'complaint', type: 'complaint' });
+    for (const q of otherVisibleQuestions) out.push({ key: `q:${q.id}`, type: 'question', question: q });
+    return out;
+  }, [npsQuestion, selectedNps, otherVisibleQuestions, badScoreThreshold]);
+
+  const [stepIndex, setStepIndex] = useState(0);
+
+  useEffect(() => {
+    if (stepIndex > steps.length - 1) setStepIndex(Math.max(steps.length - 1, 0));
+  }, [stepIndex, steps.length]);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -80,7 +106,11 @@ export function PublicSurveyPage() {
 
       const outAnswers: Array<{ questionId: string; value: unknown }> = [];
       const nextAnswers: Record<string, unknown> = { ...answers };
-      nextAnswers[npsQuestion.id] = typeof nextAnswers[npsQuestion.id] === 'number' ? nextAnswers[npsQuestion.id] : effectiveNps;
+      const npsValue = nextAnswers[npsQuestion.id];
+      if (typeof npsValue !== 'number' || !Number.isFinite(npsValue)) {
+        throw new Error('missing_required');
+      }
+      nextAnswers[npsQuestion.id] = npsValue;
 
       for (const q of visibleQuestions) {
         const cfg = q.config as QuestionConfig | null | undefined;
@@ -121,6 +151,7 @@ export function PublicSurveyPage() {
         json: {
           publicToken: token,
           idempotencyKey,
+          complaint: complaint.trim() || undefined,
           answers: outAnswers,
           customer: hasCustomerField ? customer : undefined,
           clientMetadata: { ua: navigator.userAgent },
@@ -137,6 +168,29 @@ export function PublicSurveyPage() {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   }
 
+  function canGoNext() {
+    const step = steps[stepIndex];
+    if (!step) return false;
+    if (step.type === 'nps') return typeof selectedNps === 'number' && selectedNps >= 1 && selectedNps <= 10;
+    if (step.type === 'complaint') return true;
+    if (step.type === 'question' && step.question) {
+      const q = step.question;
+      const cfg = q.config as QuestionConfig | null | undefined;
+      const required = Boolean(q.required || cfg?.requiredWhenVisible);
+      const v = answers[q.id];
+      const missing =
+        v === undefined || v === null
+          ? true
+          : typeof v === 'string'
+            ? v.trim().length === 0
+            : typeof v === 'number'
+              ? !Number.isFinite(v)
+              : false;
+      return required ? !missing : true;
+    }
+    return true;
+  }
+
   if (survey.isLoading) {
     return <div className="flex min-h-full items-center justify-center bg-slate-50 p-6 text-sm text-slate-600">Carregando...</div>;
   }
@@ -147,9 +201,9 @@ export function PublicSurveyPage() {
 
   return (
     <div className="min-h-full bg-slate-50 p-4 md:p-10">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-6 pb-44">
         <div className="text-center">
-          <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-sky-600" />
+          <img src="/favicon.svg" alt="OPAA" className="mx-auto mb-3 h-10 w-10" />
           <div className="text-xl font-semibold text-slate-900">{survey.data.survey.name}</div>
           {survey.data.survey.description && <div className="text-sm text-slate-600">{survey.data.survey.description}</div>}
         </div>
@@ -161,182 +215,251 @@ export function PublicSurveyPage() {
         ) : (
           <Card>
             <div className="grid gap-4">
-              {survey.data.survey.introMessage && <div className="text-sm text-slate-700">{survey.data.survey.introMessage}</div>}
-
-              {visibleQuestions.map((q) => {
-                const cfg = q.config as QuestionConfig | null | undefined;
-                const required = Boolean(q.required || cfg?.requiredWhenVisible);
-                const label = required ? `${q.title} *` : q.title;
-
-                if (q.type === 'nps') {
-                  return (
-                    <div key={q.id}>
-                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <div className="grid grid-cols-6 gap-2 md:grid-cols-11">
-                        {Array.from({ length: 11 }).map((_, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            className={[
-                              'h-10 rounded-md border text-sm font-medium',
-                              effectiveNps === i
-                                ? 'border-sky-600 bg-sky-600 text-white'
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                            ].join(' ')}
-                            onClick={() => setAnswer(q.id, i)}
-                          >
-                            {i}
-                          </button>
-                        ))}
-                      </div>
-                      {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                    </div>
-                  );
-                }
-
-                if (q.type === 'text_short') {
-                  const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
-                  return (
-                    <div key={q.id}>
-                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <input
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                        value={v}
-                        onChange={(e) => setAnswer(q.id, e.target.value)}
-                        placeholder="Digite aqui"
-                      />
-                      {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                    </div>
-                  );
-                }
-
-                if (q.type === 'text_long') {
-                  const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
-                  return (
-                    <div key={q.id}>
-                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <textarea
-                        className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                        value={v}
-                        onChange={(e) => setAnswer(q.id, e.target.value)}
-                        placeholder="Escreva aqui"
-                      />
-                      {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                    </div>
-                  );
-                }
-
-                if (q.type === 'multiple_choice' && q.options.length > 0) {
-                  const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
-                  return (
-                    <div key={q.id}>
-                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <select
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                        value={v}
-                        onChange={(e) => setAnswer(q.id, e.target.value)}
-                      >
-                        <option value="">Selecione</option>
-                        {q.options
-                          .slice()
-                          .sort((a, b) => a.order - b.order)
-                          .map((o) => (
-                            <option key={o.id} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                      </select>
-                      {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={q.id}>
-                    <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                    <div className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">Tipo de pergunta não suportado: {q.type}</div>
-                  </div>
-                );
-              })}
-
-              {survey.data.survey.collectCustomer && (
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">Identificação (opcional)</div>
-                      <div className="text-xs text-slate-500">Se você quiser, pode se identificar para que possamos retornar.</div>
-                    </div>
-                    <button
-                      type="button"
-                      className={[
-                        'h-10 rounded-md border px-4 text-sm font-medium',
-                        identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                      ].join(' ')}
-                      onClick={() => setIdentify((v) => !v)}
-                    >
-                      {identify ? 'Vou me identificar' : 'Quero me identificar'}
-                    </button>
-                  </div>
-
-                  {identify && (
-                    <div className="mt-4 grid gap-3">
-                      <div>
-                        <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-                        <input
-                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                        />
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div>
-                          <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
-                          <input
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                            value={customerEmail}
-                            onChange={(e) => setCustomerEmail(e.target.value)}
-                            inputMode="email"
-                          />
-                        </div>
-                        <div>
-                          <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
-                          <input
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(e.target.value)}
-                            inputMode="tel"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {survey.data.survey.introMessage && stepIndex === 0 && (
+                <div className="text-sm text-slate-700">{survey.data.survey.introMessage}</div>
               )}
 
-              <Button
-                disabled={submit.isPending}
-                onClick={() => {
-                  setFormError(null);
-                  submit.mutate(undefined, {
-                    onError: (err) => {
-                      const code = err instanceof Error ? err.message : '';
-                      if (code === 'missing_required') {
+              {(() => {
+                const step = steps[stepIndex];
+                if (!step) return null;
+
+                if (step.type === 'nps' && step.question) {
+                  const q = step.question;
+                  const cfg = q.config as QuestionConfig | null | undefined;
+                  const required = Boolean(q.required || cfg?.requiredWhenVisible);
+                  const label = required ? `${q.title} *` : q.title;
+                  return (
+                    <div>
+                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                      <div className="grid grid-cols-5 gap-2 md:grid-cols-10">
+                        {Array.from({ length: 10 }).map((_, i) => {
+                          const value = i + 1;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              className={[
+                                'h-10 rounded-md border text-sm font-medium',
+                                selectedNps === value
+                                  ? 'border-sky-600 bg-sky-600 text-white'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                              ].join(' ')}
+                              onClick={() => setAnswer(q.id, value)}
+                            >
+                              {value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                        <span>1 = muito ruim</span>
+                        <span>10 = excelente</span>
+                      </div>
+                      {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                    </div>
+                  );
+                }
+
+                if (step.type === 'complaint') {
+                  return (
+                    <div>
+                      <div className="mb-2 text-sm font-medium text-slate-800">Reclamação ou justificativa (opcional)</div>
+                      <textarea
+                        className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                        value={complaint}
+                        onChange={(e) => setComplaint(e.target.value)}
+                        placeholder="Conte rapidamente o que aconteceu"
+                      />
+                      <div className="mt-2 text-xs text-slate-500">Se preferir, você pode deixar em branco.</div>
+                    </div>
+                  );
+                }
+
+                if (step.type === 'question' && step.question) {
+                  const q = step.question;
+                  const cfg = q.config as QuestionConfig | null | undefined;
+                  const required = Boolean(q.required || cfg?.requiredWhenVisible);
+                  const label = required ? `${q.title} *` : q.title;
+
+                  if (q.type === 'text_short') {
+                    const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
+                    return (
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                          value={v}
+                          onChange={(e) => setAnswer(q.id, e.target.value)}
+                          placeholder="Digite aqui"
+                        />
+                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                      </div>
+                    );
+                  }
+
+                  if (q.type === 'text_long') {
+                    const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
+                    return (
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                        <textarea
+                          className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                          value={v}
+                          onChange={(e) => setAnswer(q.id, e.target.value)}
+                          placeholder="Escreva aqui"
+                        />
+                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                      </div>
+                    );
+                  }
+
+                  if (q.type === 'multiple_choice' && q.options.length > 0) {
+                    const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
+                    return (
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                        <select
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                          value={v}
+                          onChange={(e) => setAnswer(q.id, e.target.value)}
+                        >
+                          <option value="">Selecione</option>
+                          {q.options
+                            .slice()
+                            .sort((a, b) => a.order - b.order)
+                            .map((o) => (
+                              <option key={o.id} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                        </select>
+                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div>
+                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                      <div className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        Tipo de pergunta não suportado: {q.type}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
+
+              <div className="flex items-center justify-between gap-3">
+                <Button
+                  variant="secondary"
+                  disabled={stepIndex === 0}
+                  onClick={() => {
+                    setFormError(null);
+                    setStepIndex((i) => Math.max(0, i - 1));
+                  }}
+                >
+                  Voltar
+                </Button>
+
+                {stepIndex < steps.length - 1 ? (
+                  <Button
+                    disabled={!canGoNext()}
+                    onClick={() => {
+                      if (!canGoNext()) {
                         setFormError('Preencha os campos obrigatórios para continuar.');
                         return;
                       }
-                      setFormError('Falha ao enviar. Tente novamente.');
-                    },
-                  });
-                }}
-              >
-                {submit.isPending ? 'Enviando...' : 'Enviar'}
-              </Button>
+                      setFormError(null);
+                      setStepIndex((i) => Math.min(steps.length - 1, i + 1));
+                    }}
+                  >
+                    Próximo
+                  </Button>
+                ) : (
+                  <Button
+                    disabled={submit.isPending || !canGoNext()}
+                    onClick={() => {
+                      setFormError(null);
+                      submit.mutate(undefined, {
+                        onError: (err) => {
+                          const code = err instanceof Error ? err.message : '';
+                          if (code === 'missing_required') {
+                            setFormError('Preencha os campos obrigatórios para continuar.');
+                            return;
+                          }
+                          setFormError('Falha ao enviar. Tente novamente.');
+                        },
+                      });
+                    }}
+                  >
+                    {submit.isPending ? 'Enviando...' : 'Enviar'}
+                  </Button>
+                )}
+              </div>
 
               {formError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{formError}</div>}
             </div>
           </Card>
         )}
       </div>
+
+      {survey.data.survey.collectCustomer && !submitted && (
+        <div className="fixed bottom-4 left-1/2 w-[min(640px,calc(100%-2rem))] -translate-x-1/2">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-900">Identificação (opcional)</div>
+                <div className="text-xs text-slate-500">Você pode se identificar em qualquer momento.</div>
+              </div>
+              <button
+                type="button"
+                className={[
+                  'h-10 rounded-md border px-4 text-sm font-medium',
+                  identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                ].join(' ')}
+                onClick={() => setIdentify((v) => !v)}
+              >
+                {identify ? 'Vou me identificar' : 'Quero me identificar'}
+              </button>
+            </div>
+
+            {identify && (
+              <div className="mt-4 grid gap-3">
+                <div>
+                  <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
+                  <input
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
+                    <input
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      inputMode="email"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
+                    <input
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      inputMode="tel"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

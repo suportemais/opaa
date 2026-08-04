@@ -11,6 +11,8 @@ import { PublicSurveyPage } from './pages/PublicSurveyPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { KanbanPage } from './pages/KanbanPage';
+import { CompanyPage } from './pages/CompanyPage';
+import { UsersPage } from './pages/UsersPage';
 import { getAccessToken } from './lib/auth-store';
 
 function RequireAuth(props: { children: React.ReactNode }) {
@@ -35,7 +37,9 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="company" element={<CompanyPage />} />
         <Route path="units" element={<UnitsPage />} />
+        <Route path="users" element={<UsersPage />} />
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />

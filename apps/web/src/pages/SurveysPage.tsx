@@ -24,13 +24,22 @@ type Distribution = {
 export function SurveysPage() {
   const qc = useQueryClient();
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
+  const tenant = useQuery({ queryKey: ['tenantMe'], queryFn: () => apiFetch<{ settings?: { badScoreThreshold?: number } }>('/tenant/me') });
   const surveys = useQuery({
     queryKey: ['surveys'],
     queryFn: () => apiFetch<Survey[]>('/surveys'),
   });
 
+  const badScoreThreshold = useMemo(() => {
+    const v = tenant.data?.settings?.badScoreThreshold;
+    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
+  }, [tenant.data]);
+
   const [name, setName] = useState('Pesquisa de satisfação');
   const [description, setDescription] = useState('Conte como foi sua experiência.');
+  const [questions, setQuestions] = useState<
+    Array<{ id: string; title: string; type: 'text_short' | 'text_long'; required: boolean; onlyLowScore: boolean }>
+  >(() => [{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
 
   const defaultUnitId = useMemo(() => units.data?.[0]?.id ?? null, [units.data]);
   const [unitId, setUnitId] = useState<string | null>(null);
@@ -57,14 +66,13 @@ export function SurveysPage() {
           collectCustomer: true,
           unitIds: [u],
           questions: [
-            { title: 'De 0 a 10, o quanto você nos recomendaria?', type: 'nps', required: true },
-            { title: 'O que poderíamos melhorar?', type: 'text_long', required: false },
-            {
-              title: 'Você pode contar rapidamente o que aconteceu para dar essa nota?',
-              type: 'text_long',
-              required: false,
-              config: { when: { npsMax: 6 }, requiredWhenVisible: true },
-            },
+            { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps', required: true },
+            ...questions.map((q) => ({
+              title: q.title,
+              type: q.type,
+              required: q.required,
+              config: q.onlyLowScore ? { when: { npsMax: badScoreThreshold } } : undefined,
+            })),
           ],
         },
       });
@@ -117,6 +125,91 @@ export function SurveysPage() {
           <div className="md:col-span-2">
             <div className="mb-1 text-sm font-medium text-slate-700">Descrição</div>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <div className="mb-2 text-sm font-medium text-slate-700">Perguntas</div>
+            <div className="grid gap-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-sm font-medium text-slate-900">Pergunta base (fixa)</div>
+                <div className="text-sm text-slate-700">De 1 a 10, o quanto você nos recomendaria?</div>
+              </div>
+
+              {questions.map((q) => (
+                <div key={q.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="md:col-span-2">
+                      <div className="mb-1 text-sm font-medium text-slate-700">Título</div>
+                      <Input
+                        value={q.title}
+                        onChange={(e) =>
+                          setQuestions((prev) => prev.map((x) => (x.id === q.id ? { ...x, title: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-sm font-medium text-slate-700">Tipo</div>
+                      <select
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                        value={q.type}
+                        onChange={(e) =>
+                          setQuestions((prev) =>
+                            prev.map((x) => (x.id === q.id ? { ...x, type: e.target.value as any } : x)),
+                          )
+                        }
+                      >
+                        <option value="text_long">Texto longo</option>
+                        <option value="text_short">Texto curto</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-3 flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={q.required}
+                          onChange={(e) =>
+                            setQuestions((prev) =>
+                              prev.map((x) => (x.id === q.id ? { ...x, required: e.target.checked } : x)),
+                            )
+                          }
+                        />
+                        Obrigatória
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={q.onlyLowScore}
+                          onChange={(e) =>
+                            setQuestions((prev) =>
+                              prev.map((x) => (x.id === q.id ? { ...x, onlyLowScore: e.target.checked } : x)),
+                            )
+                          }
+                        />
+                        Só se nota ≤ {badScoreThreshold}
+                      </label>
+                      <button
+                        type="button"
+                        className="text-sm font-medium text-rose-700 hover:text-rose-800"
+                        onClick={() => setQuestions((prev) => prev.filter((x) => x.id !== q.id))}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  setQuestions((prev) => [
+                    ...prev,
+                    { id: crypto.randomUUID(), title: 'Nova pergunta', type: 'text_long', required: false, onlyLowScore: false },
+                  ])
+                }
+              >
+                Adicionar pergunta
+              </Button>
+            </div>
           </div>
           <div className="md:col-span-2">
             <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
