@@ -24,8 +24,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      APP_BASE_URL: https://opaa.devmais.com
-      APP_BASE_DOMAIN: opaa.devmais.com
+      APP_BASE_URL: https://opiina.com
+      APP_BASE_DOMAIN: opiina.com
       API_BASE_PATH: /api
       COOKIE_SECURE: "true"
       PORT: 3000
@@ -43,7 +43,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         VITE_API_BASE_URL: /api
-        VITE_APP_BASE_DOMAIN: opaa.devmais.com
+        VITE_APP_BASE_DOMAIN: opiina.com
     depends_on:
       - api
     networks:
