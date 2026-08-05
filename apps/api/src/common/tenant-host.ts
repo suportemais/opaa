@@ -34,7 +34,9 @@ export function tenantSlugFromHost(host: string, base: string) {
   if (!normalizedHost.endsWith(suffix)) return null;
 
   const prefix = normalizedHost.slice(0, -suffix.length);
-  if (!prefix || prefix.includes('.')) return null;
+  if (!prefix) return null;
+  if (prefix.includes('.')) return null;
+  if (prefix === 'www') return null;
   return prefix;
 }
 

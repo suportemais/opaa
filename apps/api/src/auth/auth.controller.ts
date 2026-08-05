@@ -69,8 +69,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const cookie = this.cookieSettings();
     await this.auth.logout({ userId: user.userId, req });
-    res.clearCookie('rt', { path: '/auth/refresh' });
+    res.clearCookie('rt', { path: cookie.path, secure: cookie.secure });
     return { ok: true };
   }
 

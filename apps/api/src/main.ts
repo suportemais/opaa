@@ -20,6 +20,7 @@ function corsBaseDomain() {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const httpAdapter = app.getHttpAdapter();
 
   app.use((req, res, next) => {
     const headerId = req.headers['x-correlation-id'];
@@ -29,13 +30,19 @@ async function bootstrap() {
     next();
   });
 
+  const instance = httpAdapter.getInstance();
+  if (instance && typeof instance.set === 'function') instance.set('trust proxy', true);
   app.use(helmet());
   app.use(cookieParser());
+
+  const basePath = (process.env.API_BASE_PATH ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (basePath) app.setGlobalPrefix(`/${basePath}`);
+
   const baseDomain = corsBaseDomain();
   app.enableCors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (!baseDomain) return cb(null, true);
+      if (!baseDomain) return cb(null, false);
       try {
         const hostname = new URL(origin).hostname.toLowerCase();
         if (hostname === baseDomain || hostname.endsWith(`.${baseDomain}`)) return cb(null, true);
@@ -59,7 +66,7 @@ async function bootstrap() {
     .setVersion('0.1.0')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  SwaggerModule.setup(basePath ? `${basePath}/docs` : 'docs', app, document);
 
   app.enableShutdownHooks();
 

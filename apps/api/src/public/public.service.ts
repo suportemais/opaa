@@ -29,7 +29,7 @@ export class PublicService {
 
   async isAllowedDomain(domain: string) {
     const base = baseDomain();
-    if (!base) return true;
+    if (!base) return false;
 
     const normalized = domain.toLowerCase().replace(/:\d+$/, '');
     if (normalized === base) return true;
