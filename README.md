@@ -1,4 +1,4 @@
-# OPAA — Satisfação & CRM (MVP)
+# Opiina — Ouça. Entenda. Fidelize.
 
 SaaS B2B multi-tenant para pesquisas de satisfação/NPS, central de feedbacks, recuperação (ocorrências/casos) e CRM básico.
 
@@ -65,4 +65,3 @@ corepack pnpm -r build
 
 - Erro 500 no onboarding geralmente indica que o PostgreSQL não está acessível na porta `55432` (Docker Desktop/Engine parado).
 - Se ocorrer 403 após adicionar permissões, rode o sync de RBAC no tenant existente (módulo `rbac-sync`).
-

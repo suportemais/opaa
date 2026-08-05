@@ -75,10 +75,10 @@ export function LoginPage() {
       <div className="relative mx-auto flex min-h-full w-full max-w-6xl items-center gap-10 p-6">
         <div className="hidden flex-1 flex-col gap-5 md:flex">
           <Link to="/" className="inline-flex items-center gap-3">
-            <img src="/favicon.svg" alt="OPAA" className="h-10 w-10" />
+            <img src="/favicon.svg" alt="Opiina" className="h-10 w-10" />
             <div>
-              <div className="text-lg font-semibold text-slate-900">OPAA</div>
-              <div className="text-sm text-slate-600">Satisfação & CRM</div>
+              <div className="text-lg font-semibold text-slate-900">Opiina</div>
+              <div className="text-sm text-slate-600">Ouça. Entenda. Fidelize.</div>
             </div>
           </Link>
 
@@ -98,7 +98,7 @@ export function LoginPage() {
 
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
-            <img src="/favicon.svg" alt="OPAA" className="mx-auto mb-3 h-10 w-10" />
+            <img src="/favicon.svg" alt="Opiina" className="mx-auto mb-3 h-10 w-10" />
             <div className="text-lg font-semibold text-slate-900">Entrar</div>
             <div className="text-sm text-slate-600">Acesse o painel</div>
           </div>
@@ -160,6 +160,12 @@ export function LoginPage() {
             </div>
           </form>
           </Card>
+          <div className="mt-6 text-center text-xs text-slate-500">
+            Desenvolvido por{' '}
+            <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">
+              Dev+
+            </a>
+          </div>
         </div>
       </div>
     </div>

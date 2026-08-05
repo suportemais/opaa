@@ -243,19 +243,19 @@ async function main() {
   await ensureGlobalPermissions();
 
   const t1 = await createTenant({
-    legalName: 'OPAA Demo Restaurante LTDA',
+    legalName: 'Opiina Demo Restaurante LTDA',
     tradeName: 'Demo Bistrô',
-    email: 'tenant1@opaa.local',
-    adminEmail: 'admin1@opaa.local',
+    email: 'tenant1@opiina.local',
+    adminEmail: 'admin1@opiina.local',
     adminName: 'Admin Demo 1',
     password: 'Admin1234!',
   });
 
   const t2 = await createTenant({
-    legalName: 'OPAA Demo Café LTDA',
+    legalName: 'Opiina Demo Café LTDA',
     tradeName: 'Café Aurora',
-    email: 'tenant2@opaa.local',
-    adminEmail: 'admin2@opaa.local',
+    email: 'tenant2@opiina.local',
+    adminEmail: 'admin2@opiina.local',
     adminName: 'Admin Demo 2',
     password: 'Admin1234!',
   });

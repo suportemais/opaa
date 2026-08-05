@@ -54,8 +54,8 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('OPAA API')
-    .setDescription('API do SaaS de pesquisas e satisfação')
+    .setTitle('Opiina API')
+    .setDescription('API do SaaS Opiina (pesquisas/NPS e central de feedbacks)')
     .setVersion('0.1.0')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);

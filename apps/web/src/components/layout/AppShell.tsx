@@ -45,10 +45,10 @@ export function AppShell() {
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-4">
             <Link to="/app" className="inline-flex items-center gap-2">
-              <img src="/favicon.svg" alt="OPAA" className="h-8 w-8" />
+              <img src="/favicon.svg" alt="Opiina" className="h-8 w-8" />
               <div className="leading-tight">
-                <div className="text-sm font-semibold">OPAA</div>
-                <div className="text-xs text-slate-500">Satisfação & CRM</div>
+                <div className="text-sm font-semibold">Opiina</div>
+                <div className="text-xs text-slate-500">Ouça. Entenda. Fidelize.</div>
               </div>
             </Link>
 
@@ -147,6 +147,12 @@ export function AppShell() {
       <main className="flex-1 overflow-auto">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-4 md:p-8">
           <Outlet />
+          <footer className="border-t border-slate-200 pt-6 text-center text-xs text-slate-500">
+            Desenvolvido por{' '}
+            <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">
+              Dev+
+            </a>
+          </footer>
         </div>
       </main>
     </div>
