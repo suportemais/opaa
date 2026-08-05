@@ -22,11 +22,35 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const httpAdapter = app.getHttpAdapter();
 
+  const basePath = (process.env.API_BASE_PATH ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (basePath) app.setGlobalPrefix(`/${basePath}`);
+
   app.use((req, res, next) => {
     const headerId = req.headers['x-correlation-id'];
     const correlationId = typeof headerId === 'string' ? headerId : randomUUID();
     req.headers['x-correlation-id'] = correlationId;
     res.setHeader('x-correlation-id', correlationId);
+
+    if (basePath) {
+      const p = `/${basePath}`;
+      const publicPathsNoPrefix = ['/public/caddy/ask'];
+      const candidates = publicPathsNoPrefix;
+      for (const candidate of candidates) {
+        if (typeof req.url === 'string' && req.url.startsWith(p)) {
+          const rest = req.url.slice(p.length);
+          if (rest === candidate || rest.startsWith(`${candidate}?`) || rest.startsWith(`${candidate}/`)) {
+            req.url = rest;
+          }
+        }
+        if (typeof (req as any).originalUrl === 'string' && (req as any).originalUrl.startsWith(p)) {
+          const rest = (req as any).originalUrl.slice(p.length);
+          if (rest === candidate || rest.startsWith(`${candidate}?`) || rest.startsWith(`${candidate}/`)) {
+            (req as any).originalUrl = rest;
+          }
+        }
+      }
+    }
+
     next();
   });
 
@@ -34,31 +58,6 @@ async function bootstrap() {
   if (instance && typeof instance.set === 'function') instance.set('trust proxy', true);
   app.use(helmet());
   app.use(cookieParser());
-
-  const basePath = (process.env.API_BASE_PATH ?? '').trim().replace(/^\/+|\/+$/g, '');
-  if (basePath) app.setGlobalPrefix(`/${basePath}`);
-
-  const publicPathsNoPrefix = ['/public/caddy/ask'];
-  if (basePath) {
-    const p = `/${basePath}`;
-    app.use((req, _res, next) => {
-      for (const candidate of publicPathsNoPrefix) {
-        if (typeof req.url === 'string' && req.url.startsWith(p)) {
-          const rest = req.url.slice(p.length);
-          if (rest === candidate || (rest.startsWith(`${candidate}?`) || rest.startsWith(`${candidate}/`))) {
-            req.url = rest;
-          }
-        }
-        if (typeof (req as any).originalUrl === 'string' && (req as any).originalUrl.startsWith(p)) {
-          const rest = (req as any).originalUrl.slice(p.length);
-          if (rest === candidate || (rest.startsWith(`${candidate}?`) || rest.startsWith(`${candidate}/`))) {
-            (req as any).originalUrl = rest;
-          }
-        }
-      }
-      next();
-    });
-  }
 
   const baseDomain = corsBaseDomain();
   app.enableCors({
