@@ -33,8 +33,7 @@ async function bootstrap() {
 
     if (basePath) {
       const p = `/${basePath}`;
-      const publicPathsNoPrefix = ['/public/caddy/ask'];
-      const candidates = publicPathsNoPrefix;
+      const candidates = ['/public/caddy/ask'];
       for (const candidate of candidates) {
         if (typeof req.url === 'string' && req.url.startsWith(p)) {
           const rest = req.url.slice(p.length);
@@ -49,6 +48,86 @@ async function bootstrap() {
           }
         }
       }
+    }
+
+    const rawPath = typeof (req as any).rawPath === 'string' ? (req as any).rawPath : null;
+    const isAskRoute =
+      typeof req.url === 'string' &&
+      (req.url === '/public/caddy/ask' || req.url.startsWith('/public/caddy/ask?') || req.url.startsWith('/public/caddy/ask/'));
+    const isAskRouteOriginal =
+      typeof (req as any).originalUrl === 'string' &&
+      ((req as any).originalUrl === '/public/caddy/ask' ||
+        (req as any).originalUrl.startsWith('/public/caddy/ask?') ||
+        (req as any).originalUrl.startsWith('/public/caddy/ask/'));
+
+    if (basePath && (isAskRoute || isAskRouteOriginal || rawPath === '/public/caddy/ask')) {
+      const query = (req.query as Record<string, unknown>) || {};
+      const domain =
+        typeof query.domain === 'string' && query.domain.trim()
+          ? query.domain
+          : typeof (req as any).rawQuery === 'string' && (req as any).rawQuery.length > 0
+            ? Object.fromEntries(new URLSearchParams((req as any).rawQuery)).domain ?? undefined
+            : undefined;
+      Promise.resolve()
+        .then(async () => {
+          if (!domain) {
+            res.statusCode = 403;
+            res.setHeader('content-type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ message: 'Forbidden', error: 'Forbidden', statusCode: 403 }));
+            return;
+          }
+          const { PrismaPg } = await import('@prisma/adapter-pg');
+          const { PrismaClient } = await import('@prisma/client');
+          const { baseDomain: baseDomainFn, tenantSlugFromHost } = await import('./common/tenant-host.js');
+          const connectionString = process.env.DATABASE_URL ?? '';
+          if (!connectionString) {
+            res.statusCode = 500;
+            res.setHeader('content-type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ message: 'Internal Server Error', error: 'Internal Server Error', statusCode: 500 }));
+            return;
+          }
+          const adapter = new PrismaPg({ connectionString });
+          const prisma = new PrismaClient({ adapter });
+          try {
+            const base = baseDomainFn();
+            if (!base) {
+              res.statusCode = 403;
+              res.setHeader('content-type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify({ message: 'Forbidden', error: 'Forbidden', statusCode: 403 }));
+              return;
+            }
+            const normalized = domain.toLowerCase().replace(/:\d+$/, '');
+            let ok = false;
+            if (normalized === base) {
+              ok = true;
+            } else {
+              const slug = tenantSlugFromHost(normalized, base);
+              if (slug) {
+                const tenant = await (prisma as any).tenant.findUnique({ where: { slug }, select: { id: true } });
+                ok = Boolean(tenant);
+              }
+            }
+            if (!ok) {
+              res.statusCode = 403;
+              res.setHeader('content-type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify({ message: 'Forbidden', error: 'Forbidden', statusCode: 403 }));
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader('content-type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ ok: true }));
+          } finally {
+            try {
+              await (prisma as any).$disconnect();
+            } catch {}
+          }
+        })
+        .catch(() => {
+          res.statusCode = 500;
+          res.setHeader('content-type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ message: 'Internal Server Error', error: 'Internal Server Error', statusCode: 500 }));
+        });
+      return;
     }
 
     next();

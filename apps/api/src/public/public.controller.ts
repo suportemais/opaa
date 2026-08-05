@@ -1,15 +1,18 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { PublicService } from './public.service';
 import { SubmitResponseDto } from './dto/submit-response.dto';
+import type { Request } from 'express';
 
 @Controller('public')
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}
 
   @Get('caddy/ask')
-  async caddyAsk(@Query('domain') domain?: string) {
-    if (!domain) throw new ForbiddenException();
-    const ok = await this.publicService.isAllowedDomain(domain);
+  async caddyAsk(@Query('domain') domain?: string, @Req() req?: Request) {
+    const fallback = req?.query?.domain;
+    const finalDomain = typeof domain === 'string' && domain.trim() ? domain : typeof fallback === 'string' && fallback.trim() ? fallback : undefined;
+    if (!finalDomain) throw new ForbiddenException();
+    const ok = await this.publicService.isAllowedDomain(finalDomain);
     if (!ok) throw new ForbiddenException();
     return { ok: true };
   }
