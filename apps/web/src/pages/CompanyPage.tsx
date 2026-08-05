@@ -23,6 +23,21 @@ type TenantMe = {
 
 export function CompanyPage() {
   const qc = useQueryClient();
+  const segmentPresets = useMemo(
+    () => [
+      'Restaurante',
+      'Clínica',
+      'Odontologia',
+      'Academia',
+      'Estética',
+      'Oficina',
+      'Varejo',
+      'Hotelaria',
+      'Educação',
+      'Serviços',
+    ],
+    [],
+  );
 
   const tenant = useQuery({
     queryKey: ['tenantMe'],
@@ -130,7 +145,17 @@ export function CompanyPage() {
             </div>
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Segmento</div>
-              <Input value={segment} onChange={(e) => setSegment(e.target.value)} placeholder="Segmento (opcional)" />
+              <Input
+                value={segment}
+                onChange={(e) => setSegment(e.target.value)}
+                placeholder="Segmento (opcional)"
+                list="opaa_segments"
+              />
+              <datalist id="opaa_segments">
+                {segmentPresets.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             </div>
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
@@ -142,11 +167,27 @@ export function CompanyPage() {
             </div>
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Cor primária</div>
-              <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} placeholder="#0ea5e9 (opcional)" />
+              <div className="flex items-center gap-3">
+                <input
+                  className="h-10 w-12 rounded-md border border-slate-200 bg-white p-1"
+                  type="color"
+                  value={primaryColor && primaryColor.trim() ? primaryColor : '#0ea5e9'}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                />
+                <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} placeholder="#0ea5e9 (opcional)" />
+              </div>
             </div>
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Cor secundária</div>
-              <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} placeholder="#0f172a (opcional)" />
+              <div className="flex items-center gap-3">
+                <input
+                  className="h-10 w-12 rounded-md border border-slate-200 bg-white p-1"
+                  type="color"
+                  value={secondaryColor && secondaryColor.trim() ? secondaryColor : '#0f172a'}
+                  onChange={(e) => setSecondaryColor(e.target.value)}
+                />
+                <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} placeholder="#0f172a (opcional)" />
+              </div>
             </div>
             <div className="md:col-span-2">
               <div className="mb-1 text-sm font-medium text-slate-700">Nota considerada ruim (1..10)</div>
@@ -237,4 +278,3 @@ export function CompanyPage() {
     </div>
   );
 }
-

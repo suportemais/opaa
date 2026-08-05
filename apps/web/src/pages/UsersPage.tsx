@@ -24,6 +24,12 @@ const roleOptions = [
   { code: 'collaborator', name: 'Colaborador' },
 ] as const;
 
+const createRoleOptions = [
+  { code: 'tenant_admin', name: 'Administrador' },
+  { code: 'analyst', name: 'Marketing' },
+  { code: 'unit_manager', name: 'Gestor' },
+] as const;
+
 export function UsersPage() {
   const qc = useQueryClient();
 
@@ -33,7 +39,7 @@ export function UsersPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
-  const [roleCode, setRoleCode] = useState<(typeof roleOptions)[number]['code']>('collaborator');
+  const [roleCode, setRoleCode] = useState<(typeof createRoleOptions)[number]['code']>('analyst');
   const [unitIds, setUnitIds] = useState<string[]>([]);
 
   const create = useMutation({
@@ -46,7 +52,7 @@ export function UsersPage() {
       setName('');
       setEmail('');
       setCreatePassword('');
-      setRoleCode('collaborator');
+      setRoleCode('analyst');
       setUnitIds([]);
       await qc.invalidateQueries({ queryKey: ['users'] });
     },
@@ -242,7 +248,7 @@ export function UsersPage() {
               value={roleCode}
               onChange={(e) => setRoleCode(e.target.value as any)}
             >
-              {roleOptions.map((r) => (
+              {createRoleOptions.map((r) => (
                 <option key={r.code} value={r.code}>
                   {r.name}
                 </option>

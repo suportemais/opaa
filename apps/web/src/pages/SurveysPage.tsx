@@ -37,6 +37,7 @@ export function SurveysPage() {
 
   const [name, setName] = useState('Pesquisa de satisfação');
   const [description, setDescription] = useState('Conte como foi sua experiência.');
+  const [collectEmployee, setCollectEmployee] = useState(true);
   const [questions, setQuestions] = useState<
     Array<{ id: string; title: string; type: 'text_short' | 'text_long'; required: boolean; onlyLowScore: boolean }>
   >(() => [{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
@@ -64,6 +65,7 @@ export function SurveysPage() {
           name,
           description,
           collectCustomer: true,
+          collectEmployee,
           unitIds: [u],
           questions: [
             { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps', required: true },
@@ -137,6 +139,17 @@ export function SurveysPage() {
           <div className="md:col-span-2">
             <div className="mb-1 text-sm font-medium text-slate-700">Descrição</div>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={collectEmployee}
+                onChange={(e) => setCollectEmployee(e.target.checked)}
+              />
+              Perguntar “Atendente” na pesquisa
+            </label>
           </div>
           <div className="md:col-span-2">
             <div className="mb-2 text-sm font-medium text-slate-700">Perguntas</div>

@@ -13,6 +13,7 @@ import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { KanbanPage } from './pages/KanbanPage';
 import { CompanyPage } from './pages/CompanyPage';
 import { UsersPage } from './pages/UsersPage';
+import { EmployeesPage } from './pages/EmployeesPage';
 import { getAccessToken } from './lib/auth-store';
 
 function RequireAuth(props: { children: React.ReactNode }) {
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="company" element={<CompanyPage />} />
         <Route path="units" element={<UnitsPage />} />
         <Route path="users" element={<UsersPage />} />
+        <Route path="employees" element={<EmployeesPage />} />
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />

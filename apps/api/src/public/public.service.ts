@@ -93,6 +93,7 @@ export class PublicService {
         introMessage: survey.introMessage,
         outroMessage: survey.outroMessage,
         collectCustomer: survey.collectCustomer,
+        collectEmployee: (survey as any).collectEmployee ?? false,
         questions: survey.publishedVersion.questions.map((q) => ({
           id: q.id,
           title: q.title,
@@ -105,6 +106,42 @@ export class PublicService {
         })),
       },
     };
+  }
+
+  async listSurveyEmployees(publicToken: string, params: { q?: string }) {
+    const distribution = await this.prisma.surveyDistribution.findUnique({
+      where: { publicToken },
+      include: { survey: true },
+    });
+
+    if (!distribution || !distribution.active) throw new NotFoundException();
+    if (!distribution.unitId) return [];
+
+    const collectEmployee = Boolean((distribution.survey as any).collectEmployee);
+    if (!collectEmployee) return [];
+
+    const q = typeof params.q === 'string' && params.q.trim() ? params.q.trim() : undefined;
+
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        tenantId: distribution.tenantId,
+        unitId: distribution.unitId,
+        status: 'active',
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: 'insensitive' } },
+                { code: { contains: q, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      take: 20,
+      orderBy: [{ name: 'asc' }, { createdAt: 'desc' }],
+      select: { id: true, name: true, code: true, roleTitle: true },
+    });
+
+    return employees;
   }
 
   async submitResponse(dto: SubmitResponseDto) {
@@ -128,6 +165,25 @@ export class PublicService {
     if (!version || survey.status !== 'published') throw new NotFoundException();
 
     const badScoreThreshold = badScoreThresholdFromSettings(distribution.tenant.settings);
+    const collectEmployee = Boolean((survey as any).collectEmployee);
+
+    let finalEmployeeId: string | null = distribution.employeeId ?? null;
+    if (dto.employeeId) {
+      if (!collectEmployee) throw new BadRequestException('employee_not_allowed');
+      if (!distribution.unitId) throw new BadRequestException('employee_not_allowed');
+
+      const employee = await this.prisma.employee.findFirst({
+        where: {
+          id: dto.employeeId,
+          tenantId: distribution.tenantId,
+          unitId: distribution.unitId,
+          status: 'active',
+        },
+        select: { id: true },
+      });
+      if (!employee) throw new BadRequestException('invalid_employee');
+      finalEmployeeId = employee.id;
+    }
 
     const questionById = new Map(version.questions.map((q) => [q.id, q]));
 
@@ -283,7 +339,7 @@ export class PublicService {
           surveyVersionId: version.id,
           distributionId: distribution.id,
           unitId: distribution.unitId,
-          employeeId: distribution.employeeId,
+          employeeId: finalEmployeeId,
           customerId,
           channel: distribution.channel,
           campaign: distribution.campaign,

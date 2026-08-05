@@ -19,6 +19,11 @@ export class PublicController {
     return this.publicService.getPublishedSurvey(token);
   }
 
+  @Get('surveys/:token/employees')
+  listEmployees(@Param('token') token: string, @Query('q') q?: string) {
+    return this.publicService.listSurveyEmployees(token, { q });
+  }
+
   @Post('responses')
   submit(@Body() dto: SubmitResponseDto) {
     return this.publicService.submitResponse(dto);

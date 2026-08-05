@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
 
 type Customer = {
   id: string;
@@ -23,6 +24,14 @@ function formatDateTime(value: string | null) {
   return d.toLocaleString();
 }
 
+function toCsvRows(rows: Array<Record<string, string>>) {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const headers = Object.keys(rows[0] ?? {});
+  const out = [headers.map(escape).join(',')];
+  for (const r of rows) out.push(headers.map((h) => escape(r[h] ?? '')).join(','));
+  return out.join('\n');
+}
+
 export function CustomersPage() {
   const [q, setQ] = useState('');
   const query = useMemo(() => q.trim(), [q]);
@@ -31,6 +40,78 @@ export function CustomersPage() {
     queryKey: ['customers', query],
     queryFn: () => apiFetch<Customer[]>(`/customers${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   });
+
+  function exportCsv() {
+    if (!customers.data || customers.data.length === 0) return;
+    const rows = customers.data.map((c) => ({
+      id: c.id,
+      name: c.name ?? '',
+      email: c.email ?? '',
+      phone: c.phone ?? '',
+      lastInteractionAt: c.lastInteractionAt ?? '',
+      createdAt: c.createdAt ?? '',
+    }));
+    const csv = toCsvRows(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'clientes.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPrint() {
+    if (!customers.data || customers.data.length === 0) return;
+    const rows = customers.data
+      .map(
+        (c) => `
+        <tr>
+          <td>${(c.name ?? '—').replace(/</g, '&lt;')}</td>
+          <td>${(c.email ?? '—').replace(/</g, '&lt;')}</td>
+          <td>${(c.phone ?? '—').replace(/</g, '&lt;')}</td>
+          <td>${formatDateTime(c.lastInteractionAt).replace(/</g, '&lt;')}</td>
+        </tr>`,
+      )
+      .join('');
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Clientes</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; color: #0f172a; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    .meta { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 8px; text-align: left; vertical-align: top; }
+    th { color: #475569; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Clientes</h1>
+  <div class="meta">Exportado em ${new Date().toLocaleString()}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>E-mail</th>
+        <th>Telefone</th>
+        <th>Última interação</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
 
   return (
     <div className="grid gap-6">
@@ -47,6 +128,14 @@ export function CustomersPage() {
       </Card>
 
       <Card title="Lista">
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          <Button variant="secondary" disabled={!customers.data || customers.data.length === 0} onClick={exportCsv}>
+            Exportar (CSV)
+          </Button>
+          <Button variant="secondary" disabled={!customers.data || customers.data.length === 0} onClick={exportPrint}>
+            Exportar (PDF)
+          </Button>
+        </div>
         {customers.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
         {customers.isError && (
           <div className="text-sm text-rose-700">

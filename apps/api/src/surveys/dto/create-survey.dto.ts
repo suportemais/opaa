@@ -29,6 +29,10 @@ export class CreateSurveyDto {
   @IsBoolean()
   collectCustomer?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  collectEmployee?: boolean;
+
   @IsArray()
   @IsUUID('4', { each: true })
   unitIds!: string[];

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDefined, IsEmail, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDefined, IsEmail, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 
 export class SubmitCustomerDto {
   @IsOptional()
@@ -29,6 +29,10 @@ export class SubmitResponseDto {
 
   @IsString()
   idempotencyKey!: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  employeeId?: string;
 
   @IsOptional()
   @IsString()

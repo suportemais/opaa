@@ -274,6 +274,7 @@ model Survey {
   outroMessage String?
   anonymousAllowed Boolean @default(true)
   collectCustomer Boolean  @default(false)
+  collectEmployee Boolean  @default(false)
   enablePublicReputation Boolean @default(false)
   enableCoupon Boolean @default(false)
   publishedVersionId String? @db.Uuid

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 
 type Unit = { id: string; name: string };
+type AuthMe = { name: string };
 type NpsSummary = { total: number; promoters: number; passives: number; detractors: number; nps: number | null };
 type NpsByUnitRow = NpsSummary & { unitId: string | null; unitName: string | null };
 type NpsByUnit = { units: NpsByUnitRow[] };
@@ -28,6 +29,8 @@ export function DashboardPage() {
   const [rangeDays, setRangeDays] = useState(30);
   const [unitId, setUnitId] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const me = useQuery({ queryKey: ['authMe'], queryFn: () => apiFetch<AuthMe>('/auth/me') });
 
   const units = useQuery({
     queryKey: ['units'],
@@ -96,8 +99,15 @@ export function DashboardPage() {
   return (
     <div className="grid gap-6">
       <div>
-        <div className="text-xl font-semibold">Dashboard</div>
-        <div className="text-sm text-slate-600">Base operacional do MVP</div>
+        <div className="text-xl font-semibold">
+          {(() => {
+            const h = new Date().getHours();
+            const greet = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+            const name = me.data?.name?.trim() ? me.data.name.trim().split(' ')[0] : null;
+            return `${greet}${name ? `, ${name}` : ''}. Que bom ter você de volta.`;
+          })()}
+        </div>
+        <div className="text-sm text-slate-600">Resumo e navegação rápida por métricas</div>
       </div>
 
       <Card>

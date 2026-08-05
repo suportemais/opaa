@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { normalizeEmail } from '../common/normalize';
 import { AuditService } from '../audit/audit.service';
+import { normalizeBrDocument } from '../common/br-document';
 import type { Request } from 'express';
 import type { CreateTenantDto } from './dto/create-tenant.dto';
 
@@ -30,6 +31,8 @@ export class OnboardingService {
   async createTenant(dto: CreateTenantDto, req?: Request) {
     const passwordHash = await argon2.hash(dto.adminPassword);
     const adminEmailNormalized = normalizeEmail(dto.adminEmail);
+    const normalizedDoc = normalizeBrDocument(dto.document);
+    if (dto.document && !normalizedDoc) throw new ConflictException('Documento inválido.');
 
     const baseSlug = slugify(dto.tenantSlug ?? dto.tradeName);
 
@@ -46,7 +49,7 @@ export class OnboardingService {
               tradeName: dto.tradeName,
               email: dto.email,
               phone: dto.phone,
-              document: dto.document,
+              document: normalizedDoc ? normalizedDoc.value : null,
               segment: dto.segment,
               primaryColor: dto.primaryColor,
               secondaryColor: dto.secondaryColor,

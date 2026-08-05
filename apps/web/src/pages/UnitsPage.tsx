@@ -156,7 +156,15 @@ export function UnitsPage() {
                   <div className="text-sm font-medium">{u.name}</div>
                   <div className="text-xs text-slate-500">{u.timeZone ?? '—'}</div>
                   <div className="text-xs text-slate-500">{u.address ?? '—'}</div>
-                  <div className="text-xs text-slate-500">{u.googleBusinessUrl ?? '—'}</div>
+                  <div className="text-xs text-slate-500">
+                    {u.googleBusinessUrl ? (
+                      <a className="text-sky-700 hover:underline" href={u.googleBusinessUrl} target="_blank" rel="noreferrer">
+                        Avaliações no Google
+                      </a>
+                    ) : (
+                      '—'
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Button

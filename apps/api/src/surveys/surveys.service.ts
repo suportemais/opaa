@@ -77,6 +77,7 @@ export class SurveysService {
         description: dto.description,
         status: 'draft',
         collectCustomer: dto.collectCustomer ?? false,
+        collectEmployee: dto.collectEmployee ?? false,
         units: {
           createMany: { data: dto.unitIds.map((unitId) => ({ unitId })) },
         },

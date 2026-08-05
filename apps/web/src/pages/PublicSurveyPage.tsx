@@ -26,9 +26,12 @@ type PublicSurvey = {
     introMessage: string | null;
     outroMessage: string | null;
     collectCustomer: boolean;
+    collectEmployee?: boolean;
     questions: PublicQuestion[];
   };
 };
+
+type PublicEmployee = { id: string; name: string; code: string | null; roleTitle: string | null };
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -61,6 +64,34 @@ export function PublicSurveyPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
+  const collectEmployee = Boolean(survey.data?.survey.collectEmployee);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [employeeQuery, setEmployeeQuery] = useState('');
+  const [employeeOpen, setEmployeeOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<PublicEmployee | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setEmployeeQuery(employeeSearch), 250);
+    return () => clearTimeout(t);
+  }, [employeeSearch]);
+
+  useEffect(() => {
+    if (!employeeOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (!target.closest('[data-employee-box]')) setEmployeeOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [employeeOpen]);
+
+  const employees = useQuery({
+    queryKey: ['publicSurveyEmployees', token, employeeQuery],
+    queryFn: () => apiFetch<PublicEmployee[]>(`/public/surveys/${token}/employees?q=${encodeURIComponent(employeeQuery)}`),
+    enabled: Boolean(token) && collectEmployee && !submitted,
+  });
+
   const selectedNps = useMemo(() => {
     if (!npsQuestion) return null;
     const v = answers[npsQuestion.id];
@@ -86,12 +117,13 @@ export function PublicSurveyPage() {
   }, [visibleQuestions, npsQuestion]);
 
   const steps = useMemo(() => {
-    const out: Array<{ key: string; type: 'nps' | 'complaint' | 'question'; question?: PublicQuestion }> = [];
+    const out: Array<{ key: string; type: 'employee' | 'nps' | 'complaint' | 'question'; question?: PublicQuestion }> = [];
+    if (collectEmployee) out.push({ key: 'employee', type: 'employee' });
     if (npsQuestion) out.push({ key: `nps:${npsQuestion.id}`, type: 'nps', question: npsQuestion });
     if (typeof selectedNps === 'number' && selectedNps <= badScoreThreshold) out.push({ key: 'complaint', type: 'complaint' });
     for (const q of otherVisibleQuestions) out.push({ key: `q:${q.id}`, type: 'question', question: q });
     return out;
-  }, [npsQuestion, selectedNps, otherVisibleQuestions, badScoreThreshold]);
+  }, [collectEmployee, npsQuestion, selectedNps, otherVisibleQuestions, badScoreThreshold]);
 
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -151,6 +183,7 @@ export function PublicSurveyPage() {
         json: {
           publicToken: token,
           idempotencyKey,
+          employeeId: selectedEmployee?.id ?? undefined,
           complaint: complaint.trim() || undefined,
           answers: outAnswers,
           customer: hasCustomerField ? customer : undefined,
@@ -172,6 +205,7 @@ export function PublicSurveyPage() {
   function canGoNext() {
     const step = steps[stepIndex];
     if (!step) return false;
+    if (step.type === 'employee') return true;
     if (step.type === 'nps') return typeof selectedNps === 'number' && selectedNps >= 1 && selectedNps <= 10;
     if (step.type === 'complaint') return true;
     if (step.type === 'question' && step.question) {
@@ -242,6 +276,77 @@ export function PublicSurveyPage() {
               {(() => {
                 const step = steps[stepIndex];
                 if (!step) return null;
+
+                if (step.type === 'employee') {
+                  return (
+                    <div className="relative" data-employee-box>
+                      <div className="mb-2 text-sm font-medium text-slate-800">Atendente (opcional)</div>
+                      <input
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                        value={employeeSearch}
+                        onChange={(e) => {
+                          setEmployeeSearch(e.target.value);
+                          setEmployeeOpen(true);
+                          setSelectedEmployee(null);
+                        }}
+                        onFocus={() => setEmployeeOpen(true)}
+                        placeholder="Digite o nome do atendente"
+                      />
+                      {selectedEmployee && (
+                        <div className="mt-2 text-xs text-slate-600">
+                          Selecionado: <span className="font-medium text-slate-900">{selectedEmployee.name}</span>
+                        </div>
+                      )}
+                      {employeeOpen && (
+                        <div className="absolute z-10 mt-2 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+                          {employees.isLoading && <div className="px-3 py-2 text-sm text-slate-600">Carregando...</div>}
+                          {employees.isError && (
+                            <div className="px-3 py-2 text-sm text-rose-700">Falha ao carregar atendentes</div>
+                          )}
+                          {employees.data && employees.data.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-slate-600">Nenhum atendente encontrado</div>
+                          )}
+                          {employees.data && employees.data.length > 0 && (
+                            <div className="max-h-60 overflow-auto">
+                              {employees.data.map((e) => (
+                                <button
+                                  key={e.id}
+                                  type="button"
+                                  className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                                  onClick={() => {
+                                    setSelectedEmployee(e);
+                                    setEmployeeSearch(e.name);
+                                    setEmployeeOpen(false);
+                                  }}
+                                >
+                                  <div>
+                                    <div className="font-medium text-slate-900">{e.name}</div>
+                                    {(e.roleTitle || e.code) && (
+                                      <div className="text-xs text-slate-500">{[e.roleTitle, e.code].filter(Boolean).join(' • ')}</div>
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <div className="border-t border-slate-100 px-3 py-2">
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-slate-600 hover:underline"
+                              onClick={() => {
+                                setSelectedEmployee(null);
+                                setEmployeeSearch('');
+                                setEmployeeOpen(false);
+                              }}
+                            >
+                              Limpar seleção
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
 
                 if (step.type === 'nps' && step.question) {
                   const q = step.question;

@@ -15,6 +15,7 @@ import { FeedbacksModule } from './feedbacks/feedbacks.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { CustomersModule } from './customers/customers.module';
 import { TenantModule } from './tenant/tenant.module';
+import { EmployeesModule } from './employees/employees.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { TenantModule } from './tenant/tenant.module';
     MetricsModule,
     CustomersModule,
     TenantModule,
+    EmployeesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

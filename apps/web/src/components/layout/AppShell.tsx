@@ -5,6 +5,7 @@ import { setAccessToken } from '../../lib/auth-store';
 import { apiFetch } from '../../lib/api';
 
 type AuthMe = {
+  name: string;
   permissionCodes: string[];
 };
 
@@ -15,6 +16,7 @@ export function AppShell() {
   const permissionCodes = me.data?.permissionCodes ?? [];
   const canManageTenant = permissionCodes.includes('tenant:settings:manage');
   const canManageUsers = permissionCodes.includes('user:manage');
+  const canManageUnits = permissionCodes.includes('unit:manage');
 
   return (
     <div className="flex h-full bg-slate-50 text-slate-900">
@@ -64,6 +66,19 @@ export function AppShell() {
           >
             Unidades
           </NavLink>
+          {canManageUnits && (
+            <NavLink
+              to="/app/employees"
+              className={({ isActive }) =>
+                [
+                  'rounded-md px-3 py-2 text-sm',
+                  isActive ? 'bg-slate-100 font-medium text-slate-900' : 'text-slate-600 hover:bg-slate-50',
+                ].join(' ')
+              }
+            >
+              Atendentes
+            </NavLink>
+          )}
           {canManageUsers && (
             <NavLink
               to="/app/users"
