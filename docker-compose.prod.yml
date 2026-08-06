@@ -51,33 +51,6 @@ services:
         aliases:
           - opaa-web
 
-  caddy:
-    image: caddy:2.8
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-      - "2019:2019"
-    volumes:
-      - ../../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../../caddy/sites:/etc/caddy/sites:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - api
-      - web
-    networks:
-      web:
-        aliases:
-          - opaa-caddy
-
-volumes:
-  caddy_data:
-    external: false
-  caddy_config:
-    external: false
-
 networks:
   web:
     external: true
