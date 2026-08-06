@@ -10,6 +10,7 @@ type TenantUser = {
   id: string;
   email: string;
   name: string;
+  phone: string | null;
   status: string;
   createdAt: string;
   roles: Array<{ code: string; name: string }>;
@@ -38,6 +39,7 @@ export function UsersPage() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [createPassword, setCreatePassword] = useState('');
   const [roleCode, setRoleCode] = useState<(typeof createRoleOptions)[number]['code']>('analyst');
   const [unitIds, setUnitIds] = useState<string[]>([]);
@@ -46,11 +48,12 @@ export function UsersPage() {
     mutationFn: () =>
       apiFetch<{ id: string }>('/users', {
         method: 'POST',
-        json: { name, email, password: createPassword, roleCode, unitIds: unitIds.length ? unitIds : undefined },
+        json: { name, email, phone: phone.trim() || undefined, password: createPassword, roleCode, unitIds: unitIds.length ? unitIds : undefined },
       }),
     onSuccess: async () => {
       setName('');
       setEmail('');
+      setPhone('');
       setCreatePassword('');
       setRoleCode('analyst');
       setUnitIds([]);
@@ -63,6 +66,7 @@ export function UsersPage() {
 
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editStatus, setEditStatus] = useState<'active' | 'disabled'>('active');
   const [editRoleCode, setEditRoleCode] = useState<(typeof roleOptions)[number]['code']>('collaborator');
   const [editUnitIds, setEditUnitIds] = useState<string[]>([]);
@@ -74,6 +78,7 @@ export function UsersPage() {
         json: {
           name: editName.trim() || undefined,
           email: editEmail.trim() || undefined,
+          phone: editPhone.trim(),
           status: editStatus,
           roleCode: editRoleCode,
           unitIds: editUnitIds,
@@ -127,6 +132,15 @@ export function UsersPage() {
               <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} inputMode="email" />
             </div>
             <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
+              <Input
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                inputMode="tel"
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+            <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Status</div>
               <select
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
@@ -137,7 +151,7 @@ export function UsersPage() {
                 <option value="disabled">Desativado</option>
               </select>
             </div>
-            <div>
+            <div className="md:col-span-2">
               <div className="mb-1 text-sm font-medium text-slate-700">Perfil</div>
               <select
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
@@ -233,6 +247,15 @@ export function UsersPage() {
             <Input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="email@empresa.com" />
           </div>
           <div>
+            <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              inputMode="tel"
+              placeholder="(00) 00000-0000"
+            />
+          </div>
+          <div>
             <div className="mb-1 text-sm font-medium text-slate-700">Senha inicial</div>
             <Input
               value={createPassword}
@@ -311,6 +334,7 @@ export function UsersPage() {
                   <div>
                     <div className="text-sm font-medium text-slate-900">{u.name}</div>
                     <div className="text-sm text-slate-700">{u.email}</div>
+                    {u.phone && <div className="text-sm text-slate-700">{u.phone}</div>}
                     <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
                       <span className="rounded-md bg-slate-100 px-2 py-1">Status: {u.status}</span>
                       <span className="rounded-md bg-slate-100 px-2 py-1">
@@ -328,6 +352,7 @@ export function UsersPage() {
                         setEditingId(u.id);
                         setEditName(u.name);
                         setEditEmail(u.email);
+                        setEditPhone(u.phone ?? '');
                         setEditStatus((u.status as any) ?? 'active');
                         setEditRoleCode(((role?.code as any) ?? 'collaborator') as any);
                         setEditUnitIds(u.unitAccess.map((x) => x.id));

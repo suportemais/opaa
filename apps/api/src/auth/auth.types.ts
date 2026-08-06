@@ -3,6 +3,7 @@ export type AuthUser = {
   tenantId: string;
   name: string;
   email: string;
+  phone: string | null;
   permissionCodes: string[];
   unitIds: string[];
 };

@@ -76,6 +76,7 @@ export class UsersService {
       id: u.id,
       email: u.email,
       name: u.name,
+      phone: u.phone,
       status: u.status,
       createdAt: u.createdAt,
       roles: u.roles.map((r) => ({ code: r.role.code, name: r.role.name })),
@@ -102,6 +103,7 @@ export class UsersService {
 
     const passwordHash = await argon2.hash(dto.password);
     const emailNormalized = normalizeEmail(dto.email);
+    const phoneNormalized = dto.phone ? dto.phone.replace(/\D+/g, '').slice(0, 30) || null : null;
 
     try {
       const created = await this.prisma.$transaction(async (tx) => {
@@ -111,6 +113,7 @@ export class UsersService {
             email: dto.email,
             emailNormalized,
             name: dto.name,
+            phone: phoneNormalized,
             passwordHash,
             status: 'active',
           },
@@ -141,6 +144,10 @@ export class UsersService {
     if (!target || target.tenantId !== user.tenantId) throw new NotFoundException();
 
     const emailNormalized = dto.email ? normalizeEmail(dto.email) : undefined;
+    const phoneNormalized =
+      Object.prototype.hasOwnProperty.call(dto, 'phone')
+        ? (dto.phone ?? '').replace(/\D+/g, '').slice(0, 30) || null
+        : undefined;
 
     let roleId: string | null = null;
     let hasUnitManage = false;
@@ -171,6 +178,7 @@ export class UsersService {
             email: dto.email,
             emailNormalized,
             name: dto.name,
+            phone: phoneNormalized,
             status: dto.status as any,
           },
         });
