@@ -45,7 +45,16 @@ export function AppShell() {
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-4">
             <Link to="/app" className="inline-flex items-center gap-2">
-              <img src="/logo.svg" alt="Opiina" className="h-9 drop-shadow-sm" />
+              <img
+                src="/logo-opiina.png"
+                alt="Opiina"
+                className="h-10 drop-shadow-sm"
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  if (el.src.endsWith('/logo.svg')) return;
+                  el.src = '/logo.svg';
+                }}
+              />
             </Link>
 
             <nav className="hidden items-center gap-1 md:flex">

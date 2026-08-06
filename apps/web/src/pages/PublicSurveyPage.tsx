@@ -238,7 +238,16 @@ export function PublicSurveyPage() {
     <div className="min-h-full bg-slate-50 p-4 md:p-10">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6 pb-44">
         <div className="text-center">
-          <img src="/logo.svg" alt="Opiina" className="mx-auto mb-3 h-8 drop-shadow-sm" />
+          <img
+            src="/logo-opiina.png"
+            alt="Opiina"
+            className="mx-auto mb-3 h-10 drop-shadow-sm"
+            onError={(e) => {
+              const el = e.currentTarget;
+              if (el.src.endsWith('/logo.svg')) return;
+              el.src = '/logo.svg';
+            }}
+          />
           <div className="text-xl font-semibold text-slate-900">{survey.data.survey.name}</div>
           {survey.data.survey.description && <div className="text-sm text-slate-600">{survey.data.survey.description}</div>}
         </div>
