@@ -103,27 +103,7 @@ export function LoginPage() {
 
         <div className="w-full max-w-md">
           <div className="mb-8 flex flex-col items-center text-center">
-            <img
-              src="/icon-opiina.png"
-              alt="Opiina"
-              className="mb-4 h-28 w-28 drop-shadow-lg"
-              onError={(e) => {
-                const el = e.currentTarget;
-                if (el.src.endsWith('/favicon.svg')) return;
-                el.src = '/favicon.svg';
-              }}
-            />
-            <img
-              src="/logo-opiina.png"
-              alt="Opiina"
-              className="mb-2 h-14 drop-shadow-sm"
-              onError={(e) => {
-                const el = e.currentTarget;
-                if (el.src.endsWith('/logo.svg')) return;
-                el.src = '/logo.svg';
-              }}
-            />
-            <div className="mt-1 text-base font-semibold text-slate-900">Entrar</div>
+            <div className="text-lg font-semibold text-slate-900">Entrar</div>
             <div className="text-sm text-slate-600">Acesse o painel</div>
           </div>
 
