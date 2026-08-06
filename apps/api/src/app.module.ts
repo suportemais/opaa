@@ -16,10 +16,12 @@ import { MetricsModule } from './metrics/metrics.module';
 import { CustomersModule } from './customers/customers.module';
 import { TenantModule } from './tenant/tenant.module';
 import { EmployeesModule } from './employees/employees.module';
+import { WebhookOutboxModule } from './webhook-outbox/webhook-outbox.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    WebhookOutboxModule,
     PrismaModule,
     AuthModule,
     UsersModule,

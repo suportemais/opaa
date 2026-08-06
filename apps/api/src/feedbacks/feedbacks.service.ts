@@ -4,10 +4,14 @@ import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
 import type { UpdateCaseDto } from './dto/update-case.dto';
 import type { CreateCaseInteractionDto } from './dto/create-case-interaction.dto';
+import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
 
 @Injectable()
 export class FeedbacksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhookOutbox: WebhookOutboxService,
+  ) {}
 
   private startOfUtcDay(d: Date) {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
@@ -253,32 +257,100 @@ export class FeedbacksService {
   async createCase(user: AuthUser, responseId: string) {
     const response = await this.prisma.surveyResponse.findFirst({
       where: { id: responseId, tenantId: user.tenantId, ...this.unitWhere(user) },
-      include: { feedbackCase: true },
+      include: {
+        feedbackCase: true,
+        survey: { select: { id: true, name: true } },
+        distribution: { select: { id: true, publicToken: true, channel: true, campaign: true } },
+        unit: { select: { id: true, name: true } },
+        employee: { select: { id: true, name: true, code: true, roleTitle: true } },
+        customer: { select: { id: true, name: true, email: true, phone: true, emailNormalized: true, phoneNormalized: true } },
+        answers: { select: { questionId: true, value: true } },
+      },
     });
     if (!response) throw new NotFoundException();
     if (response.feedbackCase) return response.feedbackCase;
 
-    const created = await this.prisma.feedbackCase.create({
-      data: {
-        tenantId: user.tenantId,
-        surveyResponseId: response.id,
-        unitId: response.unitId,
-        customerId: response.customerId,
-        priority: 'normal',
-        status: 'new',
-        description: response.mainComment,
-        events: {
-          create: [
-            {
-              tenantId: user.tenantId,
-              type: 'case.created_manual',
-              data: { trigger: 'manual' } as any,
-              createdByUserId: user.userId,
-            },
-          ],
+    const created = await this.prisma.$transaction(async (tx) => {
+      const caseRow = await tx.feedbackCase.create({
+        data: {
+          tenantId: user.tenantId,
+          surveyResponseId: response.id,
+          unitId: response.unitId,
+          customerId: response.customerId,
+          priority: 'normal',
+          status: 'new',
+          description: response.mainComment,
+          events: {
+            create: [
+              {
+                tenantId: user.tenantId,
+                type: 'case.created_manual',
+                data: { trigger: 'manual' } as any,
+                createdByUserId: user.userId,
+              },
+            ],
+          },
         },
-      },
-      include: { events: true },
+        include: { events: true },
+      });
+
+      const payload = {
+        feedbackCaseId: caseRow.id,
+        trigger: 'manual',
+        tenant: { id: user.tenantId },
+        survey: response.survey ? { id: response.survey.id, name: response.survey.name } : null,
+        surveyResponseId: response.id,
+        distribution: response.distribution
+          ? {
+              id: response.distribution.id,
+              publicToken: response.distribution.publicToken,
+              channel: response.distribution.channel,
+              campaign: response.distribution.campaign,
+            }
+          : null,
+        nps: {
+          score: response.npsScore,
+          class: response.npsClass,
+          badScoreThreshold: null,
+        },
+        unit: response.unit ? { id: response.unit.id, name: response.unit.name } : null,
+        employee: response.employee
+          ? { id: response.employee.id, name: response.employee.name, code: response.employee.code, roleTitle: response.employee.roleTitle }
+          : null,
+        customer: response.customer
+          ? {
+              id: response.customer.id,
+              name: response.customer.name ?? null,
+              email: response.customer.email ?? null,
+              emailNormalized: response.customer.emailNormalized ?? null,
+              phone: response.customer.phone ?? null,
+              phoneNormalized: response.customer.phoneNormalized ?? null,
+            }
+          : null,
+        mainComment: response.mainComment ?? null,
+        completedAt: response.completedAt ? (response.completedAt as Date).toISOString() : null,
+        idempotencyKey: (response as any).idempotencyKey ?? null,
+        answers: response.answers.map((a) => ({ questionId: a.questionId, value: a.value })),
+        createdByUser: {
+          id: user.userId,
+          name: user.name,
+          email: user.email,
+        },
+      };
+
+      await tx.webhookOutbox.create({
+        data: {
+          tenantId: user.tenantId,
+          eventType: 'feedback_case.created',
+          payload: payload as any,
+          status: 'pending',
+          attempts: 0,
+          maxAttempts: 10,
+          nextAttemptAt: new Date(),
+        },
+      });
+
+      return caseRow;
     });
 
     return created;

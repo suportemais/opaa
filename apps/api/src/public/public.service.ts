@@ -7,6 +7,7 @@ import { normalizeEmail, normalizePhone } from '../common/normalize';
 import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
 import { badScoreThresholdFromSettings } from '../common/tenant-settings';
 import { googleBusinessUrlFromSettings } from '../common/unit-settings';
+import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -25,7 +26,10 @@ function isQuestionVisible(q: { config: unknown }, ctx: { npsScore?: number }) {
 
 @Injectable()
 export class PublicService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhookOutbox: WebhookOutboxService,
+  ) {}
 
   async isAllowedDomain(domain: string) {
     const base = baseDomain();
@@ -364,8 +368,9 @@ export class PublicService {
       });
 
       const shouldCreateCase = typeof created.npsScore === 'number' && created.npsScore <= badScoreThreshold;
+      let createdCaseId: string | null = null;
       if (shouldCreateCase) {
-        await tx.feedbackCase.create({
+        const fbCase = await tx.feedbackCase.create({
           data: {
             tenantId: distribution.tenantId,
             surveyResponseId: created.id,
@@ -384,13 +389,76 @@ export class PublicService {
               ],
             },
           },
+          select: { id: true },
         });
+        createdCaseId = fbCase.id;
       }
 
-      return tx.surveyResponse.findUniqueOrThrow({
+      const returned = await tx.surveyResponse.findUniqueOrThrow({
         where: { id: created.id },
         include: { answers: true },
       });
+
+      if (createdCaseId) {
+        const unit = distribution.unitId
+          ? await tx.unit.findUnique({ where: { id: distribution.unitId }, select: { id: true, name: true } })
+          : null;
+        const employee = finalEmployeeId
+          ? await tx.employee.findUnique({ where: { id: finalEmployeeId }, select: { id: true, name: true, code: true, roleTitle: true } })
+          : null;
+        const customer = customerId
+          ? await tx.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, email: true, phone: true, emailNormalized: true, phoneNormalized: true } })
+          : null;
+        const surveyRow = await tx.survey.findUnique({ where: { id: survey.id }, select: { id: true, name: true } });
+        const outboxPayload = {
+          feedbackCaseId: createdCaseId,
+          trigger: 'nps_bad_score',
+          tenant: { id: distribution.tenantId, slug: (distribution.tenant as any)?.slug ?? null },
+          survey: { id: survey.id, name: surveyRow?.name ?? survey.name },
+          surveyResponseId: created.id,
+          distribution: {
+            id: distribution.id,
+            publicToken: distribution.publicToken,
+            channel: distribution.channel,
+            campaign: distribution.campaign,
+          },
+          nps: {
+            score: created.npsScore,
+            class: npsClass ?? null,
+            badScoreThreshold,
+          },
+          unit: unit ? { id: unit.id, name: unit.name } : null,
+          employee: employee ? { id: employee.id, name: employee.name, code: employee.code, roleTitle: employee.roleTitle } : null,
+          customer: customer
+            ? {
+                id: customer.id,
+                name: customer.name ?? null,
+                email: customer.email ?? null,
+                emailNormalized: customer.emailNormalized ?? null,
+                phone: customer.phone ?? null,
+                phoneNormalized: customer.phoneNormalized ?? null,
+              }
+            : null,
+          mainComment: created.mainComment ?? null,
+          completedAt: created.completedAt ? (created.completedAt as Date).toISOString() : null,
+          idempotencyKey: created.idempotencyKey ?? null,
+          answers: dto.answers.map((a) => ({ questionId: a.questionId, value: a.value })),
+        };
+
+        await tx.webhookOutbox.create({
+          data: {
+            tenantId: distribution.tenantId,
+            eventType: 'feedback_case.created',
+            payload: outboxPayload as any,
+            status: 'pending',
+            attempts: 0,
+            maxAttempts: 10,
+            nextAttemptAt: new Date(),
+          },
+        });
+      }
+
+      return returned;
     });
 
     return {
