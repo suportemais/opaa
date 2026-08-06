@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -8,6 +8,24 @@ import { QrCode } from '../components/QrCode';
 
 type Unit = { id: string; name: string };
 type Survey = { id: string; name: string; status: string; units: Array<{ unitId: string; unit: Unit }> };
+type SurveyDetail = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  collectCustomer: boolean;
+  collectEmployee: boolean;
+  units: Array<{ unitId: string; unit: Unit }>;
+  draftVersion: {
+    questions: Array<{
+      id: string;
+      title: string;
+      type: string;
+      required: boolean;
+      config?: { when?: { npsMax?: number; npsMin?: number } } | null;
+    }>;
+  } | null;
+};
 type Distribution = {
   id: string;
   surveyId: string;
@@ -19,6 +37,14 @@ type Distribution = {
   active: boolean;
   createdAt: string;
   unit?: Unit | null;
+};
+
+type QuestionDraft = {
+  id: string;
+  title: string;
+  type: 'text_short' | 'text_long';
+  required: boolean;
+  onlyLowScore: boolean;
 };
 
 export function SurveysPage() {
@@ -35,12 +61,20 @@ export function SurveysPage() {
     return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
   }, [tenant.data]);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const draftDetail = useQuery({
+    queryKey: ['surveyDetail', editingId],
+    queryFn: () => apiFetch<SurveyDetail>(`/surveys/${editingId}`),
+    enabled: Boolean(editingId),
+  });
+
   const [name, setName] = useState('Pesquisa de satisfação');
   const [description, setDescription] = useState('Conte como foi sua experiência.');
   const [collectEmployee, setCollectEmployee] = useState(true);
-  const [questions, setQuestions] = useState<
-    Array<{ id: string; title: string; type: 'text_short' | 'text_long'; required: boolean; onlyLowScore: boolean }>
-  >(() => [{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
+  const [questions, setQuestions] = useState<QuestionDraft[]>(() => [
+    { id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false },
+  ]);
 
   const defaultUnitId = useMemo(() => units.data?.[0]?.id ?? null, [units.data]);
   const [unitId, setUnitId] = useState<string | null>(null);
@@ -53,6 +87,52 @@ export function SurveysPage() {
     queryFn: () => apiFetch<Distribution[]>(`/surveys/${activeSurveyId}/distributions`),
     enabled: Boolean(activeSurveyId),
   });
+
+  useEffect(() => {
+    if (!editingId) return;
+    if (!draftDetail.isFetched || !draftDetail.data) return;
+    const s = draftDetail.data;
+    setName(s.name);
+    setDescription(s.description ?? '');
+    setCollectEmployee(s.collectEmployee);
+    const firstUnit = s.units[0]?.unitId ?? null;
+    if (firstUnit) setUnitId(firstUnit);
+    const extras: QuestionDraft[] =
+      s.draftVersion?.questions
+        .filter((q) => q.type !== 'nps')
+        .map((q) => ({
+          id: q.id,
+          title: q.title,
+          type: (q.type === 'text_short' || q.type === 'text_long' ? q.type : 'text_long') as QuestionDraft['type'],
+          required: q.required,
+          onlyLowScore: Boolean(q.config?.when?.npsMax),
+        })) ?? [];
+    setQuestions(extras);
+  }, [editingId, draftDetail.data, draftDetail.isFetched]);
+
+  const startEditing = (surveyId: string) => {
+    setEditingId(surveyId);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setName('Pesquisa de satisfação');
+    setDescription('Conte como foi sua experiência.');
+    setCollectEmployee(true);
+    setQuestions([{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
+    setUnitId(null);
+    qc.invalidateQueries({ queryKey: ['surveyDetail'] });
+  };
+
+  const buildQuestionsPayload = () => [
+    { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps' as const, required: true },
+    ...questions.map((q) => ({
+      title: q.title,
+      type: q.type,
+      required: q.required,
+      config: q.onlyLowScore ? { when: { npsMax: badScoreThreshold } } : undefined,
+    })),
+  ];
 
   const create = useMutation({
     mutationFn: async () => {
@@ -67,15 +147,7 @@ export function SurveysPage() {
           collectCustomer: true,
           collectEmployee,
           unitIds: [u],
-          questions: [
-            { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps', required: true },
-            ...questions.map((q) => ({
-              title: q.title,
-              type: q.type,
-              required: q.required,
-              config: q.onlyLowScore ? { when: { npsMax: badScoreThreshold } } : undefined,
-            })),
-          ],
+          questions: buildQuestionsPayload(),
         },
       });
 
@@ -86,10 +158,55 @@ export function SurveysPage() {
       return { createdId: created.id, publicToken: published.publicToken };
     },
     onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['surveys'] }),
-        qc.invalidateQueries({ queryKey: ['units'] }),
-      ]);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['surveys'] }), qc.invalidateQueries({ queryKey: ['units'] })]);
+    },
+  });
+
+  const updateDraft = useMutation({
+    mutationFn: async () => {
+      if (!editingId) throw new Error('no_editing');
+      const u = unitId ?? defaultUnitId;
+      if (!u) throw new Error('no_unit');
+      return apiFetch<{ ok: boolean; id: string }>(`/surveys/${encodeURIComponent(editingId)}`, {
+        method: 'PATCH',
+        json: {
+          name,
+          description,
+          collectEmployee,
+          unitIds: [u],
+          questions: buildQuestionsPayload(),
+        },
+      });
+    },
+    onSuccess: async (data) => {
+      await qc.invalidateQueries({ queryKey: ['surveys'] });
+      await qc.invalidateQueries({ queryKey: ['surveyDetail', data?.id] });
+    },
+  });
+
+  const saveAndPublish = useMutation({
+    mutationFn: async () => {
+      if (!editingId) throw new Error('no_editing');
+      const u = unitId ?? defaultUnitId;
+      if (!u) throw new Error('no_unit');
+      await apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(editingId)}`, {
+        method: 'PATCH',
+        json: {
+          name,
+          description,
+          collectEmployee,
+          unitIds: [u],
+          questions: buildQuestionsPayload(),
+        },
+      });
+      return apiFetch<{ publicToken: string }>(`/surveys/${encodeURIComponent(editingId)}/publish`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: async (_, _vars, _ctx) => {
+      const id = editingId;
+      cancelEditing();
+      await Promise.all([qc.invalidateQueries({ queryKey: ['surveys'] }), qc.invalidateQueries({ queryKey: ['surveyDistributions', id] })]);
     },
   });
 
@@ -122,6 +239,7 @@ export function SurveysPage() {
   });
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const publishedToken = create.data?.publicToken ?? saveAndPublish.data?.publicToken ?? null;
 
   return (
     <div className="grid gap-6">
@@ -130,7 +248,14 @@ export function SurveysPage() {
         <div className="text-sm text-slate-600">Versões imutáveis (publicadas) e rascunhos</div>
       </div>
 
-      <Card title="Criar e publicar pesquisa (MVP)">
+      <Card title={editingId ? 'Editar pesquisa (rascunho)' : 'Criar e publicar pesquisa (MVP)'}>
+        {editingId && (
+          <div className="mb-3 flex items-center justify-end">
+            <Button variant="ghost" onClick={cancelEditing} disabled={updateDraft.isPending || saveAndPublish.isPending}>
+              Cancelar edição
+            </Button>
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
             <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
@@ -178,7 +303,7 @@ export function SurveysPage() {
                         value={q.type}
                         onChange={(e) =>
                           setQuestions((prev) =>
-                            prev.map((x) => (x.id === q.id ? { ...x, type: e.target.value as any } : x)),
+                            prev.map((x) => (x.id === q.id ? { ...x, type: e.target.value as QuestionDraft['type'] } : x)),
                           )
                         }
                       >
@@ -228,7 +353,13 @@ export function SurveysPage() {
                 onClick={() =>
                   setQuestions((prev) => [
                     ...prev,
-                    { id: crypto.randomUUID(), title: 'Nova pergunta', type: 'text_long', required: false, onlyLowScore: false },
+                    {
+                      id: crypto.randomUUID(),
+                      title: 'Nova pergunta',
+                      type: 'text_long',
+                      required: false,
+                      onlyLowScore: false,
+                    },
                   ])
                 }
               >
@@ -252,24 +383,40 @@ export function SurveysPage() {
             </select>
           </div>
 
-          {create.data?.publicToken && (
+          {publishedToken && (
             <div className="md:col-span-2 rounded-md bg-slate-50 p-3 text-sm">
               <div className="text-slate-500">Link público</div>
               <a
                 className="font-mono text-sky-700 hover:underline"
-                href={`/public/${create.data.publicToken}`}
+                href={`/public/${publishedToken}`}
                 target="_blank"
                 rel="noreferrer"
               >
-                /public/{create.data.publicToken}
+                /public/{publishedToken}
               </a>
             </div>
           )}
 
-          <div className="md:col-span-2">
-            <Button disabled={create.isPending} onClick={() => create.mutate()}>
-              {create.isPending ? 'Publicando...' : 'Criar e publicar'}
-            </Button>
+          <div className="md:col-span-2 flex flex-wrap gap-2">
+            {!editingId && (
+              <Button disabled={create.isPending} onClick={() => create.mutate()}>
+                {create.isPending ? 'Publicando...' : 'Criar e publicar'}
+              </Button>
+            )}
+            {editingId && (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={updateDraft.isPending || saveAndPublish.isPending || draftDetail.isFetching}
+                  onClick={() => updateDraft.mutate()}
+                >
+                  {updateDraft.isPending ? 'Salvando...' : 'Salvar rascunho'}
+                </Button>
+                <Button disabled={saveAndPublish.isPending || updateDraft.isPending || draftDetail.isFetching} onClick={() => saveAndPublish.mutate()}>
+                  {saveAndPublish.isPending ? 'Publicando...' : 'Salvar e publicar'}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -286,7 +433,18 @@ export function SurveysPage() {
                   <div className="text-sm font-medium">{s.name}</div>
                   <div className="text-xs text-slate-500">{s.status}</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {s.status === 'draft' && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setActiveSurveyId(null);
+                        startEditing(s.id);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
                     onClick={() => {
