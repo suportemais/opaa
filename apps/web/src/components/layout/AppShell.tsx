@@ -46,13 +46,13 @@ export function AppShell() {
           <div className="flex items-center gap-4">
             <Link to="/app" className="inline-flex items-center gap-2">
               <img
-                src="/logo-opiina.png"
+                src="/icon-opiina.png"
                 alt="Opiina"
-                className="h-10 drop-shadow-sm"
+                className="h-9 w-9 drop-shadow-sm"
                 onError={(e) => {
                   const el = e.currentTarget;
-                  if (el.src.endsWith('/logo.svg')) return;
-                  el.src = '/logo.svg';
+                  if (el.src.endsWith('/favicon.svg')) return;
+                  el.src = '/favicon.svg';
                 }}
               />
             </Link>

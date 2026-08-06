@@ -241,7 +241,7 @@ export function PublicSurveyPage() {
           <img
             src="/logo-opiina.png"
             alt="Opiina"
-            className="mx-auto mb-3 h-10 drop-shadow-sm"
+            className="mx-auto mb-4 h-20 drop-shadow-sm md:h-28"
             onError={(e) => {
               const el = e.currentTarget;
               if (el.src.endsWith('/logo.svg')) return;

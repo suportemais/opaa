@@ -103,22 +103,20 @@ export function LoginPage() {
 
         <div className="w-full max-w-md">
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-3xl bg-white p-3 shadow-lg ring-1 ring-slate-200">
-              <img
-                src="/icon-opiina.png"
-                alt="Opiina"
-                className="h-full w-full drop-shadow-md"
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (el.src.endsWith('/favicon.svg')) return;
-                  el.src = '/favicon.svg';
-                }}
-              />
-            </div>
+            <img
+              src="/icon-opiina.png"
+              alt="Opiina"
+              className="mb-4 h-28 w-28 drop-shadow-lg"
+              onError={(e) => {
+                const el = e.currentTarget;
+                if (el.src.endsWith('/favicon.svg')) return;
+                el.src = '/favicon.svg';
+              }}
+            />
             <img
               src="/logo-opiina.png"
               alt="Opiina"
-              className="mb-2 h-16 drop-shadow-sm"
+              className="mb-2 h-14 drop-shadow-sm"
               onError={(e) => {
                 const el = e.currentTarget;
                 if (el.src.endsWith('/logo.svg')) return;
