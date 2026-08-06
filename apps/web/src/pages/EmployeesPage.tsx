@@ -92,6 +92,43 @@ export function EmployeesPage() {
     },
   });
 
+  const [importUnitId, setImportUnitId] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; total?: number; errors?: Array<{ row: number; message: string }> } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const importEmployees = useMutation({
+    mutationFn: async () => {
+      if (!importFile) throw new Error('missing_file');
+      const form = new FormData();
+      form.append('unitId', importUnitId || defaultUnitId);
+      form.append('file', importFile);
+      return apiFetch<{ imported: number; total?: number; errors?: Array<{ row: number; message: string }> }>('/employees/import', {
+        method: 'POST',
+        body: form,
+      });
+    },
+    onSuccess: async (data) => {
+      setImportResult(data);
+      setImportError(null);
+      setImportFile(null);
+      const input = document.getElementById('employee-import-file') as HTMLInputElement | null;
+      if (input) input.value = '';
+      await qc.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (err: any) => {
+      const body = (err as any)?.responseJson as any;
+      const message =
+        typeof err === 'string'
+          ? err
+          : Array.isArray(body?.errors)
+            ? 'Verifique os erros abaixo.'
+            : (body?.message ?? 'Falha ao importar');
+      setImportError(message);
+      setImportResult(null);
+    },
+  });
+
   return (
     <div className="grid gap-6">
       <div>
@@ -154,45 +191,138 @@ export function EmployeesPage() {
         </Card>
       )}
 
-      <Card title="Criar atendente">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div>
-            <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={unitId || defaultUnitId}
-              onChange={(e) => setUnitId(e.target.value)}
-              disabled={units.isLoading}
-            >
-              {units.data?.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Criar atendente">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={unitId || defaultUnitId}
+                onChange={(e) => setUnitId(e.target.value)}
+                disabled={units.isLoading}
+              >
+                {units.data?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do atendente" />
+            </div>
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Código</div>
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Opcional" />
+            </div>
+            <div className="md:col-span-2">
+              <div className="mb-1 text-sm font-medium text-slate-700">Cargo</div>
+              <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Opcional" />
+            </div>
+            <div className="md:col-span-3">
+              <Button disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
+                {create.isPending ? 'Criando...' : 'Criar'}
+              </Button>
+            </div>
+            {create.isError && (
+              <div className="md:col-span-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao criar</div>
+            )}
           </div>
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do atendente" />
+        </Card>
+
+        <Card
+          title="Importar CSV"
+          description="Colunas: Nome (obrigatório), Código (opcional), Cargo (opcional). Limite 2MB."
+        >
+          <div className="grid gap-3">
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={importUnitId || defaultUnitId}
+                onChange={(e) => setImportUnitId(e.target.value)}
+                disabled={units.isLoading || importEmployees.isPending}
+              >
+                {units.data?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Arquivo CSV</div>
+              <input
+                id="employee-import-file"
+                type="file"
+                accept=".csv,text/csv"
+                disabled={importEmployees.isPending}
+                className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-sky-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-sky-700"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setImportFile(f);
+                  setImportResult(null);
+                  setImportError(null);
+                }}
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Exemplo de cabeçalho: <span className="font-mono text-slate-700">Nome,Código,Cargo</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                variant="secondary"
+                disabled={importEmployees.isPending || !importFile}
+                onClick={() => {
+                  setImportFile(null);
+                  setImportResult(null);
+                  setImportError(null);
+                  const input = document.getElementById('employee-import-file') as HTMLInputElement | null;
+                  if (input) input.value = '';
+                }}
+              >
+                Limpar
+              </Button>
+              <Button disabled={!importFile || importEmployees.isPending} onClick={() => importEmployees.mutate()}>
+                {importEmployees.isPending ? 'Importando...' : 'Importar'}
+              </Button>
+            </div>
+            {importResult && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                {importResult.imported} de {importResult.total ?? importResult.imported} atendente(s) importado(s) com sucesso.
+                {importResult.errors && importResult.errors.length > 0 && (
+                  <div className="mt-2 text-emerald-900">
+                    <div className="mb-1 font-medium">Observações:</div>
+                    <ul className="list-disc space-y-0.5 pl-5">
+                      {importResult.errors.map((e, i) => (
+                        <li key={i}>
+                          Linha {e.row}: {e.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            {importError && (
+              <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {importError}
+                {Array.isArray((importEmployees.error as any)?.responseJson?.errors) && (
+                  <ul className="mt-2 list-disc space-y-0.5 pl-5">
+                    {((importEmployees.error as any)?.responseJson?.errors ?? []).map((e: any, i: number) => (
+                      <li key={i}>
+                        Linha {e.row}: {e.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
-          <div>
-            <div className="mb-1 text-sm font-medium text-slate-700">Código</div>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Opcional" />
-          </div>
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Cargo</div>
-            <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Opcional" />
-          </div>
-          <div className="md:col-span-3">
-            <Button disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
-              {create.isPending ? 'Criando...' : 'Criar'}
-            </Button>
-          </div>
-          {create.isError && (
-            <div className="md:col-span-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao criar</div>
-          )}
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       <Card title="Lista">
         <div className="mb-4 grid gap-3 md:grid-cols-3">

@@ -139,5 +139,103 @@ export class EmployeesService {
     await this.prisma.employee.update({ where: { id: current.id }, data: { status: 'inactive' } });
     return { ok: true };
   }
+
+  async importFromCsv(user: AuthUser, params: { unitId: string; rows: Array<Record<string, string>> }) {
+    if (!user.permissionCodes.includes(PermissionCodes.UnitManage)) throw new ForbiddenException();
+
+    const unit = await this.prisma.unit.findFirst({ where: { id: params.unitId, tenantId: user.tenantId }, select: { id: true } });
+    if (!unit) throw new NotFoundException('unit_not_found');
+
+    type Row = { name: string; code: string | null; roleTitle: string | null };
+    const cleanRows: Row[] = [];
+    const errors: Array<{ row: number; message: string }> = [];
+
+    params.rows.forEach((raw, idx) => {
+      const lineNumber = idx + 2;
+      const getValue = (keys: string[]): string | null => {
+        for (const key of keys) {
+          const found = Object.keys(raw).find((k) => k.trim().toLowerCase() === key.toLowerCase());
+          if (found) {
+            const value = raw[found];
+            if (typeof value === 'string') return value.trim();
+          }
+        }
+        return null;
+      };
+
+      const name = getValue(['Nome', 'Name', 'name', 'nome']) ?? '';
+      const code = getValue(['Código', 'Codigo', 'Code', 'code', 'codigo']);
+      const roleTitle = getValue(['Cargo', 'Role', 'Função', 'Funcao', 'cargo', 'role', 'funcao', 'função']);
+
+      if (!name) {
+        errors.push({ row: lineNumber, message: 'Nome é obrigatório' });
+        return;
+      }
+
+      if (name.length > 120) {
+        errors.push({ row: lineNumber, message: 'Nome excede 120 caracteres' });
+        return;
+      }
+
+      if (code && code.length > 40) {
+        errors.push({ row: lineNumber, message: 'Código excede 40 caracteres' });
+        return;
+      }
+
+      if (roleTitle && roleTitle.length > 80) {
+        errors.push({ row: lineNumber, message: 'Cargo excede 80 caracteres' });
+        return;
+      }
+
+      cleanRows.push({ name, code: code || null, roleTitle: roleTitle || null });
+    });
+
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        message: 'invalid_rows',
+        errors,
+      } as any);
+    }
+
+    if (!cleanRows.length) return { imported: 0, errors: [] };
+
+    const createdIds: string[] = [];
+    const importErrors: Array<{ row: number; message: string }> = [];
+
+    for (let i = 0; i < cleanRows.length; i++) {
+      const row = cleanRows[i];
+      const lineNumber = i + 2;
+      try {
+        const created = await this.prisma.employee.create({
+          data: {
+            tenantId: user.tenantId,
+            unitId: unit.id,
+            name: row.name,
+            code: row.code,
+            roleTitle: row.roleTitle,
+            status: 'active',
+          },
+          select: { id: true },
+        });
+        createdIds.push(created.id);
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          importErrors.push({ row: lineNumber, message: 'Código duplicado' });
+          continue;
+        }
+        importErrors.push({ row: lineNumber, message: 'Falha ao criar atendente' });
+      }
+    }
+
+    if (importErrors.length === cleanRows.length - createdIds.length && importErrors.length === 0) {
+      // all good
+    }
+
+    return {
+      imported: createdIds.length,
+      total: cleanRows.length,
+      errors: importErrors,
+    };
+  }
 }
 
