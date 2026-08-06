@@ -5,6 +5,11 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      WEBHOOK_ENABLED: ${WEBHOOK_ENABLED}
+      WEBHOOK_N8N_URL: ${WEBHOOK_N8N_URL}
+      WEBHOOK_N8N_TOKEN: ${WEBHOOK_N8N_TOKEN}
+      WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS}
+      WEBHOOK_BATCH_SIZE: ${WEBHOOK_BATCH_SIZE}
     command:
       [
         "sh",
@@ -29,6 +34,11 @@ services:
       API_BASE_PATH: /api
       COOKIE_SECURE: "true"
       PORT: 3000
+      WEBHOOK_ENABLED: ${WEBHOOK_ENABLED}
+      WEBHOOK_N8N_URL: ${WEBHOOK_N8N_URL}
+      WEBHOOK_N8N_TOKEN: ${WEBHOOK_N8N_TOKEN}
+      WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS}
+      WEBHOOK_BATCH_SIZE: ${WEBHOOK_BATCH_SIZE}
     depends_on:
       migrate:
         condition: service_completed_successfully
