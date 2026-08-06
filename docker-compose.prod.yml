@@ -51,6 +51,38 @@ services:
         aliases:
           - opaa-web
 
+  caddy:
+    build:
+      context: .
+      dockerfile: docker/caddy/Dockerfile
+    restart: unless-stopped
+    environment:
+      GODADDY_API_KEY: ${GODADDY_API_KEY}
+      GODADDY_API_SECRET: ${GODADDY_API_SECRET}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+      - "2019:2019"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    networks:
+      web:
+        aliases:
+          - opaa-caddy
+
+volumes:
+  caddy_data:
+    external: false
+  caddy_config:
+    external: false
+
 networks:
   web:
     external: true
