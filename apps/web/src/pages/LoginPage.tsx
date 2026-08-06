@@ -75,11 +75,7 @@ export function LoginPage() {
       <div className="relative mx-auto flex min-h-full w-full max-w-6xl items-center gap-10 p-6">
         <div className="hidden flex-1 flex-col gap-5 md:flex">
           <Link to="/" className="inline-flex items-center gap-3">
-            <img src="/favicon.svg" alt="Opiina" className="h-10 w-10" />
-            <div>
-              <div className="text-lg font-semibold text-slate-900">Opiina</div>
-              <div className="text-sm text-slate-600">Ouça. Entenda. Fidelize.</div>
-            </div>
+            <img src="/logo.svg" alt="Opiina" className="h-24 drop-shadow-sm" />
           </Link>
 
           <div className="mt-6 text-3xl font-semibold leading-tight text-slate-900">
@@ -97,9 +93,12 @@ export function LoginPage() {
         </div>
 
         <div className="w-full max-w-md">
-          <div className="mb-6 text-center">
-            <img src="/favicon.svg" alt="Opiina" className="mx-auto mb-3 h-10 w-10" />
-            <div className="text-lg font-semibold text-slate-900">Entrar</div>
+          <div className="mb-8 flex flex-col items-center text-center">
+            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500/10 via-white to-indigo-500/10 p-3 shadow-lg ring-1 ring-slate-200">
+              <img src="/favicon.svg" alt="Opiina" className="h-14 w-14 drop-shadow-md" />
+            </div>
+            <img src="/logo.svg" alt="Opiina" className="mb-3 h-16 drop-shadow-sm" />
+            <div className="mt-1 text-base font-semibold text-slate-900">Entrar</div>
             <div className="text-sm text-slate-600">Acesse o painel</div>
           </div>
 

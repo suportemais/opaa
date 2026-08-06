@@ -238,7 +238,7 @@ export function PublicSurveyPage() {
     <div className="min-h-full bg-slate-50 p-4 md:p-10">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6 pb-44">
         <div className="text-center">
-          <img src="/favicon.svg" alt="Opiina" className="mx-auto mb-3 h-10 w-10" />
+          <img src="/logo.svg" alt="Opiina" className="mx-auto mb-3 h-8 drop-shadow-sm" />
           <div className="text-xl font-semibold text-slate-900">{survey.data.survey.name}</div>
           {survey.data.survey.description && <div className="text-sm text-slate-600">{survey.data.survey.description}</div>}
         </div>

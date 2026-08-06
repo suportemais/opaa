@@ -45,11 +45,7 @@ export function AppShell() {
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-4">
             <Link to="/app" className="inline-flex items-center gap-2">
-              <img src="/favicon.svg" alt="Opiina" className="h-8 w-8" />
-              <div className="leading-tight">
-                <div className="text-sm font-semibold">Opiina</div>
-                <div className="text-xs text-slate-500">Ouça. Entenda. Fidelize.</div>
-              </div>
+              <img src="/logo.svg" alt="Opiina" className="h-9 drop-shadow-sm" />
             </Link>
 
             <nav className="hidden items-center gap-1 md:flex">
