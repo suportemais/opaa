@@ -204,6 +204,20 @@ export function PublicWhistleblowerPage() {
           </div>
         </div>
 
+        <Card title="Aviso de confidencialidade e conformidade LGPD" description="Leia atentamente antes de enviar sua denúncia">
+          <div className="grid gap-3 text-sm leading-relaxed text-slate-700">
+            <p>
+              Este canal destina-se ao recebimento de denúncias relacionadas a racismo, injúria racial, homofobia, transfobia, intolerância religiosa, assédio de qualquer natureza, violência e demais formas de discriminação ou condutas inadequadas ocorridas no ambiente de trabalho.
+            </p>
+            <p>
+              As informações fornecidas serão tratadas com confidencialidade e utilizadas exclusivamente para a apuração dos fatos relatados, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD). O acesso aos dados será restrito às pessoas autorizadas e, quando necessário, as informações poderão ser compartilhadas para fins de investigação e cumprimento de obrigações legais e regulatórias.
+            </p>
+            <p>
+              O denunciante poderá optar por permanecer anônimo, sendo asseguradas a confidencialidade das informações e a não retaliação contra pessoas que apresentem denúncias fundamentadas.
+            </p>
+          </div>
+        </Card>
+
         {!anonymous && (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
             Você optou por se identificar voluntariamente. Seus dados serão utilizados apenas para contato sobre esta denúncia.

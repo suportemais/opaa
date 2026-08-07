@@ -11,6 +11,8 @@ import {
 } from '../lib/labels';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
+import { QrCode } from '../components/QrCode';
 
 type WhistleblowerRow = {
   id: string;
@@ -29,6 +31,14 @@ type WhistleblowerRow = {
 };
 
 type Unit = { id: string; name: string };
+
+type TenantMe = {
+  id: string;
+  slug: string;
+  tradeName: string;
+  legalName: string;
+  settings?: { badScoreThreshold?: number };
+};
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—';
@@ -55,6 +65,7 @@ const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
 
 export function DenunciasPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   const [status, setStatus] = useState<string>(() => searchParams.get('status') ?? 'any');
   const [priority, setPriority] = useState<string>(() => searchParams.get('priority') ?? 'any');
@@ -66,6 +77,14 @@ export function DenunciasPage() {
   const [q, setQ] = useState(searchParams.get('q') ?? '');
 
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
+  const tenant = useQuery({
+    queryKey: ['tenantMe'],
+    queryFn: () => apiFetch<TenantMe>('/tenant/me'),
+  });
+
+  const publicSlug = tenant.data?.slug ?? '';
+  const publicPath = publicSlug ? `/canal-etico/${publicSlug}` : '';
+  const publicFullUrl = publicPath ? `${origin}${publicPath}` : '';
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -98,6 +117,72 @@ export function DenunciasPage() {
           <div className="text-sm text-slate-600">Listagem de denúncias recebidas pelo canal de ética e conformidade</div>
         </div>
       </div>
+
+      <Card
+        title="Canal público de denúncias"
+        description="Use este link ou QR Code para disponibilizar o canal de denúncias na sua empresa, intranet, murais ou e-mails."
+      >
+        {tenant.isLoading && <div className="text-sm text-slate-600">Carregando informações do tenant...</div>}
+        {tenant.isError && <div className="text-sm text-rose-700">Falha ao carregar informações do tenant.</div>}
+        {tenant.data && (
+          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
+            <div className="flex items-start justify-center md:justify-start">
+              {publicFullUrl ? <QrCode value={publicFullUrl} /> : <div className="h-[220px] w-[220px] rounded-md bg-slate-100" />}
+            </div>
+            <div className="grid gap-3">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-sm font-medium text-slate-900">Tenant</div>
+                  <div className="text-sm text-slate-700">
+                    {tenant.data.tradeName} <span className="text-slate-500">({tenant.data.slug})</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium text-slate-900">Tipo de acesso</div>
+                  <div className="text-sm text-slate-700">Público · sem login · anônimo garantido</div>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <div className="rounded-md bg-slate-50 p-3 text-sm">
+                  <div className="text-slate-500">Link principal (canal de ética)</div>
+                  <a className="font-mono text-sky-700 hover:underline" href={publicPath} target="_blank" rel="noreferrer">
+                    {publicPath || '—'}
+                  </a>
+                </div>
+                <div className="rounded-md bg-slate-50 p-3 text-sm">
+                  <div className="text-slate-500">Link alternativo (/whistleblower)</div>
+                  <a className="font-mono text-sky-700 hover:underline" href={publicSlug ? `/whistleblower/${publicSlug}` : ''} target="_blank" rel="noreferrer">
+                    {publicSlug ? `/whistleblower/${publicSlug}` : '—'}
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={!publicFullUrl}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(publicFullUrl);
+                    } catch {}
+                  }}
+                >
+                  Copiar link
+                </Button>
+                <a
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  href={publicPath}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Abrir canal
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
 
       <Card title="Filtros" description="Filtre por status, prioridade, categoria, unidade e identificação">
         <div className="grid gap-3 md:grid-cols-4">
