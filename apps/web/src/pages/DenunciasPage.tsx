@@ -12,7 +12,7 @@ import {
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
-import { QrCode } from '../components/QrCode';
+import { QrCodePosterWhistleblower } from '../components/QrCodePosterWhistleblower';
 
 type WhistleblowerRow = {
   id: string;
@@ -120,42 +120,47 @@ export function DenunciasPage() {
 
       <Card
         title="Canal público de denúncias"
-        description="Use este link ou QR Code para disponibilizar o canal de denúncias na sua empresa, intranet, murais ou e-mails."
+        description="Cartaz para impressão, intranet, murais e comunicação interna. Baixe em PNG abaixo para alta resolução."
       >
         {tenant.isLoading && <div className="text-sm text-slate-600">Carregando informações do tenant...</div>}
         {tenant.isError && <div className="text-sm text-rose-700">Falha ao carregar informações do tenant.</div>}
         {tenant.data && (
-          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-            <div className="flex items-start justify-center md:justify-start">
-              {publicFullUrl ? <QrCode value={publicFullUrl} /> : <div className="h-[220px] w-[220px] rounded-md bg-slate-100" />}
+          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+            <div className="min-w-0">
+              {publicFullUrl ? (
+                <QrCodePosterWhistleblower
+                  url={publicFullUrl}
+                  tenantName={tenant.data.tradeName || tenant.data.legalName || null}
+                  tenantSlug={publicSlug || null}
+                />
+              ) : (
+                <div className="h-[560px] w-full rounded-xl bg-slate-100" />
+              )}
             </div>
-            <div className="grid gap-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="text-sm font-medium text-slate-900">Tenant</div>
-                  <div className="text-sm text-slate-700">
-                    {tenant.data.tradeName} <span className="text-slate-500">({tenant.data.slug})</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium text-slate-900">Tipo de acesso</div>
-                  <div className="text-sm text-slate-700">Público · sem login · anônimo garantido</div>
+
+            <div className="grid h-fit gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-900">Links do canal</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  Use os links abaixo para direcionar colaboradores e parceiros ao canal de denúncias.
                 </div>
               </div>
 
-              <div className="grid gap-2">
-                <div className="rounded-md bg-slate-50 p-3 text-sm">
-                  <div className="text-slate-500">Link principal (canal de ética)</div>
-                  <a className="font-mono text-sky-700 hover:underline" href={publicPath} target="_blank" rel="noreferrer">
-                    {publicPath || '—'}
-                  </a>
-                </div>
-                <div className="rounded-md bg-slate-50 p-3 text-sm">
-                  <div className="text-slate-500">Link alternativo (/whistleblower)</div>
-                  <a className="font-mono text-sky-700 hover:underline" href={publicSlug ? `/whistleblower/${publicSlug}` : ''} target="_blank" rel="noreferrer">
-                    {publicSlug ? `/whistleblower/${publicSlug}` : '—'}
-                  </a>
-                </div>
+              <div className="rounded-md bg-slate-50 p-3 text-sm">
+                <div className="text-slate-500">Link principal (canal de ética)</div>
+                <a className="font-mono text-sky-700 hover:underline" href={publicPath} target="_blank" rel="noreferrer">
+                  {publicPath || '—'}
+                </a>
+              </div>
+              <div className="rounded-md bg-slate-50 p-3 text-sm">
+                <div className="text-slate-500">Link alternativo (/whistleblower)</div>
+                <a className="font-mono text-sky-700 hover:underline" href={publicSlug ? `/whistleblower/${publicSlug}` : ''} target="_blank" rel="noreferrer">
+                  {publicSlug ? `/whistleblower/${publicSlug}` : '—'}
+                </a>
+              </div>
+              <div className="rounded-md bg-slate-50 p-3 text-sm">
+                <div className="text-slate-500">URL completa</div>
+                <div className="break-all font-mono text-slate-800">{publicFullUrl || '—'}</div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -178,6 +183,10 @@ export function DenunciasPage() {
                 >
                   Abrir canal
                 </a>
+              </div>
+
+              <div className="mt-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
+                Dica do modelo: use o botão <span className="font-semibold">“Baixar cartaz em PNG (impressão)”</span> sobre o QR Code para baixar a arte em alta resolução. O ícone do Opiina já está no centro do QR Code (nível H de correção), preservando a identidade visual da marca.
               </div>
             </div>
           </div>
