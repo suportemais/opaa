@@ -14,7 +14,19 @@ type Unit = {
   googleBusinessUrl: string | null;
 };
 
+function usePermissionCodes() {
+  const { data } = useQuery({
+    queryKey: ['authMe'],
+    queryFn: () => apiFetch<{ permissionCodes: string[] }>('/auth/me').catch(() => ({ permissionCodes: [] })),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  return data?.permissionCodes ?? [];
+}
+
 export function UnitsPage() {
+  const permissionCodes = usePermissionCodes();
+  const canManageUnits = permissionCodes.includes('unit:manage');
   const qc = useQueryClient();
   const units = useQuery({
     queryKey: ['units'],
@@ -80,7 +92,7 @@ export function UnitsPage() {
         <div className="text-sm text-slate-600">Gestão multiunidade por tenant</div>
       </div>
 
-      {editingId && (
+      {editingId && canManageUnits && (
         <Card title="Editar unidade" description="Atualize dados operacionais (endereço, fuso)">
           <div className="grid gap-3 md:grid-cols-3">
             <div className="md:col-span-2">
@@ -118,7 +130,8 @@ export function UnitsPage() {
         </Card>
       )}
 
-      <Card title="Criar unidade">
+      {canManageUnits && (
+        <Card title="Criar unidade">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="md:col-span-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da unidade" />
@@ -142,7 +155,8 @@ export function UnitsPage() {
             </Button>
           </div>
         </div>
-      </Card>
+        </Card>
+      )}
 
       <Card title="Lista">
         {units.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
@@ -167,18 +181,20 @@ export function UnitsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingId(u.id);
-                      setEditName(u.name);
-                      setEditTimeZone(u.timeZone ?? 'America/Sao_Paulo');
-                      setEditAddress(u.address ?? '');
-                      setEditGoogleBusinessUrl(u.googleBusinessUrl ?? '');
-                    }}
-                  >
-                    Editar
-                  </Button>
+                  {canManageUnits && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingId(u.id);
+                        setEditName(u.name);
+                        setEditTimeZone(u.timeZone ?? 'America/Sao_Paulo');
+                        setEditAddress(u.address ?? '');
+                        setEditGoogleBusinessUrl(u.googleBusinessUrl ?? '');
+                      }}
+                    >
+                      Editar
+                    </Button>
+                  )}
                   <div className="text-xs font-mono text-slate-500">{u.id}</div>
                 </div>
               </div>

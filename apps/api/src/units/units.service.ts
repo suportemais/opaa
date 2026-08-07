@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
@@ -18,7 +18,12 @@ export class UnitsService {
     };
   }
 
+  private canManage(user: AuthUser) {
+    return user.permissionCodes.includes(PermissionCodes.UnitManage);
+  }
+
   async create(user: AuthUser, dto: CreateUnitDto) {
+    if (!this.canManage(user)) throw new ForbiddenException();
     const settings = dto.googleBusinessUrl ? withGoogleBusinessUrl(null, dto.googleBusinessUrl) : undefined;
     const created = await this.prisma.unit.create({
       data: {
@@ -34,7 +39,7 @@ export class UnitsService {
   }
 
   async list(user: AuthUser) {
-    const canSeeAll = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAll = this.canManage(user);
     const rows = await this.prisma.unit.findMany({
       where: {
         tenantId: user.tenantId,
@@ -46,6 +51,7 @@ export class UnitsService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateUnitDto) {
+    if (!this.canManage(user)) throw new ForbiddenException();
     const existing = await this.prisma.unit.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!existing) throw new NotFoundException('unit_not_found');
 
