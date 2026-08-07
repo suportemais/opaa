@@ -11,15 +11,27 @@ export class EmployeesService {
   constructor(private readonly prisma: PrismaService) {}
 
   private unitWhere(user: AuthUser) {
-    const canSeeAll = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAll =
+      user.permissionCodes.includes(PermissionCodes.UnitManage) ||
+      user.permissionCodes.includes(PermissionCodes.EmployeeManage);
     if (canSeeAll) return {};
     const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
     return { unitId: { in: allowed } };
   }
 
+  private canAccessUnit(user: AuthUser, unitId: string) {
+    if (
+      user.permissionCodes.includes(PermissionCodes.UnitManage) ||
+      user.permissionCodes.includes(PermissionCodes.EmployeeManage)
+    ) {
+      return true;
+    }
+    return user.unitIds.includes(unitId);
+  }
+
   async list(user: AuthUser, params: { unitId?: string; q?: string; status?: string }) {
-    if (params.unitId && !user.permissionCodes.includes(PermissionCodes.UnitManage)) {
-      if (!user.unitIds.includes(params.unitId)) throw new ForbiddenException();
+    if (params.unitId && !this.canAccessUnit(user, params.unitId)) {
+      throw new ForbiddenException();
     }
 
     const q = typeof params.q === 'string' && params.q.trim() ? params.q.trim() : undefined;
@@ -59,6 +71,7 @@ export class EmployeesService {
   async create(user: AuthUser, dto: CreateEmployeeDto) {
     const unit = await this.prisma.unit.findFirst({ where: { id: dto.unitId, tenantId: user.tenantId }, select: { id: true } });
     if (!unit) throw new NotFoundException('unit_not_found');
+    if (!this.canAccessUnit(user, dto.unitId)) throw new ForbiddenException();
 
     const code = typeof dto.code === 'string' && dto.code.trim() ? dto.code.trim() : null;
 
@@ -89,10 +102,12 @@ export class EmployeesService {
       select: { id: true, unitId: true },
     });
     if (!current) throw new NotFoundException();
+    if (!this.canAccessUnit(user, current.unitId)) throw new ForbiddenException();
 
     if (dto.unitId) {
       const unit = await this.prisma.unit.findFirst({ where: { id: dto.unitId, tenantId: user.tenantId }, select: { id: true } });
       if (!unit) throw new NotFoundException('unit_not_found');
+      if (!this.canAccessUnit(user, dto.unitId)) throw new ForbiddenException();
     }
 
     const name = typeof dto.name === 'string' ? dto.name.trim() : undefined;
@@ -132,19 +147,26 @@ export class EmployeesService {
   async disable(user: AuthUser, employeeId: string) {
     const current = await this.prisma.employee.findFirst({
       where: { id: employeeId, tenantId: user.tenantId },
-      select: { id: true },
+      select: { id: true, unitId: true },
     });
     if (!current) throw new NotFoundException();
+    if (!this.canAccessUnit(user, current.unitId)) throw new ForbiddenException();
 
     await this.prisma.employee.update({ where: { id: current.id }, data: { status: 'inactive' } });
     return { ok: true };
   }
 
   async importFromCsv(user: AuthUser, params: { unitId: string; rows: Array<Record<string, string>> }) {
-    if (!user.permissionCodes.includes(PermissionCodes.UnitManage)) throw new ForbiddenException();
+    if (
+      !user.permissionCodes.includes(PermissionCodes.EmployeeManage) &&
+      !user.permissionCodes.includes(PermissionCodes.UnitManage)
+    ) {
+      throw new ForbiddenException();
+    }
 
     const unit = await this.prisma.unit.findFirst({ where: { id: params.unitId, tenantId: user.tenantId }, select: { id: true } });
     if (!unit) throw new NotFoundException('unit_not_found');
+    if (!this.canAccessUnit(user, params.unitId)) throw new ForbiddenException();
 
     type Row = { name: string; code: string | null; roleTitle: string | null };
     const cleanRows: Row[] = [];

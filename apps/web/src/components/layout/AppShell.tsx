@@ -19,6 +19,8 @@ export function AppShell() {
   const canManageUsers = permissionCodes.includes('user:manage');
   const canManageUnits = permissionCodes.includes('unit:manage');
   const canReadUnits = permissionCodes.includes('unit:read') || canManageUnits;
+  const canReadEmployees = permissionCodes.includes('employee:read') || permissionCodes.includes('employee:manage');
+  const canManageEmployees = permissionCodes.includes('employee:manage') || canManageUnits;
   const canReadWhistleblower = permissionCodes.includes('whistleblower:read') || permissionCodes.includes('whistleblower:manage');
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -120,7 +122,7 @@ export function AppShell() {
                       Unidades
                     </NavLink>
                   )}
-                  {canManageUnits && (
+                  {(canManageEmployees || canReadEmployees) && (
                     <NavLink
                       to="/app/employees"
                       className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}

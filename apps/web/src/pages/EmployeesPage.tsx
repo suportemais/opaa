@@ -17,8 +17,21 @@ type Employee = {
   unit: Unit;
 };
 
+function usePermissionCodes() {
+  const { data } = useQuery({
+    queryKey: ['authMe'],
+    queryFn: () => apiFetch<{ permissionCodes: string[] }>('/auth/me').catch(() => ({ permissionCodes: [] })),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  return data?.permissionCodes ?? [];
+}
+
 export function EmployeesPage() {
   const qc = useQueryClient();
+  const permissionCodes = usePermissionCodes();
+  const canManageEmployees =
+    permissionCodes.includes('employee:manage') || permissionCodes.includes('unit:manage');
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
 
   const defaultUnitId = useMemo(() => units.data?.[0]?.id ?? '', [units.data]);
@@ -136,7 +149,7 @@ export function EmployeesPage() {
         <div className="text-sm text-slate-600">Cadastro de atendentes por unidade para seleção na pesquisa</div>
       </div>
 
-      {editingId && (
+      {editingId && canManageEmployees && (
         <Card title="Editar atendente">
           <div className="grid gap-3 md:grid-cols-3">
             <div>
@@ -192,8 +205,9 @@ export function EmployeesPage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Criar atendente">
-          <div className="grid gap-3 md:grid-cols-3">
+        {canManageEmployees && (
+          <Card title="Criar atendente">
+            <div className="grid gap-3 md:grid-cols-3">
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
               <select
@@ -231,7 +245,9 @@ export function EmployeesPage() {
             )}
           </div>
         </Card>
+        )}
 
+        {canManageEmployees && (
         <Card
           title="Importar CSV"
           description="Colunas: Nome (obrigatório), Código (opcional), Cargo (opcional). Limite 2MB."
@@ -322,6 +338,7 @@ export function EmployeesPage() {
             )}
           </div>
         </Card>
+        )}
       </div>
 
       <Card title="Lista">
@@ -363,26 +380,30 @@ export function EmployeesPage() {
                   <div className="text-xs text-slate-500">{[e.roleTitle, e.code].filter(Boolean).join(' • ') || '—'}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingId(e.id);
-                      setEditUnitId(e.unitId);
-                      setEditName(e.name);
-                      setEditCode(e.code ?? '');
-                      setEditRoleTitle(e.roleTitle ?? '');
-                      setEditStatus((e.status as any) ?? 'active');
-                    }}
-                  >
-                    Editar
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={disable.isPending || e.status !== 'active'}
-                    onClick={() => disable.mutate(e.id)}
-                  >
-                    Desativar
-                  </Button>
+                  {canManageEmployees && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingId(e.id);
+                          setEditUnitId(e.unitId);
+                          setEditName(e.name);
+                          setEditCode(e.code ?? '');
+                          setEditRoleTitle(e.roleTitle ?? '');
+                          setEditStatus((e.status as any) ?? 'active');
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={disable.isPending || e.status !== 'active'}
+                        onClick={() => disable.mutate(e.id)}
+                      >
+                        Desativar
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

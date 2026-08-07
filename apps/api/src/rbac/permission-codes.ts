@@ -11,6 +11,8 @@ export const PermissionCodes = {
   FeedbackManage: 'feedback:manage',
   CustomerRead: 'customer:read',
   CustomerManage: 'customer:manage',
+  EmployeeRead: 'employee:read',
+  EmployeeManage: 'employee:manage',
   WhistleblowerRead: 'whistleblower:read',
   WhistleblowerManage: 'whistleblower:manage',
 } as const;

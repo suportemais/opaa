@@ -40,19 +40,19 @@ export class EmployeesController {
   constructor(private readonly employees: EmployeesService) {}
 
   @Get()
-  @RequirePermissions(PermissionCodes.UnitRead)
+  @RequirePermissions(PermissionCodes.EmployeeRead)
   list(@CurrentUser() user: AuthUser, @Query('unitId') unitId?: string, @Query('q') q?: string, @Query('status') status?: string) {
     return this.employees.list(user, { unitId, q, status });
   }
 
   @Post()
-  @RequirePermissions(PermissionCodes.UnitManage)
+  @RequirePermissions(PermissionCodes.EmployeeManage)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateEmployeeDto) {
     return this.employees.create(user, dto);
   }
 
   @Post('import')
-  @RequirePermissions(PermissionCodes.UnitManage)
+  @RequirePermissions(PermissionCodes.EmployeeManage)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -90,13 +90,13 @@ export class EmployeesController {
   }
 
   @Patch(':id')
-  @RequirePermissions(PermissionCodes.UnitManage)
+  @RequirePermissions(PermissionCodes.EmployeeManage)
   update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
     return this.employees.update(user, id, dto);
   }
 
   @Delete(':id')
-  @RequirePermissions(PermissionCodes.UnitManage)
+  @RequirePermissions(PermissionCodes.EmployeeManage)
   disable(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.employees.disable(user, id);
   }
