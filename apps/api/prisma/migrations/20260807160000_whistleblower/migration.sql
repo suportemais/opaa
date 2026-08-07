@@ -1,4 +1,4 @@
-﻿-- Enums
+-- Enums
 CREATE TYPE "WhistleblowerStatus" AS ENUM ('received', 'analyzing', 'investigating', 'awaiting_info', 'completed', 'archived');
 CREATE TYPE "WhistleblowerPriority" AS ENUM ('low', 'medium', 'high', 'critical');
 CREATE TYPE "WhistleblowerCategory" AS ENUM ('moral_harassment', 'sexual_harassment', 'discrimination', 'racism', 'fraud', 'corruption', 'conflict_of_interest', 'policy_violation', 'work_safety', 'lgpd_privacy', 'misconduct', 'other');
