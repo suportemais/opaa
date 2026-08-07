@@ -20,21 +20,32 @@ type Employee = {
 function usePermissionCodes() {
   const { data } = useQuery({
     queryKey: ['authMe'],
-    queryFn: () => apiFetch<{ permissionCodes: string[] }>('/auth/me').catch(() => ({ permissionCodes: [] })),
+    queryFn: () => apiFetch<{ permissionCodes: string[]; unitIds: string[] }>('/auth/me').catch(() => ({ permissionCodes: [], unitIds: [] })),
     staleTime: 60 * 1000,
     retry: false,
   });
-  return data?.permissionCodes ?? [];
+  return {
+    permissionCodes: data?.permissionCodes ?? [],
+    unitIds: data?.unitIds ?? [],
+  };
 }
 
 export function EmployeesPage() {
   const qc = useQueryClient();
-  const permissionCodes = usePermissionCodes();
+  const { permissionCodes, unitIds } = usePermissionCodes();
   const canManageEmployees =
     permissionCodes.includes('employee:manage') || permissionCodes.includes('unit:manage');
+  const canSeeAllUnits = permissionCodes.includes('unit:manage');
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
 
-  const defaultUnitId = useMemo(() => units.data?.[0]?.id ?? '', [units.data]);
+  const allowedUnits = useMemo<Unit[]>(() => {
+    if (!units.data) return [];
+    if (canSeeAllUnits) return units.data;
+    const allowed = new Set(unitIds);
+    return units.data.filter((u) => allowed.has(u.id));
+  }, [units.data, canSeeAllUnits, unitIds]);
+
+  const defaultUnitId = useMemo(() => allowedUnits[0]?.id ?? '', [allowedUnits]);
   const [filterUnitId, setFilterUnitId] = useState('');
   const [search, setSearch] = useState('');
 
@@ -159,7 +170,7 @@ export function EmployeesPage() {
                 value={editUnitId}
                 onChange={(e) => setEditUnitId(e.target.value)}
               >
-                {units.data?.map((u) => (
+                {allowedUnits.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
@@ -216,7 +227,7 @@ export function EmployeesPage() {
                 onChange={(e) => setUnitId(e.target.value)}
                 disabled={units.isLoading}
               >
-                {units.data?.map((u) => (
+                {allowedUnits.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
@@ -261,7 +272,7 @@ export function EmployeesPage() {
                 onChange={(e) => setImportUnitId(e.target.value)}
                 disabled={units.isLoading || importEmployees.isPending}
               >
-                {units.data?.map((u) => (
+                {allowedUnits.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
@@ -352,7 +363,7 @@ export function EmployeesPage() {
               disabled={units.isLoading}
             >
               <option value="">Todas</option>
-              {units.data?.map((u) => (
+              {allowedUnits.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
                 </option>
