@@ -16,6 +16,7 @@ import { MetricsModule } from './metrics/metrics.module';
 import { CustomersModule } from './customers/customers.module';
 import { TenantModule } from './tenant/tenant.module';
 import { EmployeesModule } from './employees/employees.module';
+import { WhistleblowerModule } from './whistleblower/whistleblower.module';
 import { WebhookOutboxModule } from './webhook-outbox/webhook-outbox.module';
 
 @Module({
@@ -36,6 +37,7 @@ import { WebhookOutboxModule } from './webhook-outbox/webhook-outbox.module';
     CustomersModule,
     TenantModule,
     EmployeesModule,
+    WhistleblowerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

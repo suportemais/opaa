@@ -50,6 +50,37 @@ enum FeedbackCaseStatus {
   dismissed
 }
 
+enum WhistleblowerStatus {
+  received
+  analyzing
+  investigating
+  awaiting_info
+  completed
+  archived
+}
+
+enum WhistleblowerPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum WhistleblowerCategory {
+  moral_harassment
+  sexual_harassment
+  discrimination
+  racism
+  fraud
+  corruption
+  conflict_of_interest
+  policy_violation
+  work_safety
+  lgpd_privacy
+  misconduct
+  other
+}
+
 enum CouponCampaignStatus {
   draft
   active
@@ -109,6 +140,8 @@ model Tenant {
   customerInteractions CustomerInteraction[]
   feedbackCases FeedbackCase[]
   feedbackCaseEvents FeedbackCaseEvent[]
+  whistleblowerReports WhistleblowerReport[]
+  whistleblowerReportEvents WhistleblowerReportEvent[]
   alerts        AlertRule[]
   notifications Notification[]
   couponCampaigns CouponCampaign[]
@@ -142,7 +175,10 @@ model User {
   roles             UserRole[]
   unitAccess        UserUnitAccess[]
   assignedFeedbackCases FeedbackCase[] @relation("FeedbackCaseAssignee")
+  assignedWhistleblowerReports WhistleblowerReport[] @relation("WhistleblowerReportAssignee")
+  whistleblowerReportEventsAssigned WhistleblowerReportEvent[] @relation("WhistleblowerEventAssignee")
   feedbackCaseEventsCreated FeedbackCaseEvent[] @relation("FeedbackCaseEventCreatedBy")
+  whistleblowerReportEventsCreated WhistleblowerReportEvent[] @relation("WhistleblowerEventCreatedBy")
   customerInteractionsCreated CustomerInteraction[] @relation("CustomerInteractionCreatedBy")
   auditLogs         AuditLog[]
 
@@ -224,6 +260,7 @@ model Unit {
   couponRedemptions CouponRedemption[]
   reviewLinks PublicReviewLink[]
   customerInteractions CustomerInteraction[] @relation("CustomerInteractionUnit")
+  whistleblowerReports WhistleblowerReport[]
 
   @@index([tenantId])
   @@map("units")
@@ -492,6 +529,67 @@ model WebhookOutbox {
   @@index([status, nextAttemptAt])
   @@index([tenantId, eventType])
   @@map("webhook_outbox")
+}
+
+model WhistleblowerReport {
+  id                String               @id @default(uuid()) @db.Uuid
+  tenantId          String               @db.Uuid
+  unitId            String?              @db.Uuid
+  protocol          String               @unique
+  publicToken       String               @unique
+  category          WhistleblowerCategory
+  customCategory    String?
+  title             String
+  description       String               @db.Text
+  occurredAt        DateTime?
+  locationText      String?
+  involvedPeople    String?              @db.Text
+  witnesses         String?              @db.Text
+  additionalInfo    String?              @db.Text
+  status            WhistleblowerStatus  @default(received)
+  priority          WhistleblowerPriority @default(medium)
+  reporterName      String?
+  reporterEmail     String?
+  reporterPhone     String?
+  reporterDoc       String?
+  reporterAnonymous Boolean              @default(true)
+  assigneeUserId    String?              @db.Uuid
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  tenant            Tenant               @relation(fields: [tenantId], references: [id])
+  unit              Unit?                @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  assignee          User?                @relation("WhistleblowerReportAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  events            WhistleblowerReportEvent[]
+
+  @@unique([tenantId, protocol])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, unitId, createdAt])
+  @@index([tenantId, priority, createdAt])
+  @@map("whistleblower_reports")
+}
+
+model WhistleblowerReportEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @db.Uuid
+  reportId          String   @db.Uuid
+  type              String
+  fromStatus        String?
+  toStatus          String?
+  notes             String?  @db.Text
+  assigneeUserId    String?  @db.Uuid
+  createdById       String?  @db.Uuid
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  report            WhistleblowerReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  assignee          User?    @relation("WhistleblowerEventAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  createdBy         User?    @relation("WhistleblowerEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, reportId, createdAt])
+  @@map("whistleblower_report_events")
 }
 
 model Customer {

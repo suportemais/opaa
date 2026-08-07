@@ -1,6 +1,7 @@
 import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { PublicService } from './public.service';
 import { SubmitResponseDto } from './dto/submit-response.dto';
+import { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 import type { Request } from 'express';
 
 @Controller('public')
@@ -30,5 +31,18 @@ export class PublicController {
   @Post('responses')
   submit(@Body() dto: SubmitResponseDto) {
     return this.publicService.submitResponse(dto);
+  }
+
+  @Get('whistleblower/:tenantSlug')
+  getWhistleblowerForm(@Param('tenantSlug') tenantSlug: string) {
+    return this.publicService.getWhistleblowerForm(tenantSlug);
+  }
+
+  @Post('whistleblower/:tenantSlug')
+  submitWhistleblower(
+    @Param('tenantSlug') tenantSlug: string,
+    @Body() dto: SubmitWhistleblowerDto,
+  ) {
+    return this.publicService.submitWhistleblower(tenantSlug, dto);
   }
 }

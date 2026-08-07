@@ -14,6 +14,9 @@ import { KanbanPage } from './pages/KanbanPage';
 import { CompanyPage } from './pages/CompanyPage';
 import { UsersPage } from './pages/UsersPage';
 import { EmployeesPage } from './pages/EmployeesPage';
+import { DenunciasPage } from './pages/DenunciasPage';
+import { DenunciaDetailPage } from './pages/DenunciaDetailPage';
+import { PublicWhistleblowerPage } from './pages/PublicWhistleblowerPage';
 import { getAccessToken } from './lib/auth-store';
 
 function RequireAuth(props: { children: React.ReactNode }) {
@@ -28,6 +31,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/public/:token" element={<PublicSurveyPage />} />
+      <Route path="/canal-etico/:tenantSlug" element={<PublicWhistleblowerPage />} />
+      <Route path="/whistleblower/:tenantSlug" element={<PublicWhistleblowerPage />} />
 
       <Route
         path="/app"
@@ -45,6 +50,8 @@ export default function App() {
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="whistleblower" element={<DenunciasPage />} />
+        <Route path="whistleblower/:id" element={<DenunciaDetailPage />} />
         <Route path="feedbacks" element={<FeedbacksPage />} />
         <Route path="feedbacks/kanban" element={<KanbanPage />} />
         <Route path="feedbacks/:id" element={<FeedbackDetailPage />} />

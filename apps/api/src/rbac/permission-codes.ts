@@ -11,6 +11,8 @@ export const PermissionCodes = {
   FeedbackManage: 'feedback:manage',
   CustomerRead: 'customer:read',
   CustomerManage: 'customer:manage',
+  WhistleblowerRead: 'whistleblower:read',
+  WhistleblowerManage: 'whistleblower:manage',
 } as const;
 
 export type PermissionCode = (typeof PermissionCodes)[keyof typeof PermissionCodes];

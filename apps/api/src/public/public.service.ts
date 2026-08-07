@@ -8,6 +8,7 @@ import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
 import { badScoreThresholdFromSettings } from '../common/tenant-settings';
 import { googleBusinessUrlFromSettings } from '../common/unit-settings';
 import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
+import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -466,6 +467,201 @@ export class PublicService {
       status: response.status,
       npsScore: response.npsScore,
       npsClass: response.npsClass,
+    };
+  }
+
+  async getWhistleblowerForm(tenantSlug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+      select: {
+        id: true,
+        slug: true,
+        tradeName: true,
+        legalName: true,
+        settings: true,
+      },
+    });
+    if (!tenant) throw new NotFoundException('tenant_not_found');
+    const units = await this.prisma.unit.findMany({
+      where: { tenantId: tenant.id, status: 'active' },
+      select: { id: true, name: true, internalCode: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+    return {
+      tenant: {
+        id: tenant.id,
+        slug: tenant.slug,
+        tradeName: tenant.tradeName,
+        legalName: tenant.legalName,
+      },
+      units: units.map((u) => ({ id: u.id, name: u.name, internalCode: u.internalCode ?? null })),
+    };
+  }
+
+  async submitWhistleblower(tenantSlug: string, dto: SubmitWhistleblowerDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+      select: { id: true, slug: true, status: true },
+    });
+    if (!tenant) throw new NotFoundException('tenant_not_found');
+    if (tenant.status !== 'active' && tenant.status !== 'trial') {
+      throw new BadRequestException('tenant_inactive');
+    }
+
+    const reporter = dto.reporter ?? {};
+    const hasAnyReporterField =
+      Boolean(reporter.name?.trim()) ||
+      Boolean(reporter.email?.trim()) ||
+      Boolean(reporter.phone?.trim()) ||
+      Boolean(reporter.doc?.trim());
+    const anonymous = dto.anonymous === false && hasAnyReporterField ? false : true;
+
+    const category = dto.category;
+    const customCategory = dto.customCategory?.trim() || null;
+    if (category === 'other' && !customCategory) {
+      throw new BadRequestException('custom_category_required_when_other');
+    }
+
+    if (dto.unitId) {
+      const exists = await this.prisma.unit.findFirst({
+        where: { id: dto.unitId, tenantId: tenant.id },
+        select: { id: true },
+      });
+      if (!exists) throw new BadRequestException('unit_not_found');
+    }
+
+    const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : null;
+    if (occurredAt && Number.isNaN(occurredAt.getTime())) {
+      throw new BadRequestException('invalid_occurred_at');
+    }
+
+    const reporterEmailNormalized = reporter.email?.trim() ? normalizeEmail(reporter.email.trim()) : null;
+    const reporterPhoneNormalized = reporter.phone?.trim() ? normalizePhone(reporter.phone.trim()).slice(0, 30) || null : null;
+
+    const random = () => {
+      const b = crypto.getRandomValues(new Uint8Array(2));
+      return (b[0] * 256 + b[1]).toString(36).toUpperCase().padStart(3, '0').slice(0, 3);
+    };
+    const datePrefix = new Date();
+    const prefix =
+      'DEN' +
+      datePrefix.getUTCFullYear().toString() +
+      String(datePrefix.getUTCMonth() + 1).padStart(2, '0') +
+      String(datePrefix.getUTCDate()).padStart(2, '0');
+
+    let protocol = `${prefix}-${random()}`;
+    for (let i = 0; i < 10; i++) {
+      const existing = await this.prisma.whistleblowerReport.findUnique({
+        where: { protocol },
+        select: { id: true },
+      });
+      if (!existing) break;
+      protocol = `${prefix}-${random()}`;
+    }
+
+    let publicToken = '';
+    for (let i = 0; i < 10; i++) {
+      const bytes = crypto.getRandomValues(new Uint8Array(12));
+      const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const exists = await this.prisma.whistleblowerReport.findUnique({ where: { publicToken: token }, select: { id: true } });
+      if (!exists) {
+        publicToken = token;
+        break;
+      }
+    }
+    if (!publicToken) throw new BadRequestException('token_generate_failed');
+
+    const created = await this.prisma.whistleblowerReport.create({
+      data: {
+        tenantId: tenant.id,
+        unitId: dto.unitId ?? null,
+        protocol,
+        publicToken,
+        category,
+        customCategory,
+        title: dto.title.trim(),
+        description: dto.description.trim(),
+        occurredAt,
+        locationText: dto.locationText?.trim() || null,
+        involvedPeople: dto.involvedPeople?.trim() || null,
+        witnesses: dto.witnesses?.trim() || null,
+        additionalInfo: dto.additionalInfo?.trim() || null,
+        reporterAnonymous: anonymous,
+        reporterName: anonymous ? null : reporter.name?.trim() || null,
+        reporterEmail: anonymous ? null : reporter.email?.trim() || null,
+        reporterPhone: anonymous ? null : reporter.phone?.trim() || null,
+        reporterDoc: anonymous ? null : reporter.doc?.trim() || null,
+        status: 'received',
+        priority: 'medium',
+        metadata: {
+          idempotencyKey: dto.idempotencyKey?.trim() || null,
+          reporterEmailNormalized: anonymous ? null : reporterEmailNormalized,
+          reporterPhoneNormalized: anonymous ? null : reporterPhoneNormalized,
+          clientMetadata: dto.clientMetadata ?? null,
+        },
+        events: {
+          create: [
+            {
+              tenantId: tenant.id,
+              type: 'report.submitted',
+              notes: anonymous ? 'Denúncia enviada de forma anônima.' : 'Denúncia enviada com identificação voluntária.',
+            },
+          ],
+        },
+      },
+      select: { id: true, protocol: true, publicToken: true, createdAt: true, status: true, priority: true },
+    });
+
+    const enqueuePayload = {
+      whistleblowerReportId: created.id,
+      protocol: created.protocol,
+      publicToken: created.publicToken,
+      category,
+      customCategory,
+      title: dto.title.trim(),
+      summary: dto.description.trim().slice(0, 500),
+      occurredAt: occurredAt ? occurredAt.toISOString() : null,
+      unit: dto.unitId ? { id: dto.unitId } : null,
+      anonymous,
+      reporter: anonymous
+        ? null
+        : {
+            name: reporter.name?.trim() || null,
+            email: reporter.email?.trim() || null,
+            emailNormalized: reporterEmailNormalized,
+            phone: reporter.phone?.trim() || null,
+            phoneNormalized: reporterPhoneNormalized,
+            doc: reporter.doc?.trim() || null,
+          },
+      createdAt: created.createdAt ? (created.createdAt as Date).toISOString() : null,
+      idempotencyKey: dto.idempotencyKey?.trim() || null,
+    };
+
+    try {
+      await this.prisma.webhookOutbox.create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'whistleblower_report.submitted',
+          payload: enqueuePayload as any,
+          status: 'pending',
+          attempts: 0,
+          maxAttempts: 10,
+          nextAttemptAt: new Date(),
+        },
+      });
+    } catch {
+      // ignore; report is already saved
+    }
+
+    return {
+      id: created.id,
+      protocol: created.protocol,
+      publicToken: created.publicToken,
+      anonymous,
+      status: created.status,
+      priority: created.priority,
+      createdAt: created.createdAt,
+      message: 'Denúncia recebida com sucesso. Guarde o número de protocolo para acompanhamento.',
     };
   }
 }

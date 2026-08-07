@@ -19,6 +19,7 @@ export function AppShell() {
   const canManageUsers = permissionCodes.includes('user:manage');
   const canManageUnits = permissionCodes.includes('unit:manage');
   const canReadUnits = permissionCodes.includes('unit:read') || canManageUnits;
+  const canReadWhistleblower = permissionCodes.includes('whistleblower:read') || permissionCodes.includes('whistleblower:manage');
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -67,6 +68,11 @@ export function AppShell() {
               <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
                 Clientes
               </NavLink>
+              {canReadWhistleblower && (
+                <NavLink to="/app/whistleblower" className={({ isActive }) => navClass(isActive)}>
+                  Denúncias
+                </NavLink>
+              )}
               <NavLink to="/app/feedbacks" className={({ isActive }) => navClass(isActive)}>
                 Feedbacks
               </NavLink>
