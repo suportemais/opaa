@@ -17,6 +17,8 @@ import { EmployeesPage } from './pages/EmployeesPage';
 import { DenunciasPage } from './pages/DenunciasPage';
 import { DenunciaDetailPage } from './pages/DenunciaDetailPage';
 import { PublicWhistleblowerPage } from './pages/PublicWhistleblowerPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { getAccessToken } from './lib/auth-store';
 
 function RequireAuth(props: { children: React.ReactNode }) {
@@ -30,6 +32,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/public/:token" element={<PublicSurveyPage />} />
       <Route path="/canal-etico/:tenantSlug" element={<PublicWhistleblowerPage />} />
       <Route path="/whistleblower/:tenantSlug" element={<PublicWhistleblowerPage />} />

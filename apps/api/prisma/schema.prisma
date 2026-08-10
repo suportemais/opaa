@@ -150,6 +150,7 @@ model Tenant {
   fileAssets    FileAsset[]  @relation("TenantFileAssets")
   auditLogs     AuditLog[]
   webhookOutbox WebhookOutbox[]
+  passwordResetTokens PasswordResetToken[]
 
   @@unique([email])
   @@unique([slug])
@@ -181,6 +182,7 @@ model User {
   whistleblowerReportEventsCreated WhistleblowerReportEvent[] @relation("WhistleblowerEventCreatedBy")
   customerInteractionsCreated CustomerInteraction[] @relation("CustomerInteractionCreatedBy")
   auditLogs         AuditLog[]
+  passwordResetTokens PasswordResetToken[]
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId])
@@ -870,4 +872,24 @@ model AuditLog {
   @@index([tenantId, occurredAt])
   @@index([correlationId])
   @@map("audit_logs")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tenantId  String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }

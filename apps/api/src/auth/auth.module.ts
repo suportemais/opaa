@@ -7,9 +7,10 @@ import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { AuditModule } from '../audit/audit.module';
+import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), UsersModule, RbacModule, AuditModule],
+  imports: [PassportModule, JwtModule.register({}), UsersModule, RbacModule, AuditModule, MailerModule],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
 })

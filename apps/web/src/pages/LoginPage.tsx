@@ -159,6 +159,14 @@ export function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
 
+            {!isRootDomain && (
+              <div className="text-right text-sm">
+                <Link to="/forgot-password" className="text-sky-700 hover:underline">
+                  Esqueci minha senha
+                </Link>
+              </div>
+            )}
+
             <div className="pt-1 text-center text-sm text-slate-600">
               Novo por aqui? <Link to="/onboarding" className="text-sky-700 hover:underline">Criar tenant</Link>
             </div>

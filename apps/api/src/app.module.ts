@@ -18,10 +18,12 @@ import { TenantModule } from './tenant/tenant.module';
 import { EmployeesModule } from './employees/employees.module';
 import { WhistleblowerModule } from './whistleblower/whistleblower.module';
 import { WebhookOutboxModule } from './webhook-outbox/webhook-outbox.module';
+import { MailerModule } from './mailer/mailer.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    MailerModule,
     WebhookOutboxModule,
     PrismaModule,
     AuthModule,
