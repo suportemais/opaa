@@ -52,6 +52,8 @@ export class RbacService {
           PermissionCodes.EmployeeManage,
           PermissionCodes.WhistleblowerRead,
           PermissionCodes.WhistleblowerManage,
+          PermissionCodes.ReviewRead,
+          PermissionCodes.ReviewManage,
         ],
       },
       {
@@ -66,6 +68,8 @@ export class RbacService {
           PermissionCodes.EmployeeRead,
           PermissionCodes.WhistleblowerRead,
           PermissionCodes.WhistleblowerManage,
+          PermissionCodes.ReviewRead,
+          PermissionCodes.ReviewManage,
         ],
       },
       {
@@ -81,6 +85,8 @@ export class RbacService {
           PermissionCodes.EmployeeManage,
           PermissionCodes.WhistleblowerRead,
           PermissionCodes.WhistleblowerManage,
+          PermissionCodes.ReviewRead,
+          PermissionCodes.ReviewManage,
         ],
       },
       {
@@ -92,6 +98,7 @@ export class RbacService {
           PermissionCodes.ResponseRead,
           PermissionCodes.CustomerRead,
           PermissionCodes.WhistleblowerRead,
+          PermissionCodes.ReviewRead,
         ],
       },
       {

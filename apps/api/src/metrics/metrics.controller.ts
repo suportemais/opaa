@@ -8,6 +8,7 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import { MetricsService } from './metrics.service';
 import { NpsQueryDto } from './dto/nps-query.dto';
 import { CasesQueryDto } from './dto/cases-query.dto';
+import { ReviewsQueryDto } from './dto/reviews-query.dto';
 
 @Controller('metrics')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -36,5 +37,24 @@ export class MetricsController {
   @RequirePermissions(PermissionCodes.ResponseRead)
   casesSummary(@CurrentUser() user: AuthUser, @Query() query: CasesQueryDto) {
     return this.metrics.casesSummary(user, query);
+  }
+
+  // ============ REVIEWS - Plataformas Externas ============
+  @Get('reviews/platform-cards')
+  @RequirePermissions(PermissionCodes.ReviewRead)
+  reviewsPlatformCards(@CurrentUser() user: AuthUser, @Query() query: ReviewsQueryDto) {
+    return this.metrics.reviewsPlatformCards(user, query);
+  }
+
+  @Get('reviews/by-unit')
+  @RequirePermissions(PermissionCodes.ReviewRead)
+  reviewsByUnit(@CurrentUser() user: AuthUser, @Query() query: ReviewsQueryDto) {
+    return this.metrics.reviewsByUnit(user, query);
+  }
+
+  @Get('reviews/feed')
+  @RequirePermissions(PermissionCodes.ReviewRead)
+  reviewsFeed(@CurrentUser() user: AuthUser, @Query() query: ReviewsQueryDto) {
+    return this.metrics.reviewsFeed(user, query);
   }
 }

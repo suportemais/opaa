@@ -16,6 +16,7 @@ services:
         "-lc",
         "apps/api/node_modules/.bin/prisma migrate deploy --config apps/api/prisma.config.ts",
       ]
+    restart: "no"
     networks:
       web:
         aliases:
@@ -46,6 +47,7 @@ services:
       WEBHOOK_N8N_TOKEN: ${WEBHOOK_N8N_TOKEN}
       WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS}
       WEBHOOK_BATCH_SIZE: ${WEBHOOK_BATCH_SIZE}
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -61,6 +63,7 @@ services:
       args:
         VITE_API_BASE_URL: /api
         VITE_APP_BASE_DOMAIN: opiina.com
+    restart: unless-stopped
     depends_on:
       - api
     networks:

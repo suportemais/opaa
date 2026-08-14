@@ -50,6 +50,10 @@ export function whistleblowerCategoryLabel(value: string | null | undefined) {
   if (value === 'sexual_harassment') return 'Assédio sexual';
   if (value === 'discrimination') return 'Discriminação';
   if (value === 'racism') return 'Racismo';
+  if (value === 'racial_injury') return 'Injúria racial';
+  if (value === 'homophobia') return 'Homofobia';
+  if (value === 'transphobia') return 'Transfobia';
+  if (value === 'religious_intolerance') return 'Intolerância religiosa';
   if (value === 'fraud') return 'Fraude';
   if (value === 'corruption') return 'Corrupção';
   if (value === 'conflict_of_interest') return 'Conflito de interesses';

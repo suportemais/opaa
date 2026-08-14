@@ -41,6 +41,10 @@ const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'sexual_harassment', label: 'Assédio sexual' },
   { value: 'discrimination', label: 'Discriminação' },
   { value: 'racism', label: 'Racismo' },
+  { value: 'racial_injury', label: 'Injúria racial' },
+  { value: 'homophobia', label: 'Homofobia' },
+  { value: 'transphobia', label: 'Transfobia' },
+  { value: 'religious_intolerance', label: 'Intolerância religiosa' },
   { value: 'fraud', label: 'Fraude' },
   { value: 'corruption', label: 'Corrupção' },
   { value: 'conflict_of_interest', label: 'Conflito de interesses' },
@@ -79,6 +83,8 @@ export function PublicWhistleblowerPage() {
   const [reporterPhone, setReporterPhone] = useState('');
   const [reporterDoc, setReporterDoc] = useState('');
 
+  const [truthfulnessAgreement, setTruthfulnessAgreement] = useState(false);
+
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const submit = useMutation({
@@ -96,6 +102,7 @@ export function PublicWhistleblowerPage() {
         witnesses: witnesses.trim() || undefined,
         additionalInfo: additionalInfo.trim() || undefined,
         anonymous,
+        truthfulnessAgreement,
         reporter: anonymous
           ? undefined
           : {
@@ -119,8 +126,9 @@ export function PublicWhistleblowerPage() {
       const d = new Date(occurredAt);
       if (Number.isNaN(d.getTime())) errs.push('Data do ocorrido inválida.');
     }
+    if (!truthfulnessAgreement) errs.push('Marque a declaração de veracidade das informações.');
     return errs;
-  }, [category, customCategory, title, description, occurredAt]);
+  }, [category, customCategory, title, description, occurredAt, truthfulnessAgreement]);
 
   if (form.isLoading) {
     return (
@@ -374,6 +382,20 @@ export function PublicWhistleblowerPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-5 w-5 shrink-0"
+                  checked={truthfulnessAgreement}
+                  onChange={(e) => setTruthfulnessAgreement(e.target.checked)}
+                />
+                <span className="text-sm leading-relaxed text-slate-800">
+                  Declaro, sob minha responsabilidade, que as informações prestadas são verdadeiras, conforme meu conhecimento, e foram fornecidas de boa-fé e de forma legítima.
+                </span>
+              </label>
             </div>
 
             {requiredMissing && (

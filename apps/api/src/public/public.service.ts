@@ -522,6 +522,10 @@ export class PublicService {
       throw new BadRequestException('custom_category_required_when_other');
     }
 
+    if (dto.truthfulnessAgreement !== true) {
+      throw new BadRequestException('truthfulness_agreement_required');
+    }
+
     if (dto.unitId) {
       const exists = await this.prisma.unit.findFirst({
         where: { id: dto.unitId, tenantId: tenant.id },
@@ -591,6 +595,7 @@ export class PublicService {
         reporterEmail: anonymous ? null : reporter.email?.trim() || null,
         reporterPhone: anonymous ? null : reporter.phone?.trim() || null,
         reporterDoc: anonymous ? null : reporter.doc?.trim() || null,
+        truthfulnessAgreement: true,
         status: 'received',
         priority: 'medium',
         metadata: {

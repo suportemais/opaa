@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { WhistleblowerCategory } from '@prisma/client';
 
 export class SubmitWhistleblowerReporterDto {
@@ -76,6 +76,9 @@ export class SubmitWhistleblowerDto {
 
   @IsOptional()
   anonymous?: boolean;
+
+  @IsBoolean()
+  truthfulnessAgreement!: boolean;
 
   @IsOptional()
   reporter?: SubmitWhistleblowerReporterDto;

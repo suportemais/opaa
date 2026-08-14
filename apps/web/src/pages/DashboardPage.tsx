@@ -20,6 +20,23 @@ type CasesSummary = {
   byPriority: Record<string, number>;
 };
 
+type ReviewPlatform = 'google' | 'ifood' | 'tripadvisor' | 'reclameaqui';
+type ReviewPlatformCard = {
+  platform: ReviewPlatform;
+  averageRating: number;
+  totalReviews: number;
+  lastSyncAt: string | null;
+  syncStatus: string | null;
+  publicUrl: string | null;
+};
+
+const REVIEW_CARD_META: Record<ReviewPlatform, { label: string; color: string; icon: string }> = {
+  google:      { label: 'Google',        color: 'from-sky-500 to-blue-600', icon: '🔍' },
+  ifood:       { label: 'iFood',         color: 'from-rose-500 to-red-600', icon: '🍔' },
+  tripadvisor: { label: 'Tripadvisor',   color: 'from-emerald-500 to-teal-600', icon: '✈️' },
+  reclameaqui: { label: 'Reclame Aqui',  color: 'from-amber-500 to-orange-600', icon: '📣' },
+};
+
 function toIsoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -32,6 +49,14 @@ export function DashboardPage() {
 
   const me = useQuery({ queryKey: ['authMe'], queryFn: () => apiFetch<AuthMe>('/auth/me') });
 
+  const permissionCodes = useQuery({
+    queryKey: ['authMePermissions'],
+    queryFn: () => apiFetch<{ permissionCodes: string[] }>('/auth/me').then((r) => r.permissionCodes).catch(() => [] as string[]),
+    staleTime: 60 * 1000,
+  });
+
+  const canReviewRead = (permissionCodes.data ?? [] as string[]).includes('review:read');
+
   const units = useQuery({
     queryKey: ['units'],
     queryFn: () => apiFetch<Unit[]>('/units'),
@@ -42,6 +67,15 @@ export function DashboardPage() {
     const fromDate = new Date(now.getTime() - (rangeDays - 1) * 24 * 60 * 60 * 1000);
     return { from: toIsoDate(fromDate), to: toIsoDate(now) };
   }, [rangeDays]);
+
+  const reviewCards = useQuery({
+    queryKey: ['metrics', 'reviews', 'platformCards', from, to, unitId],
+    queryFn: () =>
+      apiFetch<{ cards: ReviewPlatformCard[] }>(
+        `/metrics/reviews/platform-cards?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${unitId ? `&unitId=${encodeURIComponent(unitId)}` : ''}`,
+      ),
+    enabled: canReviewRead,
+  });
 
   const summary = useQuery({
     queryKey: ['metrics', 'npsSummary', from, to, unitId],
@@ -154,6 +188,57 @@ export function DashboardPage() {
           </div>
         )}
       </Card>
+
+      {canReviewRead && (
+        <Card title="Avaliações por plataforma" description={`Período ${from} → ${to} · ${unitId ? 'Filtrado por unidade selecionada' : 'Todas as unidades'}`}>
+          {reviewCards.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
+          {reviewCards.isError && <div className="text-sm text-rose-700">Falha ao carregar avaliações</div>}
+          {reviewCards.data?.cards && (
+            <div className="grid gap-4 md:grid-cols-4">
+              {reviewCards.data.cards.map((card) => {
+                const meta = REVIEW_CARD_META[card.platform];
+                const rating = typeof card.averageRating === 'number' ? card.averageRating : 0;
+                const total = card.totalReviews ?? 0;
+                const colorStar = rating >= 4.5 ? 'text-amber-500' : rating >= 4 ? 'text-yellow-500' : rating >= 3 ? 'text-orange-500' : rating > 0 ? 'text-rose-500' : 'text-slate-400';
+                const ratingFmt = rating > 0 || total > 0 ? rating.toFixed(1) : '0,0';
+                return (
+                  <div
+                    key={card.platform}
+                    className="grid gap-3 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={['flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-xl text-white shadow-sm', meta.color].join(' ')}>
+                        {meta.icon}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{meta.label}</div>
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                          <span className="text-slate-400">Último sync:</span>
+                          {card.lastSyncAt
+                            ? new Date(card.lastSyncAt).toLocaleString('pt-BR')
+                            : 'Pendente'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className={['text-3xl font-bold', colorStar].join(' ')}>★ {ratingFmt}</span>
+                      <span className="text-xs text-slate-500">/ 5,0</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-600">{total.toLocaleString('pt-BR')} avaliações</span>
+                      {card.publicUrl && (
+                        <a className="text-xs text-sky-700 hover:underline" href={card.publicUrl} target="_blank" rel="noreferrer">
+                          Ver ↗
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card title="Unidades" description="Acesso por permissão e vínculo">

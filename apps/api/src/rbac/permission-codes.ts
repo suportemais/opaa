@@ -15,6 +15,8 @@ export const PermissionCodes = {
   EmployeeManage: 'employee:manage',
   WhistleblowerRead: 'whistleblower:read',
   WhistleblowerManage: 'whistleblower:manage',
+  ReviewRead: 'review:read',
+  ReviewManage: 'review:manage',
 } as const;
 
 export type PermissionCode = (typeof PermissionCodes)[keyof typeof PermissionCodes];

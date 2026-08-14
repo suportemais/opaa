@@ -19,10 +19,12 @@ import { EmployeesModule } from './employees/employees.module';
 import { WhistleblowerModule } from './whistleblower/whistleblower.module';
 import { WebhookOutboxModule } from './webhook-outbox/webhook-outbox.module';
 import { MailerModule } from './mailer/mailer.module';
+import { ReviewSyncModule } from './review-sync/review-sync.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ReviewSyncModule,
     MailerModule,
     WebhookOutboxModule,
     PrismaModule,
