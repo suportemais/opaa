@@ -33,9 +33,9 @@ function usePermissionCodes() {
 export function EmployeesPage() {
   const qc = useQueryClient();
   const { permissionCodes, unitIds } = usePermissionCodes();
-  const canManageEmployees =
-    permissionCodes.includes('employee:manage') || permissionCodes.includes('unit:manage');
-  const canSeeAllUnits = permissionCodes.includes('unit:manage');
+  const canManageEmployees = permissionCodes.includes('employee:manage') || permissionCodes.includes('unit:manage');
+  const canSeeAllUnits =
+    permissionCodes.includes('unit:manage') || permissionCodes.includes('unit:read:all');
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
 
   const allowedUnits = useMemo<Unit[]>(() => {
@@ -157,7 +157,9 @@ export function EmployeesPage() {
     <div className="grid gap-6">
       <div>
         <div className="text-xl font-semibold">Atendentes</div>
-        <div className="text-sm text-slate-600">Cadastro de atendentes por unidade para seleção na pesquisa</div>
+        <div className="text-sm text-slate-600">
+          Gestor cadastra e edita atendentes das unidades com permissão. Gestor regional, de todas as unidades.
+        </div>
       </div>
 
       {editingId && canManageEmployees && (

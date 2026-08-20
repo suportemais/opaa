@@ -27,9 +27,12 @@ const roleOptions = [
 
 const createRoleOptions = [
   { code: 'tenant_admin', name: 'Administrador' },
+  { code: 'regional_manager', name: 'Gestor regional' },
   { code: 'analyst', name: 'Marketing' },
   { code: 'unit_manager', name: 'Gestor' },
 ] as const;
+
+const rolesWithoutUnitAssignment = new Set(['tenant_admin', 'regional_manager']);
 
 export function UsersPage() {
   const qc = useQueryClient();
@@ -48,7 +51,7 @@ export function UsersPage() {
     mutationFn: () =>
       apiFetch<{ id: string }>('/users', {
         method: 'POST',
-        json: { name, email, phone: phone.trim() || undefined, password: createPassword, roleCode, unitIds: unitIds.length ? unitIds : undefined },
+        json: { name, email, phone: phone.trim() || undefined, password: createPassword, roleCode, unitIds: rolesWithoutUnitAssignment.has(roleCode) || !unitIds.length ? undefined : unitIds },
       }),
     onSuccess: async () => {
       setName('');
@@ -81,7 +84,7 @@ export function UsersPage() {
           phone: editPhone.trim(),
           status: editStatus,
           roleCode: editRoleCode,
-          unitIds: editUnitIds,
+          unitIds: rolesWithoutUnitAssignment.has(editRoleCode) ? [] : editUnitIds,
         },
       }),
     onSuccess: async () => {
@@ -166,6 +169,7 @@ export function UsersPage() {
               </select>
             </div>
 
+            {!rolesWithoutUnitAssignment.has(editRoleCode) && (
             <div className="md:col-span-2">
               <div className="mb-2 text-sm font-medium text-slate-700">Acesso às unidades</div>
               <div className="grid gap-2 md:grid-cols-2">
@@ -189,9 +193,10 @@ export function UsersPage() {
                 )}
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                Perfis sem permissão de gerenciar unidades precisam ter pelo menos 1 unidade selecionada.
+                Gestor precisa de pelo menos uma unidade. Gestor regional e Administrador acessam todas, sem vínculo.
               </div>
             </div>
+            )}
 
             <div className="md:col-span-2 flex items-center justify-end gap-2">
               <Button
@@ -279,6 +284,7 @@ export function UsersPage() {
             </select>
           </div>
 
+          {!rolesWithoutUnitAssignment.has(roleCode) && (
           <div className="md:col-span-2">
             <div className="mb-2 text-sm font-medium text-slate-700">Acesso às unidades</div>
             <div className="grid gap-2 md:grid-cols-2">
@@ -302,6 +308,7 @@ export function UsersPage() {
               )}
             </div>
           </div>
+          )}
 
           <div className="md:col-span-2">
             <Button

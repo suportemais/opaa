@@ -5,28 +5,18 @@ import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
 import type { CreateEmployeeDto } from './dto/create-employee.dto';
 import type { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { canAccessUnit, employeeUnitWhere } from '../common/unit-scope';
 
 @Injectable()
 export class EmployeesService {
   constructor(private readonly prisma: PrismaService) {}
 
   private unitWhere(user: AuthUser) {
-    const canSeeAll =
-      user.permissionCodes.includes(PermissionCodes.UnitManage) ||
-      user.permissionCodes.includes(PermissionCodes.EmployeeManage);
-    if (canSeeAll) return {};
-    const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
-    return { unitId: { in: allowed } };
+    return employeeUnitWhere(user);
   }
 
   private canAccessUnit(user: AuthUser, unitId: string) {
-    if (
-      user.permissionCodes.includes(PermissionCodes.UnitManage) ||
-      user.permissionCodes.includes(PermissionCodes.EmployeeManage)
-    ) {
-      return true;
-    }
-    return user.unitIds.includes(unitId);
+    return canAccessUnit(user, unitId);
   }
 
   async list(user: AuthUser, params: { unitId?: string; q?: string; status?: string }) {
@@ -157,10 +147,7 @@ export class EmployeesService {
   }
 
   async importFromCsv(user: AuthUser, params: { unitId: string; rows: Array<Record<string, string>> }) {
-    if (
-      !user.permissionCodes.includes(PermissionCodes.EmployeeManage) &&
-      !user.permissionCodes.includes(PermissionCodes.UnitManage)
-    ) {
+    if (!user.permissionCodes.includes(PermissionCodes.EmployeeManage)) {
       throw new ForbiddenException();
     }
 

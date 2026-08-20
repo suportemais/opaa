@@ -3,6 +3,7 @@ export const PermissionCodes = {
   PlatformTenantManage: 'platform:tenant:manage',
   TenantSettingsManage: 'tenant:settings:manage',
   UnitRead: 'unit:read',
+  UnitReadAll: 'unit:read:all',
   UnitManage: 'unit:manage',
   UserManage: 'user:manage',
   SurveyRead: 'survey:read',

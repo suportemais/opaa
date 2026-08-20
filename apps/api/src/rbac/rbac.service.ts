@@ -40,6 +40,7 @@ export class RbacService {
         permissions: [
           PermissionCodes.TenantSettingsManage,
           PermissionCodes.UnitRead,
+          PermissionCodes.UnitReadAll,
           PermissionCodes.UnitManage,
           PermissionCodes.UserManage,
           PermissionCodes.SurveyRead,
@@ -61,11 +62,13 @@ export class RbacService {
         name: 'Gestor regional',
         permissions: [
           PermissionCodes.UnitRead,
+          PermissionCodes.UnitReadAll,
           PermissionCodes.SurveyRead,
           PermissionCodes.ResponseRead,
           PermissionCodes.FeedbackManage,
           PermissionCodes.CustomerRead,
           PermissionCodes.EmployeeRead,
+          PermissionCodes.EmployeeManage,
           PermissionCodes.WhistleblowerRead,
           PermissionCodes.WhistleblowerManage,
           PermissionCodes.ReviewRead,

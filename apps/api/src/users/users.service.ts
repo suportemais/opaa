@@ -6,6 +6,7 @@ import { normalizeEmail } from '../common/normalize';
 import type { AuthUser } from '../auth/auth.types';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
+import { roleSeesAllUnits } from '../common/unit-scope';
 
 @Injectable()
 export class UsersService {
@@ -91,8 +92,8 @@ export class UsersService {
     });
     if (!role) throw new NotFoundException('role_not_found');
 
-    const hasUnitManage = role.permissions.some((p) => p.permission.code === 'unit:manage');
-    if (!hasUnitManage && (!dto.unitIds || dto.unitIds.length === 0)) {
+    const seesAllUnits = roleSeesAllUnits(role.permissions.map((p) => p.permission.code));
+    if (!seesAllUnits && (!dto.unitIds || dto.unitIds.length === 0)) {
       throw new BadRequestException('unit_required');
     }
 
@@ -150,7 +151,7 @@ export class UsersService {
         : undefined;
 
     let roleId: string | null = null;
-    let hasUnitManage = false;
+    let seesAllUnits = false;
     if (dto.roleCode) {
       const role = await this.prisma.role.findUnique({
         where: { tenantId_code: { tenantId: user.tenantId, code: dto.roleCode } },
@@ -158,10 +159,10 @@ export class UsersService {
       });
       if (!role) throw new NotFoundException('role_not_found');
       roleId = role.id;
-      hasUnitManage = role.permissions.some((p) => p.permission.code === 'unit:manage');
+      seesAllUnits = roleSeesAllUnits(role.permissions.map((p) => p.permission.code));
     }
 
-    if (!hasUnitManage && dto.unitIds && dto.unitIds.length === 0) {
+    if (!seesAllUnits && dto.unitIds && dto.unitIds.length === 0) {
       throw new BadRequestException('unit_required');
     }
 

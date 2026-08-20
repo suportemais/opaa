@@ -8,6 +8,7 @@ import type { UpdateUnitDto } from './dto/update-unit.dto';
 import type { UpsertReviewProfileDto } from './dto/review-profile.dto';
 import { googleBusinessUrlFromSettings, withGoogleBusinessUrl } from '../common/unit-settings';
 import { ReviewSyncService } from '../review-sync/review-sync.service';
+import { canSeeAllUnits as userCanSeeAllUnits } from '../common/unit-scope';
 
 @Injectable()
 export class UnitsService {
@@ -40,8 +41,7 @@ export class UnitsService {
     if (requireManage && !this.canManage(user) && !this.canReviewManage(user)) {
       throw new ForbiddenException();
     }
-    const canSeeAllUnits = this.canManage(user);
-    if (!canSeeAllUnits && !user.unitIds.includes(unitId)) {
+    if (!userCanSeeAllUnits(user) && !user.unitIds.includes(unitId)) {
       throw new ForbiddenException();
     }
     const unit = await this.prisma.unit.findFirst({ where: { id: unitId, tenantId: user.tenantId } });
@@ -98,7 +98,7 @@ export class UnitsService {
   }
 
   async list(user: AuthUser) {
-    const canSeeAll = this.canManage(user);
+    const canSeeAll = userCanSeeAllUnits(user);
     const rows = await this.prisma.unit.findMany({
       where: {
         tenantId: user.tenantId,
