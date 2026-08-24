@@ -7,7 +7,13 @@ import { Button } from '../components/ui/Button';
 import { QrCode } from '../components/QrCode';
 
 type Unit = { id: string; name: string };
-type Survey = { id: string; name: string; status: string; units: Array<{ unitId: string; unit: Unit }> };
+type Survey = {
+  id: string;
+  name: string;
+  status: string;
+  anonymousAllowed: boolean;
+  units: Array<{ unitId: string; unit: Unit }>;
+};
 type SurveyDetail = {
   id: string;
   name: string;
@@ -15,6 +21,7 @@ type SurveyDetail = {
   status: string;
   collectCustomer: boolean;
   collectEmployee: boolean;
+  anonymousAllowed: boolean;
   units: Array<{ unitId: string; unit: Unit }>;
   draftVersion: {
     questions: Array<{
@@ -72,6 +79,7 @@ export function SurveysPage() {
   const [name, setName] = useState('Pesquisa de satisfação');
   const [description, setDescription] = useState('Conte como foi sua experiência.');
   const [collectEmployee, setCollectEmployee] = useState(true);
+  const [anonymousAllowed, setAnonymousAllowed] = useState(true);
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [
     { id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false },
   ]);
@@ -95,6 +103,7 @@ export function SurveysPage() {
     setName(s.name);
     setDescription(s.description ?? '');
     setCollectEmployee(s.collectEmployee);
+    setAnonymousAllowed(s.anonymousAllowed !== false);
     const firstUnit = s.units[0]?.unitId ?? null;
     if (firstUnit) setUnitId(firstUnit);
     const extras: QuestionDraft[] =
@@ -119,6 +128,7 @@ export function SurveysPage() {
     setName('Pesquisa de satisfação');
     setDescription('Conte como foi sua experiência.');
     setCollectEmployee(true);
+    setAnonymousAllowed(true);
     setQuestions([{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
     setUnitId(null);
     qc.invalidateQueries({ queryKey: ['surveyDetail'] });
@@ -144,8 +154,9 @@ export function SurveysPage() {
         json: {
           name,
           description,
-          collectCustomer: true,
+          collectCustomer: !anonymousAllowed,
           collectEmployee,
+          anonymousAllowed,
           unitIds: [u],
           questions: buildQuestionsPayload(),
         },
@@ -173,6 +184,7 @@ export function SurveysPage() {
           name,
           description,
           collectEmployee,
+          anonymousAllowed,
           unitIds: [u],
           questions: buildQuestionsPayload(),
         },
@@ -195,6 +207,7 @@ export function SurveysPage() {
           name,
           description,
           collectEmployee,
+          anonymousAllowed,
           unitIds: [u],
           questions: buildQuestionsPayload(),
         },
@@ -223,6 +236,17 @@ export function SurveysPage() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['surveyDistributions', activeSurveyId] });
+    },
+  });
+
+  const setAnonymous = useMutation({
+    mutationFn: (payload: { id: string; anonymousAllowed: boolean }) =>
+      apiFetch<{ ok: boolean; id: string }>(`/surveys/${encodeURIComponent(payload.id)}`, {
+        method: 'PATCH',
+        json: { anonymousAllowed: payload.anonymousAllowed },
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['surveys'] });
     },
   });
 
@@ -264,6 +288,22 @@ export function SurveysPage() {
           <div className="md:col-span-2">
             <div className="mb-1 text-sm font-medium text-slate-700">Descrição</div>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={anonymousAllowed}
+                onChange={(e) => setAnonymousAllowed(e.target.checked)}
+              />
+              Permitir resposta anônima
+            </label>
+            <div className="mt-1 text-xs text-slate-500">
+              {anonymousAllowed
+                ? 'O cliente pode responder sem se identificar.'
+                : 'A pesquisa vai exigir nome e e-mail ou telefone.'}
+            </div>
           </div>
           <div className="md:col-span-2">
             <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -428,10 +468,20 @@ export function SurveysPage() {
         {surveys.data && surveys.data.length > 0 && (
           <div className="divide-y divide-slate-200">
             {surveys.data.map((s) => (
-              <div key={s.id} className="flex items-center justify-between py-3">
+              <div key={s.id} className="flex flex-col gap-3 py-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <div className="text-sm font-medium">{s.name}</div>
                   <div className="text-xs text-slate-500">{s.status}</div>
+                  <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={s.anonymousAllowed !== false}
+                      disabled={s.status === 'archived' || setAnonymous.isPending}
+                      onChange={(e) => setAnonymous.mutate({ id: s.id, anonymousAllowed: e.target.checked })}
+                    />
+                    Permitir resposta anônima
+                  </label>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {s.status === 'draft' && (

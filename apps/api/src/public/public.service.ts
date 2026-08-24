@@ -99,6 +99,7 @@ export class PublicService {
         outroMessage: survey.outroMessage,
         collectCustomer: survey.collectCustomer,
         collectEmployee: (survey as any).collectEmployee ?? false,
+        anonymousAllowed: survey.anonymousAllowed !== false,
         questions: survey.publishedVersion.questions.map((q) => ({
           id: q.id,
           title: q.title,
@@ -254,6 +255,15 @@ export class PublicService {
       typeof dto.complaint === 'string' && dto.complaint.trim().length > 0 ? dto.complaint.trim() : undefined;
 
     const mainComment = complaint && isBadScore ? complaint : derivedComment;
+
+    if (survey.anonymousAllowed === false) {
+      const name = typeof dto.customer?.name === 'string' ? dto.customer.name.trim() : '';
+      const email = typeof dto.customer?.email === 'string' ? dto.customer.email.trim() : '';
+      const phone = typeof dto.customer?.phone === 'string' ? dto.customer.phone.trim() : '';
+      if (!name || (!email && !phone)) {
+        throw new BadRequestException('identification_required');
+      }
+    }
 
     const response = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.surveyResponse.findUnique({

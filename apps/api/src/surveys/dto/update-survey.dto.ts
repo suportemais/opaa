@@ -32,6 +32,10 @@ export class UpdateSurveyDto {
 
   @IsOptional()
   @IsBoolean()
+  anonymousAllowed?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   collectEmployee?: boolean;
 
   @IsOptional()

@@ -90,6 +90,7 @@ export class SurveysService {
       status: survey.status,
       collectCustomer: survey.collectCustomer,
       collectEmployee: survey.collectEmployee,
+      anonymousAllowed: survey.anonymousAllowed,
       createdAt: survey.createdAt,
       units,
       draftVersion: draft
@@ -122,7 +123,8 @@ export class SurveysService {
         name: dto.name,
         description: dto.description,
         status: 'draft',
-        collectCustomer: dto.collectCustomer ?? false,
+        anonymousAllowed: dto.anonymousAllowed ?? true,
+        collectCustomer: dto.anonymousAllowed === false ? true : (dto.collectCustomer ?? false),
         collectEmployee: dto.collectEmployee ?? false,
         units: {
           createMany: { data: dto.unitIds.map((unitId) => ({ unitId })) },
@@ -180,18 +182,48 @@ export class SurveysService {
 
   async update(user: AuthUser, surveyId: string, dto: UpdateSurveyDto, req?: Request) {
     const survey = await this.getAccessibleSurvey(user, surveyId);
-    if (survey.status !== 'draft') throw new BadRequestException('only_draft_editable');
+    const hasDraftFields =
+      dto.name !== undefined ||
+      dto.description !== undefined ||
+      dto.questions !== undefined ||
+      dto.unitIds !== undefined ||
+      dto.collectEmployee !== undefined;
+    if (survey.status !== 'draft' && hasDraftFields) throw new BadRequestException('only_draft_editable');
 
     if (dto.questions) this.validateQuestions(dto.questions);
     if (dto.unitIds) this.validateUnitIds(user, dto.unitIds);
+
+    const settingsData = {
+      ...(dto.anonymousAllowed !== undefined ? { anonymousAllowed: dto.anonymousAllowed } : {}),
+      ...(dto.collectCustomer !== undefined ? { collectCustomer: dto.collectCustomer } : {}),
+      ...(dto.anonymousAllowed === false ? { collectCustomer: true } : {}),
+    };
+
+    if (survey.status !== 'draft') {
+      const updated = await this.prisma.survey.update({
+        where: { id: survey.id },
+        data: settingsData,
+      });
+      await this.audit.log({
+        tenantId: user.tenantId,
+        actorType: 'user',
+        actorUserId: user.userId,
+        action: 'survey.updated',
+        entity: 'Survey',
+        entityId: survey.id,
+        summary: { anonymousAllowed: updated.anonymousAllowed },
+        req,
+      });
+      return { ok: true, id: survey.id };
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.survey.update({
         where: { id: survey.id },
         data: {
+          ...settingsData,
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.description !== undefined ? { description: dto.description } : {}),
-          ...(dto.collectCustomer !== undefined ? { collectCustomer: dto.collectCustomer } : {}),
           ...(dto.collectEmployee !== undefined ? { collectEmployee: dto.collectEmployee } : {}),
         },
       });

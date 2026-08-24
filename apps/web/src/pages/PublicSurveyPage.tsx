@@ -27,6 +27,7 @@ type PublicSurvey = {
     outroMessage: string | null;
     collectCustomer: boolean;
     collectEmployee?: boolean;
+    anonymousAllowed?: boolean;
     questions: PublicQuestion[];
   };
 };
@@ -65,6 +66,11 @@ export function PublicSurveyPage() {
   const [customerPhone, setCustomerPhone] = useState('');
 
   const collectEmployee = Boolean(survey.data?.survey.collectEmployee);
+  const anonymousAllowed = survey.data?.survey.anonymousAllowed !== false;
+
+  useEffect(() => {
+    if (!anonymousAllowed) setIdentify(true);
+  }, [anonymousAllowed]);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [employeeQuery, setEmployeeQuery] = useState('');
   const [employeeOpen, setEmployeeOpen] = useState(false);
@@ -168,7 +174,7 @@ export function PublicSurveyPage() {
         }
       }
 
-      const customer = identify
+      const customer = identify || !anonymousAllowed
         ? {
             name: customerName.trim() || undefined,
             email: customerEmail.trim() || undefined,
@@ -177,6 +183,9 @@ export function PublicSurveyPage() {
         : undefined;
 
       const hasCustomerField = Boolean(customer?.name || customer?.email || customer?.phone);
+      if (!anonymousAllowed && (!customer?.name || (!customer.email && !customer.phone))) {
+        throw new Error('identification_required');
+      }
 
       return apiFetch<{ responseId: string; npsClass: string }>('/public/responses', {
         method: 'POST',
@@ -523,6 +532,10 @@ export function PublicSurveyPage() {
                             setFormError('Preencha os campos obrigatórios para continuar.');
                             return;
                           }
+                          if (code === 'identification_required') {
+                            setFormError('Informe seu nome e um e-mail ou telefone para enviar a resposta.');
+                            return;
+                          }
                           setFormError('Falha ao enviar. Tente novamente.');
                         },
                       });
@@ -550,25 +563,33 @@ export function PublicSurveyPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-medium text-slate-900">Identificação (opcional)</div>
-                <div className="text-xs text-slate-500">Você pode se identificar em qualquer momento.</div>
+                <div className="text-sm font-medium text-slate-900">
+                  {anonymousAllowed ? 'Identificação (opcional)' : 'Identificação obrigatória'}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {anonymousAllowed
+                    ? 'Você pode se identificar em qualquer momento.'
+                    : 'Esta pesquisa exige nome e e-mail ou telefone.'}
+                </div>
               </div>
-              <button
-                type="button"
-                className={[
-                  'h-10 rounded-md border px-4 text-sm font-medium',
-                  identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                ].join(' ')}
-                onClick={() => setIdentify((v) => !v)}
-              >
-                {identify ? 'Não quero me identificar' : 'Quero me identificar'}
-              </button>
+              {anonymousAllowed ? (
+                <button
+                  type="button"
+                  className={[
+                    'h-10 rounded-md border px-4 text-sm font-medium',
+                    identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                  ].join(' ')}
+                  onClick={() => setIdentify((v) => !v)}
+                >
+                  {identify ? 'Não quero me identificar' : 'Quero me identificar'}
+                </button>
+              ) : null}
             </div>
 
-            {identify && (
+            {(identify || !anonymousAllowed) && (
               <div className="mt-4 grid gap-3">
                 <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
+                  <div className="mb-1 text-sm font-medium text-slate-700">Nome{anonymousAllowed ? '' : ' *'}</div>
                   <input
                     className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
                     value={customerName}
@@ -577,7 +598,7 @@ export function PublicSurveyPage() {
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
+                    <div className="mb-1 text-sm font-medium text-slate-700">E-mail{anonymousAllowed ? '' : ' *'}</div>
                     <input
                       className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
                       value={customerEmail}
@@ -586,7 +607,7 @@ export function PublicSurveyPage() {
                     />
                   </div>
                   <div>
-                    <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
+                    <div className="mb-1 text-sm font-medium text-slate-700">Telefone{anonymousAllowed ? '' : ' *'}</div>
                     <input
                       className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
                       value={customerPhone}
@@ -595,6 +616,9 @@ export function PublicSurveyPage() {
                     />
                   </div>
                 </div>
+                {!anonymousAllowed && (
+                  <div className="text-xs text-slate-500">Preencha o nome e pelo menos um contato (e-mail ou telefone).</div>
+                )}
               </div>
             )}
           </div>
