@@ -160,7 +160,7 @@ export function clampSummary(input: unknown): string {
 export function classifyFromScore(
   npsClass: NpsClass | null | undefined,
 ): ClassificationResult | null {
-  if (npsClass === NpsClass.promoter || npsClass === 'promoter') {
+  if (npsClass === NpsClass.promoter) {
     return {
       label: 'elogio',
       theme: null,
@@ -168,7 +168,7 @@ export function classifyFromScore(
       source: 'score',
     };
   }
-  if (npsClass === NpsClass.detractor || npsClass === 'detractor') {
+  if (npsClass === NpsClass.detractor) {
     return {
       label: 'reclamacao',
       theme: null,
@@ -176,7 +176,7 @@ export function classifyFromScore(
       source: 'score',
     };
   }
-  if (npsClass === NpsClass.passive || npsClass === 'passive') {
+  if (npsClass === NpsClass.passive) {
     return {
       label: 'neutro',
       theme: null,
