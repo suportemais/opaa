@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { RankingPage } from './pages/RankingPage';
 import { UnitsPage } from './pages/UnitsPage';
 import { SurveysPage } from './pages/SurveysPage';
 import { FeedbacksPage } from './pages/FeedbacksPage';
@@ -47,6 +48,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="ranking" element={<RankingPage />} />
         <Route path="company" element={<CompanyPage />} />
         <Route path="units" element={<UnitsPage />} />
         <Route path="users" element={<UsersPage />} />

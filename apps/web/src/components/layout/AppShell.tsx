@@ -64,6 +64,9 @@ export function AppShell() {
               <NavLink to="/app" end className={({ isActive }) => navClass(isActive)}>
                 Dashboard
               </NavLink>
+              <NavLink to="/app/ranking" className={({ isActive }) => navClass(isActive)}>
+                Ranking
+              </NavLink>
               <NavLink to="/app/surveys" className={({ isActive }) => navClass(isActive)}>
                 Pesquisas
               </NavLink>

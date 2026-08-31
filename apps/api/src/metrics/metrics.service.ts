@@ -1,6 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { calculateNps } from '../domain/metrics/nps';
+import {
+  buildRankingMonthly,
+  buildRankingSnapshot,
+} from '../domain/metrics/ranking';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
 import { PrismaService } from '../prisma/prisma.service';
@@ -493,5 +497,137 @@ export class MetricsService {
       tenantId: user.tenantId,
       limit: dto.limit ?? 8,
     });
+  }
+
+  private caseUnitWhere(scope: {
+    canSeeAllUnits: boolean;
+    unitIds: string[] | null;
+    unitId?: string;
+  }): Prisma.FeedbackCaseWhereInput {
+    if (scope.unitId) return { unitId: scope.unitId };
+    if (scope.canSeeAllUnits) return {};
+    return { OR: [{ unitId: { in: scope.unitIds! } }, { unitId: null }] };
+  }
+
+  private async loadRankingInputs(user: AuthUser, query: NpsQueryDto) {
+    const { from, to } = this.resolveRange(query);
+    const scope = await this.resolveUnitScope(user, query.unitId);
+    const responseWhere: Prisma.SurveyResponseWhereInput = {
+      tenantId: user.tenantId,
+      status: 'completed',
+      completedAt: { gte: from, lte: to },
+      ...this.responseUnitWhere(scope),
+    };
+    const caseWhere: Prisma.FeedbackCaseWhereInput = {
+      tenantId: user.tenantId,
+      ...this.caseUnitWhere(scope),
+      OR: [
+        { createdAt: { gte: from, lte: to } },
+        { resolvedAt: { gte: from, lte: to } },
+      ],
+    };
+    const reviewWhere: Prisma.ReviewWhereInput = {
+      tenantId: user.tenantId,
+      fetchedAt: { gte: from, lte: to },
+      ...this.buildReviewsUnitWhere(scope),
+    };
+
+    const unitFilter = scope.unitId
+      ? { id: scope.unitId }
+      : scope.canSeeAllUnits
+        ? {}
+        : { id: { in: scope.unitIds! } };
+
+    const [units, responses, cases, reviews] = await Promise.all([
+      this.prisma.unit.findMany({
+        where: { tenantId: user.tenantId, ...unitFilter },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.surveyResponse.findMany({
+        where: responseWhere,
+        select: {
+          unitId: true,
+          npsScore: true,
+          npsClass: true,
+          sentiment: true,
+          completedAt: true,
+          startedAt: true,
+          feedbackCase: {
+            select: {
+              status: true,
+              assigneeUserId: true,
+              dueAt: true,
+              firstActionAt: true,
+              firstViewedAt: true,
+              resolvedAt: true,
+              createdAt: true,
+            },
+          },
+        },
+      }),
+      this.prisma.feedbackCase.findMany({
+        where: caseWhere,
+        select: {
+          unitId: true,
+          status: true,
+          assigneeUserId: true,
+          dueAt: true,
+          firstActionAt: true,
+          firstViewedAt: true,
+          resolvedAt: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.review.findMany({
+        where: reviewWhere,
+        select: { unitId: true, rating: true },
+      }),
+    ]);
+
+    return { from, to, scope, units, responses, cases, reviews };
+  }
+
+  async rankingSummary(user: AuthUser, query: NpsQueryDto) {
+    const { from, to, scope, units, responses, cases, reviews } =
+      await this.loadRankingInputs(user, query);
+    const createdInRange = cases.filter(
+      (row) =>
+        row.createdAt.getTime() >= from.getTime() &&
+        row.createdAt.getTime() <= to.getTime(),
+    );
+    const snapshot = buildRankingSnapshot({
+      units,
+      responses,
+      cases: createdInRange,
+      reviews,
+      now: new Date(),
+    });
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      unitId: scope.unitId ?? null,
+      totals: snapshot.totals,
+      units: snapshot.units,
+    };
+  }
+
+  async rankingMonthly(user: AuthUser, query: NpsQueryDto) {
+    const { from, to, scope, units, responses, cases } =
+      await this.loadRankingInputs(user, query);
+    const monthly = buildRankingMonthly({
+      units,
+      responses,
+      cases,
+      from,
+      to,
+    });
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      unitId: scope.unitId ?? null,
+      months: monthly.months,
+      series: monthly.series,
+    };
   }
 }

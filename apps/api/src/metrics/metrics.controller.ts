@@ -79,4 +79,16 @@ export class MetricsController {
   ) {
     return this.metrics.sentimentBackfill(user, dto ?? {});
   }
+
+  @Get('ranking/summary')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  rankingSummary(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
+    return this.metrics.rankingSummary(user, query);
+  }
+
+  @Get('ranking/monthly')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  rankingMonthly(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
+    return this.metrics.rankingMonthly(user, query);
+  }
 }
