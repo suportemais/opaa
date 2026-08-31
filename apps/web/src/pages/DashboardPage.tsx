@@ -303,7 +303,15 @@ export function DashboardPage() {
       >
         {sentiment.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
         {sentiment.isError && <div className="text-sm text-rose-700">Falha ao carregar análise</div>}
-        {sentiment.data && <SentimentAnalysis data={sentiment.data} />}
+        {sentiment.data && (
+          <SentimentAnalysis
+            data={sentiment.data}
+            onSelectSentiment={(label) => goFeedbacks({ sentiment: label })}
+            onSelectTheme={(theme, sentiment) =>
+              goFeedbacks(sentiment ? { theme, sentiment } : { theme })
+            }
+          />
+        )}
       </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -404,7 +412,11 @@ export function DashboardPage() {
   );
 }
 
-function SentimentAnalysis(props: { data: SentimentSummary }) {
+function SentimentAnalysis(props: {
+  data: SentimentSummary;
+  onSelectSentiment?: (label: keyof SentimentCounts) => void;
+  onSelectTheme?: (theme: string, sentiment?: keyof SentimentCounts) => void;
+}) {
   const data = props.data;
   const classified = data.classified;
   const empty = classified === 0;
@@ -418,6 +430,7 @@ function SentimentAnalysis(props: { data: SentimentSummary }) {
           percent={data.percents.elogio}
           colorClass="text-emerald-600"
           barClass="bg-emerald-500"
+          onClick={props.onSelectSentiment ? () => props.onSelectSentiment!('elogio') : undefined}
         />
         <SentimentStat
           label={sentimentLabel('reclamacao')}
@@ -425,6 +438,7 @@ function SentimentAnalysis(props: { data: SentimentSummary }) {
           percent={data.percents.reclamacao}
           colorClass="text-rose-600"
           barClass="bg-rose-500"
+          onClick={props.onSelectSentiment ? () => props.onSelectSentiment!('reclamacao') : undefined}
         />
         <SentimentStat
           label={sentimentLabel('neutro')}
@@ -432,6 +446,7 @@ function SentimentAnalysis(props: { data: SentimentSummary }) {
           percent={data.percents.neutro}
           colorClass="text-slate-600"
           barClass="bg-slate-500"
+          onClick={props.onSelectSentiment ? () => props.onSelectSentiment!('neutro') : undefined}
         />
       </div>
 
@@ -441,7 +456,12 @@ function SentimentAnalysis(props: { data: SentimentSummary }) {
           {empty ? (
             <div className="text-sm text-slate-600">Sem respostas classificadas no período</div>
           ) : (
-            <SentimentDonut counts={data.counts} percents={data.percents} classified={classified} />
+            <SentimentDonut
+              counts={data.counts}
+              percents={data.percents}
+              classified={classified}
+              onSelect={props.onSelectSentiment}
+            />
           )}
         </div>
 
@@ -452,7 +472,12 @@ function SentimentAnalysis(props: { data: SentimentSummary }) {
           ) : (
             <div className="grid gap-2">
               {data.byTheme.slice(0, 8).map((row) => (
-                <ThemeBar key={row.theme} row={row} max={data.byTheme[0]?.total || 1} />
+                <ThemeBar
+                  key={row.theme}
+                  row={row}
+                  max={data.byTheme[0]?.total || 1}
+                  onSelect={props.onSelectTheme}
+                />
               ))}
             </div>
           )}
@@ -478,9 +503,15 @@ function SentimentStat(props: {
   percent: number;
   colorClass: string;
   barClass: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
+  const content = (
+    <div
+      className={[
+        'grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4',
+        props.onClick ? 'transition-colors hover:border-slate-300 hover:bg-white hover:shadow-sm' : '',
+      ].join(' ')}
+    >
       <div className="text-sm text-slate-600">{props.label}</div>
       <div className="flex items-baseline gap-2">
         <div className={['text-2xl font-semibold', props.colorClass].join(' ')}>{props.value}</div>
@@ -491,12 +522,21 @@ function SentimentStat(props: {
       </div>
     </div>
   );
+
+  if (!props.onClick) return content;
+
+  return (
+    <button type="button" className="w-full text-left" onClick={props.onClick}>
+      {content}
+    </button>
+  );
 }
 
 function SentimentDonut(props: {
   counts: SentimentCounts;
   percents: SentimentCounts;
   classified: number;
+  onSelect?: (label: keyof SentimentCounts) => void;
 }) {
   const radius = 16;
   const circumference = 2 * Math.PI * radius;
@@ -532,40 +572,91 @@ function SentimentDonut(props: {
               strokeDashoffset={arc.dashOffset}
               strokeLinecap="butt"
               transform="rotate(-90 24 24)"
-            />
+              pointerEvents="stroke"
+              className={props.onSelect ? 'cursor-pointer hover:opacity-80' : undefined}
+              onClick={props.onSelect ? () => props.onSelect!(arc.key) : undefined}
+            >
+              <title>{sentimentLabel(arc.key)}</title>
+            </circle>
           ) : null,
         )}
       </svg>
       <div className="grid gap-1.5 text-sm">
-        {segments.map((seg) => (
-          <div key={seg.key} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
-            <span className="text-slate-700">{sentimentLabel(seg.key)}</span>
-            <span className="text-slate-500">
-              {props.counts[seg.key]} ({props.percents[seg.key]}%)
-            </span>
-          </div>
-        ))}
+        {segments.map((seg) => {
+          const row = (
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
+              <span className="text-slate-700">{sentimentLabel(seg.key)}</span>
+              <span className="text-slate-500">
+                {props.counts[seg.key]} ({props.percents[seg.key]}%)
+              </span>
+            </div>
+          );
+          if (!props.onSelect) return <div key={seg.key}>{row}</div>;
+          return (
+            <button
+              key={seg.key}
+              type="button"
+              className="rounded-md px-1 py-0.5 text-left hover:bg-slate-50"
+              onClick={() => props.onSelect!(seg.key)}
+            >
+              {row}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function ThemeBar(props: { row: SentimentThemeRow; max: number }) {
+function ThemeBar(props: {
+  row: SentimentThemeRow;
+  max: number;
+  onSelect?: (theme: string, sentiment?: keyof SentimentCounts) => void;
+}) {
   const width = props.max > 0 ? Math.round((props.row.total / props.max) * 100) : 0;
   const elogioPct = props.row.total > 0 ? (props.row.elogio / props.row.total) * 100 : 0;
   const reclamacaoPct = props.row.total > 0 ? (props.row.reclamacao / props.row.total) * 100 : 0;
   const neutroPct = props.row.total > 0 ? (props.row.neutro / props.row.total) * 100 : 0;
+  const segments: Array<{ key: keyof SentimentCounts; pct: number; colorClass: string }> = [
+    { key: 'elogio', pct: elogioPct, colorClass: 'bg-emerald-500' },
+    { key: 'reclamacao', pct: reclamacaoPct, colorClass: 'bg-rose-500' },
+    { key: 'neutro', pct: neutroPct, colorClass: 'bg-slate-500' },
+  ];
+
+  const label = (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <div className="font-medium text-slate-900">{sentimentThemeLabel(props.row.theme)}</div>
+      <div className="text-slate-600">{props.row.total}</div>
+    </div>
+  );
+
   return (
     <div className="grid gap-1">
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <div className="font-medium text-slate-900">{sentimentThemeLabel(props.row.theme)}</div>
-        <div className="text-slate-600">{props.row.total}</div>
-      </div>
+      {props.onSelect ? (
+        <button type="button" className="w-full rounded-md text-left hover:bg-slate-50" onClick={() => props.onSelect!(props.row.theme)}>
+          {label}
+        </button>
+      ) : (
+        label
+      )}
       <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100" style={{ maxWidth: `${Math.max(width, 12)}%` }}>
-        <div className="h-full bg-emerald-500" style={{ width: `${elogioPct}%` }} />
-        <div className="h-full bg-rose-500" style={{ width: `${reclamacaoPct}%` }} />
-        <div className="h-full bg-slate-500" style={{ width: `${neutroPct}%` }} />
+        {segments.map((seg) =>
+          seg.pct > 0 ? (
+            props.onSelect ? (
+              <button
+                key={seg.key}
+                type="button"
+                title={`${sentimentLabel(seg.key)} · ${sentimentThemeLabel(props.row.theme)}`}
+                className={['block h-full min-h-0 min-w-0 border-0 p-0 hover:opacity-80', seg.colorClass].join(' ')}
+                style={{ width: `${seg.pct}%` }}
+                onClick={() => props.onSelect!(props.row.theme, seg.key)}
+              />
+            ) : (
+              <div key={seg.key} className={['h-full', seg.colorClass].join(' ')} style={{ width: `${seg.pct}%` }} />
+            )
+          ) : null,
+        )}
       </div>
     </div>
   );

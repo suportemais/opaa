@@ -2,7 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
-import { feedbackCaseStatusLabel } from '../lib/labels';
+import {
+  feedbackCaseStatusLabel,
+  isSentimentFilterValue,
+  isSentimentThemeFilterValue,
+  SENTIMENT_FILTER_VALUES,
+  SENTIMENT_THEME_FILTER_VALUES,
+  sentimentLabel,
+  sentimentThemeLabel,
+} from '../lib/labels';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 
@@ -69,6 +77,16 @@ export function FeedbacksPage() {
     if (v === 'any' || v === 'promoter' || v === 'passive' || v === 'detractor') return v;
     return 'any';
   });
+  const [sentiment, setSentiment] = useState<'any' | (typeof SENTIMENT_FILTER_VALUES)[number]>(() => {
+    const v = searchParams.get('sentiment');
+    if (v === 'any' || isSentimentFilterValue(v)) return v;
+    return 'any';
+  });
+  const [theme, setTheme] = useState<'any' | (typeof SENTIMENT_THEME_FILTER_VALUES)[number]>(() => {
+    const v = searchParams.get('theme') ?? searchParams.get('sentimentTheme');
+    if (v === 'any' || isSentimentThemeFilterValue(v)) return v;
+    return 'any';
+  });
   const [from, setFrom] = useState(searchParams.get('from') ?? '');
   const [to, setTo] = useState(searchParams.get('to') ?? '');
   const [unitId, setUnitId] = useState(searchParams.get('unitId') ?? '');
@@ -81,12 +99,14 @@ export function FeedbacksPage() {
     if (assignee !== 'any') params.set('assignee', assignee);
     if (due !== 'any') params.set('due', due);
     if (npsClass !== 'any') params.set('npsClass', npsClass);
+    if (sentiment !== 'any') params.set('sentiment', sentiment);
+    if (theme !== 'any') params.set('theme', theme);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (unitId) params.set('unitId', unitId);
     const qs = params.toString();
     return qs ? `?${qs}` : '';
-  }, [assignee, caseFilter, due, from, npsClass, to, unitId]);
+  }, [assignee, caseFilter, due, from, npsClass, sentiment, theme, to, unitId]);
 
   useEffect(() => {
     const next = new URLSearchParams(queryString.replace(/^\?/, ''));
@@ -161,6 +181,36 @@ export function FeedbacksPage() {
               <option value="promoter">Promotores</option>
               <option value="passive">Passivos</option>
               <option value="detractor">Detratores</option>
+            </select>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">Sentimento</div>
+            <select
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={sentiment}
+              onChange={(e) => setSentiment(e.target.value as any)}
+            >
+              <option value="any">Todos</option>
+              {SENTIMENT_FILTER_VALUES.map((value) => (
+                <option key={value} value={value}>
+                  {sentimentLabel(value)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">Tema</div>
+            <select
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={theme}
+              onChange={(e) => setTheme(e.target.value as any)}
+            >
+              <option value="any">Todos</option>
+              {SENTIMENT_THEME_FILTER_VALUES.map((value) => (
+                <option key={value} value={value}>
+                  {sentimentThemeLabel(value)}
+                </option>
+              ))}
             </select>
           </div>
           <div>

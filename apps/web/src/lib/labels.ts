@@ -1,3 +1,28 @@
+export const SENTIMENT_FILTER_VALUES = ['elogio', 'reclamacao', 'neutro'] as const;
+export type SentimentFilterValue = (typeof SENTIMENT_FILTER_VALUES)[number];
+
+export const SENTIMENT_THEME_FILTER_VALUES = [
+  'atendimento',
+  'espera',
+  'comida',
+  'preco',
+  'limpeza',
+  'qualidade',
+  'ambiente',
+  'entrega',
+  'produto',
+  'outro',
+] as const;
+export type SentimentThemeFilterValue = (typeof SENTIMENT_THEME_FILTER_VALUES)[number];
+
+export function isSentimentFilterValue(value: string | null | undefined): value is SentimentFilterValue {
+  return value === 'elogio' || value === 'reclamacao' || value === 'neutro';
+}
+
+export function isSentimentThemeFilterValue(value: string | null | undefined): value is SentimentThemeFilterValue {
+  return (SENTIMENT_THEME_FILTER_VALUES as readonly string[]).includes(value ?? '');
+}
+
 export function sentimentLabel(value: string | null | undefined) {
   if (value === 'elogio') return 'Elogio';
   if (value === 'reclamacao') return 'Reclamação';

@@ -5,6 +5,12 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import type { UpdateCaseDto } from './dto/update-case.dto';
 import type { CreateCaseInteractionDto } from './dto/create-case-interaction.dto';
 import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
+import {
+  CANONICAL_THEMES,
+  SENTIMENT_LABELS,
+  type CanonicalTheme,
+  type SentimentLabel,
+} from '../domain/sentiment/classify';
 
 @Injectable()
 export class FeedbacksService {
@@ -52,6 +58,9 @@ export class FeedbacksService {
       assignee?: string;
       due?: string;
       npsClass?: string;
+      sentiment?: string;
+      theme?: string;
+      sentimentTheme?: string;
       from?: string;
       to?: string;
       unitId?: string;
@@ -74,6 +83,42 @@ export class FeedbacksService {
     } else {
       throw new BadRequestException('invalid_nps_class');
     }
+
+    let sentiment: SentimentLabel | undefined;
+    if (
+      (SENTIMENT_LABELS as readonly string[]).includes(params.sentiment ?? '')
+    ) {
+      sentiment = params.sentiment as SentimentLabel;
+    } else if (params.sentiment === 'any' || !params.sentiment) {
+      // no sentiment filter
+    } else {
+      throw new BadRequestException('invalid_sentiment');
+    }
+
+    const themeRaw = params.theme || params.sentimentTheme;
+    let theme: CanonicalTheme | undefined;
+    if ((CANONICAL_THEMES as readonly string[]).includes(themeRaw ?? '')) {
+      theme = themeRaw as CanonicalTheme;
+    } else if (themeRaw === 'any' || !themeRaw) {
+      // no theme filter
+    } else {
+      throw new BadRequestException('invalid_theme');
+    }
+
+    const sentimentThemeWhere =
+      theme === 'outro'
+        ? {
+            OR: [
+              { sentimentTheme: 'outro' },
+              {
+                sentimentTheme: null,
+                ...(sentiment ? {} : { sentiment: { not: null } }),
+              },
+            ],
+          }
+        : theme
+          ? { sentimentTheme: theme }
+          : undefined;
 
     const openStatuses = ['new', 'viewed', 'in_progress', 'waiting_customer'];
 
@@ -128,14 +173,21 @@ export class FeedbacksService {
             ? { is: caseWhere }
             : undefined;
 
+    const extraFilters: Record<string, unknown>[] = [];
+    if (npsClass) extraFilters.push({ npsClass });
+    if (sentiment) extraFilters.push({ sentiment });
+    if (sentimentThemeWhere) extraFilters.push(sentimentThemeWhere);
+    if (range)
+      extraFilters.push({ completedAt: { gte: range.from, lte: range.to } });
+    if (feedbackCaseFilter)
+      extraFilters.push({ feedbackCase: feedbackCaseFilter });
+
     return this.prisma.surveyResponse.findMany({
       where: {
         tenantId: user.tenantId,
         status: 'completed',
         ...unitWhere,
-        ...(npsClass ? { npsClass } : {}),
-        ...(range ? { completedAt: { gte: range.from, lte: range.to } } : {}),
-        ...(feedbackCaseFilter ? { feedbackCase: feedbackCaseFilter } : {}),
+        ...(extraFilters.length ? { AND: extraFilters } : {}),
       },
       orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
       take,
