@@ -36,7 +36,8 @@ describe('sentiment classifier mapping', () => {
   });
 
   it('parses Groq JSON including markdown fences and extra keys', () => {
-    const raw = '```json\n{"label":"reclamação","theme":"espera","summary":"Demorou demais na fila.","extra":1}\n```';
+    const raw =
+      '```json\n{"label":"reclamação","theme":"espera","summary":"Demorou demais na fila.","extra":1}\n```';
     expect(parseGroqClassification(raw)).toEqual({
       label: 'reclamacao',
       theme: 'espera',
@@ -46,7 +47,8 @@ describe('sentiment classifier mapping', () => {
   });
 
   it('parses JSON preceded by chatter', () => {
-    const raw = 'Aqui está o resultado: {"label":"elogio","tema":"comida","resumo":"Gostou do prato."}';
+    const raw =
+      'Aqui está o resultado: {"label":"elogio","tema":"comida","resumo":"Gostou do prato."}';
     expect(parseGroqClassification(raw)).toEqual({
       label: 'elogio',
       theme: 'comida',
@@ -75,13 +77,20 @@ describe('sentiment classifier mapping', () => {
     expect(
       collectCommentText({
         mainComment: 'Fila enorme',
-        answers: [{ value: 'Fila enorme' }, { value: 9 }, { value: '  ' }, { value: 'Atendente rude' }],
+        answers: [
+          { value: 'Fila enorme' },
+          { value: 9 },
+          { value: '  ' },
+          { value: 'Atendente rude' },
+        ],
       }),
     ).toBe('Fila enorme\nAtendente rude');
   });
 
   it('clamps summary to a single short line', () => {
-    expect(clampSummary('  duas   linhas\nno texto  ')).toBe('duas linhas no texto');
+    expect(clampSummary('  duas   linhas\nno texto  ')).toBe(
+      'duas linhas no texto',
+    );
     const long = 'x'.repeat(200);
     expect(clampSummary(long).length).toBeLessThanOrEqual(160);
   });
@@ -124,7 +133,9 @@ describe('sentiment dashboard aggregation', () => {
   });
 
   it('does not mix unknown labels into counts', () => {
-    const result = aggregateSentiment([{ sentiment: 'positive', sentimentTheme: 'atendimento' }]);
+    const result = aggregateSentiment([
+      { sentiment: 'positive', sentimentTheme: 'atendimento' },
+    ]);
     expect(result.classified).toBe(0);
     expect(result.unclassified).toBe(1);
   });

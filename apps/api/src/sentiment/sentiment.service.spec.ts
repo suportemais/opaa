@@ -27,17 +27,20 @@ describe('SentimentService', () => {
       answers: [{ value: 10 }],
     });
 
-    await expect(service.classifyResponse('t1', 'r1')).resolves.toBe('classified');
-    expect(groq.classifyFeedback).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'r1', tenantId: 't1', sentiment: null },
-        data: expect.objectContaining({
-          sentiment: 'elogio',
-          sentimentSource: 'score',
-        }),
-      }),
+    await expect(service.classifyResponse('t1', 'r1')).resolves.toBe(
+      'classified',
     );
+    expect(groq.classifyFeedback).not.toHaveBeenCalled();
+    const scoreCalls = updateMany.mock.calls as unknown as Array<
+      [{ where: Record<string, unknown>; data: Record<string, unknown> }]
+    >;
+    expect(scoreCalls[0][0].where).toEqual({
+      id: 'r1',
+      tenantId: 't1',
+      sentiment: null,
+    });
+    expect(scoreCalls[0][0].data.sentiment).toBe('elogio');
+    expect(scoreCalls[0][0].data.sentimentSource).toBe('score');
   });
 
   it('persists Groq mapping for comments', async () => {
@@ -55,17 +58,16 @@ describe('SentimentService', () => {
       '{"label":"reclamacao","theme":"espera","summary":"Reclamou da espera."}',
     );
 
-    await expect(service.classifyResponse('t1', 'r1')).resolves.toBe('classified');
-    expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          sentiment: 'reclamacao',
-          sentimentTheme: 'espera',
-          sentimentSummary: 'Reclamou da espera.',
-          sentimentSource: 'groq',
-        }),
-      }),
+    await expect(service.classifyResponse('t1', 'r1')).resolves.toBe(
+      'classified',
     );
+    const groqCalls = updateMany.mock.calls as unknown as Array<
+      [{ data: Record<string, unknown> }]
+    >;
+    expect(groqCalls[0][0].data.sentiment).toBe('reclamacao');
+    expect(groqCalls[0][0].data.sentimentTheme).toBe('espera');
+    expect(groqCalls[0][0].data.sentimentSummary).toBe('Reclamou da espera.');
+    expect(groqCalls[0][0].data.sentimentSource).toBe('groq');
   });
 
   it('leaves the survey saved and retries later when Groq fails', async () => {
@@ -82,21 +84,24 @@ describe('SentimentService', () => {
     groq.classifyFeedback.mockRejectedValue(new Error('timeout'));
 
     await expect(service.classifyResponse('t1', 'r1')).resolves.toBe('retry');
-    expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'r1', tenantId: 't1', sentiment: null },
-        data: expect.objectContaining({
-          sentimentAttempts: 1,
-          sentimentLastError: 'timeout',
-        }),
-      }),
-    );
-    expect(updateMany.mock.calls[0][0].data.sentiment).toBeUndefined();
+    const retryCalls = updateMany.mock.calls as unknown as Array<
+      [{ where: Record<string, unknown>; data: Record<string, unknown> }]
+    >;
+    expect(retryCalls[0][0].where).toEqual({
+      id: 'r1',
+      tenantId: 't1',
+      sentiment: null,
+    });
+    expect(retryCalls[0][0].data.sentimentAttempts).toBe(1);
+    expect(retryCalls[0][0].data.sentimentLastError).toBe('timeout');
+    expect(retryCalls[0][0].data.sentiment).toBeUndefined();
   });
 
   it('does not classify a response from another tenant', async () => {
     const { service, updateMany } = setup(null);
-    await expect(service.classifyResponse('tenant-b', 'r1')).resolves.toBe('ignored');
+    await expect(service.classifyResponse('tenant-b', 'r1')).resolves.toBe(
+      'ignored',
+    );
     expect(updateMany).not.toHaveBeenCalled();
   });
 });

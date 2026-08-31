@@ -27,10 +27,16 @@ describe('MetricsService sentimentSummary', () => {
       { isGroqConfigured: () => true } as never,
     );
 
-    const result = await service.sentimentSummary(user(), { from: '2026-08-01', to: '2026-08-31' });
+    const result = await service.sentimentSummary(user(), {
+      from: '2026-08-01',
+      to: '2026-08-31',
+    });
 
     expect(findMany).toHaveBeenCalledTimes(1);
-    const arg = findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    const calls = findMany.mock.calls as unknown as Array<
+      [{ where: Record<string, unknown> }]
+    >;
+    const arg = calls[0][0];
     expect(arg.where.tenantId).toBe('tenant-a');
     expect(arg.where.status).toBe('completed');
     expect(result.counts).toEqual({ elogio: 1, reclamacao: 1, neutro: 0 });
@@ -51,8 +57,12 @@ describe('MetricsService sentimentSummary', () => {
       unitId: '11111111-1111-4111-8111-111111111111',
     });
 
-    const arg = findMany.mock.calls[0][0] as { where: Record<string, unknown> };
-    expect(arg.where.unitId).toBe('11111111-1111-4111-8111-111111111111');
+    const calls = findMany.mock.calls as unknown as Array<
+      [{ where: Record<string, unknown> }]
+    >;
+    expect(calls[0][0].where.unitId).toBe(
+      '11111111-1111-4111-8111-111111111111',
+    );
   });
 
   it('rejects a unit outside the user scope', async () => {

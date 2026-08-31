@@ -64,8 +64,15 @@ function stripDiacritics(value: string) {
   return value.normalize('NFD').replace(/\p{M}/gu, '');
 }
 
+function asText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  return '';
+}
+
 function normalizeKey(value: unknown): string {
-  return stripDiacritics(String(value ?? ''))
+  return stripDiacritics(asText(value))
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, ' ')
@@ -133,7 +140,8 @@ export function mapSentimentLabel(input: unknown): SentimentLabel {
 export function normalizeTheme(input: unknown): CanonicalTheme {
   const key = normalizeKey(input).replace(/\s+/g, '');
   if (!key) return 'outro';
-  if ((CANONICAL_THEMES as readonly string[]).includes(key)) return key as CanonicalTheme;
+  if ((CANONICAL_THEMES as readonly string[]).includes(key))
+    return key as CanonicalTheme;
   if (THEME_ALIASES[key]) return THEME_ALIASES[key];
   for (const theme of CANONICAL_THEMES) {
     if (key.includes(theme) || theme.includes(key)) return theme;
@@ -142,15 +150,15 @@ export function normalizeTheme(input: unknown): CanonicalTheme {
 }
 
 export function clampSummary(input: unknown): string {
-  const text = String(input ?? '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const text = asText(input).replace(/\s+/g, ' ').trim();
   if (!text) return 'Sem resumo.';
-  return text.length > MAX_SUMMARY_LENGTH ? `${text.slice(0, MAX_SUMMARY_LENGTH - 1).trimEnd()}…` : text;
+  return text.length > MAX_SUMMARY_LENGTH
+    ? `${text.slice(0, MAX_SUMMARY_LENGTH - 1).trimEnd()}…`
+    : text;
 }
 
 export function classifyFromScore(
-  npsClass: NpsClass | string | null | undefined,
+  npsClass: NpsClass | null | undefined,
 ): ClassificationResult | null {
   if (npsClass === NpsClass.promoter || npsClass === 'promoter') {
     return {
@@ -195,7 +203,8 @@ function extractJsonObject(raw: string): unknown {
   const text = (fence ? fence[1] : trimmed).trim();
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) throw new Error('invalid_json');
+  if (start === -1 || end === -1 || end <= start)
+    throw new Error('invalid_json');
   return JSON.parse(text.slice(start, end + 1)) as unknown;
 }
 
@@ -203,8 +212,12 @@ export function parseGroqClassification(raw: string): ClassificationResult {
   const parsed = extractJsonObject(raw);
   if (!parsed || typeof parsed !== 'object') throw new Error('invalid_payload');
   const obj = parsed as Record<string, unknown>;
-  const label = mapSentimentLabel(obj.label ?? obj.sentiment ?? obj.classificacao);
-  const theme = normalizeTheme(obj.theme ?? obj.tema ?? obj.category ?? obj.categoria);
+  const label = mapSentimentLabel(
+    obj.label ?? obj.sentiment ?? obj.classificacao,
+  );
+  const theme = normalizeTheme(
+    obj.theme ?? obj.tema ?? obj.category ?? obj.categoria,
+  );
   const summary = clampSummary(obj.summary ?? obj.resumo ?? obj.sinopse);
   return { label, theme, summary, source: 'groq' };
 }

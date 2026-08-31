@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, ResponseSentiment, SentimentSource } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GroqClient } from './groq.client';
 import {
@@ -42,7 +42,10 @@ export class SentimentService {
     });
   }
 
-  async classifyResponse(tenantId: string, responseId: string): Promise<ClassifyOutcome> {
+  async classifyResponse(
+    tenantId: string,
+    responseId: string,
+  ): Promise<ClassifyOutcome> {
     const row = await this.prisma.surveyResponse.findFirst({
       where: { id: responseId, tenantId, status: 'completed' },
       select: {
@@ -60,19 +63,29 @@ export class SentimentService {
     if (!row) return 'ignored';
     if (row.sentiment) return 'ignored';
 
-    const comment = collectCommentText({ mainComment: row.mainComment, answers: row.answers });
+    const comment = collectCommentText({
+      mainComment: row.mainComment,
+      answers: row.answers,
+    });
 
     if (!hasUsableComment(comment)) {
-      const fallback = classifyFromScore(row.npsClass) ?? skippedWithoutSignal();
+      const fallback =
+        classifyFromScore(row.npsClass) ?? skippedWithoutSignal();
       await this.persistSuccess(tenantId, responseId, fallback);
       return fallback.source === 'skipped' ? 'skipped' : 'classified';
     }
 
     if (!this.groq.isConfigured()) {
-      await this.markRetry(tenantId, responseId, row.sentimentAttempts, 'missing_api_key', {
-        incrementAttempts: false,
-        retryInMs: MISSING_KEY_RETRY_MS,
-      });
+      await this.markRetry(
+        tenantId,
+        responseId,
+        row.sentimentAttempts,
+        'missing_api_key',
+        {
+          incrementAttempts: false,
+          retryInMs: MISSING_KEY_RETRY_MS,
+        },
+      );
       return 'retry';
     }
 
@@ -86,28 +99,48 @@ export class SentimentService {
       await this.persistSuccess(tenantId, responseId, parsed);
       return 'classified';
     } catch (err: unknown) {
-      const message = (err instanceof Error ? err.message : String(err)).slice(0, 500);
-      this.logger.warn(`Groq classify failed tenant=${tenantId} response=${responseId}: ${message}`);
-      await this.markRetry(tenantId, responseId, row.sentimentAttempts, message, {
-        incrementAttempts: true,
-      });
+      const message = (err instanceof Error ? err.message : String(err)).slice(
+        0,
+        500,
+      );
+      this.logger.warn(
+        `Groq classify failed tenant=${tenantId} response=${responseId}: ${message}`,
+      );
+      await this.markRetry(
+        tenantId,
+        responseId,
+        row.sentimentAttempts,
+        message,
+        {
+          incrementAttempts: true,
+        },
+      );
       return 'retry';
     }
   }
 
-  async processPendingBatch(opts?: { tenantId?: string; limit?: number }): Promise<{
+  async processPendingBatch(opts?: {
+    tenantId?: string;
+    limit?: number;
+  }): Promise<{
     processed: number;
     classified: number;
     skipped: number;
     failed: number;
   }> {
-    const limit = Math.max(1, Math.min(ENDPOINT_BATCH_MAX, opts?.limit ?? PROCESSOR_BATCH));
+    const limit = Math.max(
+      1,
+      Math.min(ENDPOINT_BATCH_MAX, opts?.limit ?? PROCESSOR_BATCH),
+    );
     const now = new Date();
     const where: Prisma.SurveyResponseWhereInput = {
       status: 'completed',
       sentiment: null,
       sentimentAttempts: { lt: MAX_ATTEMPTS },
-      OR: [{ sentimentNextAttemptAt: null }, { sentimentNextAttemptAt: { lte: now } }],
+      OR: [
+        { sentimentNextAttemptAt: null },
+        { sentimentNextAttemptAt: { lte: now } },
+      ],
       ...(opts?.tenantId ? { tenantId: opts.tenantId } : {}),
     };
 
@@ -138,14 +171,18 @@ export class SentimentService {
     return { processed: rows.length, classified, skipped, failed };
   }
 
-  private async persistSuccess(tenantId: string, responseId: string, result: ClassificationResult) {
+  private async persistSuccess(
+    tenantId: string,
+    responseId: string,
+    result: ClassificationResult,
+  ) {
     await this.prisma.surveyResponse.updateMany({
       where: { id: responseId, tenantId, sentiment: null },
       data: {
-        sentiment: result.label as ResponseSentiment,
+        sentiment: result.label,
         sentimentTheme: result.theme,
         sentimentSummary: result.summary,
-        sentimentSource: result.source as SentimentSource,
+        sentimentSource: result.source,
         sentimentClassifiedAt: new Date(),
         sentimentLastError: null,
         sentimentNextAttemptAt: null,
@@ -160,9 +197,12 @@ export class SentimentService {
     error: string,
     opts: { incrementAttempts: boolean; retryInMs?: number },
   ) {
-    const attempts = opts.incrementAttempts ? currentAttempts + 1 : currentAttempts;
+    const attempts = opts.incrementAttempts
+      ? currentAttempts + 1
+      : currentAttempts;
     const retryInMs =
-      opts.retryInMs ?? BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length - 1)] * 60_000;
+      opts.retryInMs ??
+      BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length - 1)] * 60_000;
     await this.prisma.surveyResponse.updateMany({
       where: { id: responseId, tenantId, sentiment: null },
       data: {

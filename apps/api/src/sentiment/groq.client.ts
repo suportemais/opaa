@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import { buildGroqUserPrompt, GROQ_SYSTEM_PROMPT } from '../domain/sentiment/classify';
+import {
+  buildGroqUserPrompt,
+  GROQ_SYSTEM_PROMPT,
+} from '../domain/sentiment/classify';
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
@@ -17,11 +20,17 @@ export class GroqClient {
   }
 
   model(): string {
-    return (this.config.get<string>('GROQ_MODEL') ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+    return (
+      (this.config.get<string>('GROQ_MODEL') ?? DEFAULT_MODEL).trim() ||
+      DEFAULT_MODEL
+    );
   }
 
   baseUrl(): string {
-    return (this.config.get<string>('GROQ_BASE_URL') ?? DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL;
+    return (
+      (this.config.get<string>('GROQ_BASE_URL') ?? DEFAULT_BASE_URL).trim() ||
+      DEFAULT_BASE_URL
+    );
   }
 
   async classifyFeedback(params: {

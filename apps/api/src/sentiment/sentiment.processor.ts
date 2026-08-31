@@ -41,7 +41,9 @@ export class SentimentProcessor {
           );
         }
       } catch (err: unknown) {
-        this.logger.error(`Sentiment tick error: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.error(
+          `Sentiment tick error: ${err instanceof Error ? err.message : String(err)}`,
+        );
       } finally {
         this.running = false;
       }

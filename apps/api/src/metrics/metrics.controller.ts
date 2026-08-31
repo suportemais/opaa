@@ -43,13 +43,19 @@ export class MetricsController {
   // ============ REVIEWS - Plataformas Externas ============
   @Get('reviews/platform-cards')
   @RequirePermissions(PermissionCodes.ReviewRead)
-  reviewsPlatformCards(@CurrentUser() user: AuthUser, @Query() query: ReviewsQueryDto) {
+  reviewsPlatformCards(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ReviewsQueryDto,
+  ) {
     return this.metrics.reviewsPlatformCards(user, query);
   }
 
   @Get('reviews/by-unit')
   @RequirePermissions(PermissionCodes.ReviewRead)
-  reviewsByUnit(@CurrentUser() user: AuthUser, @Query() query: ReviewsQueryDto) {
+  reviewsByUnit(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ReviewsQueryDto,
+  ) {
     return this.metrics.reviewsByUnit(user, query);
   }
 
@@ -67,7 +73,10 @@ export class MetricsController {
 
   @Post('sentiment/backfill')
   @RequirePermissions(PermissionCodes.ResponseRead)
-  sentimentBackfill(@CurrentUser() user: AuthUser, @Body() dto: SentimentBackfillDto = {}) {
+  sentimentBackfill(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SentimentBackfillDto = {},
+  ) {
     return this.metrics.sentimentBackfill(user, dto ?? {});
   }
 }

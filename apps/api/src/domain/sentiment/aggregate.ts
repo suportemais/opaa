@@ -1,7 +1,7 @@
 import type { SentimentLabel } from './classify';
 
 export type SentimentRow = {
-  sentiment: SentimentLabel | string | null;
+  sentiment: string | null;
   sentimentTheme: string | null;
 };
 
