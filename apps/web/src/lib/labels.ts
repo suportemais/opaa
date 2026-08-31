@@ -1,3 +1,24 @@
+export function sentimentLabel(value: string | null | undefined) {
+  if (value === 'elogio') return 'Elogio';
+  if (value === 'reclamacao') return 'Reclamação';
+  if (value === 'neutro') return 'Neutro';
+  return value ?? '—';
+}
+
+export function sentimentThemeLabel(value: string | null | undefined) {
+  if (value === 'atendimento') return 'Atendimento';
+  if (value === 'espera') return 'Espera';
+  if (value === 'comida') return 'Comida';
+  if (value === 'preco') return 'Preço';
+  if (value === 'limpeza') return 'Limpeza';
+  if (value === 'qualidade') return 'Qualidade';
+  if (value === 'ambiente') return 'Ambiente';
+  if (value === 'entrega') return 'Entrega';
+  if (value === 'produto') return 'Produto';
+  if (value === 'outro') return 'Outro';
+  return value ?? '—';
+}
+
 export function npsClassLabel(value: string | null | undefined) {
   if (value === 'detractor') return 'Detrator';
   if (value === 'passive') return 'Neutro';

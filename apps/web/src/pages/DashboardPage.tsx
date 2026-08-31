@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
+import { sentimentLabel, sentimentThemeLabel } from '../lib/labels';
 
 type Unit = { id: string; name: string };
 type AuthMe = { name: string };
@@ -18,6 +19,18 @@ type CasesSummary = {
   due: { overdue: number; today: number; next7: number; noDue: number };
   byStatus: Record<string, number>;
   byPriority: Record<string, number>;
+};
+
+type SentimentCounts = { elogio: number; reclamacao: number; neutro: number };
+type SentimentThemeRow = SentimentCounts & { theme: string; total: number };
+type SentimentSummary = {
+  responses: number;
+  classified: number;
+  unclassified: number;
+  counts: SentimentCounts;
+  percents: SentimentCounts;
+  byTheme: SentimentThemeRow[];
+  groqConfigured: boolean;
 };
 
 type ReviewPlatform = 'google' | 'ifood' | 'tripadvisor' | 'reclameaqui';
@@ -43,6 +56,7 @@ function toIsoDate(d: Date) {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [rangeDays, setRangeDays] = useState(30);
   const [unitId, setUnitId] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -108,6 +122,30 @@ export function DashboardPage() {
     queryFn: () => apiFetch<NpsByUnit>(`/metrics/nps/by-unit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     enabled: !unitId,
   });
+
+  const sentiment = useQuery({
+    queryKey: ['metrics', 'sentimentSummary', from, to, unitId],
+    queryFn: () =>
+      apiFetch<SentimentSummary>(
+        `/metrics/sentiment/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${
+          unitId ? `&unitId=${encodeURIComponent(unitId)}` : ''
+        }`,
+      ),
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ processed: number }>('/metrics/sentiment/backfill', { method: 'POST', json: { limit: 5 } })
+      .then((res) => {
+        if (!cancelled && res.processed > 0) {
+          void queryClient.invalidateQueries({ queryKey: ['metrics', 'sentimentSummary'] });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to, unitId, queryClient]);
 
   function goFeedbacks(extra?: Record<string, string>) {
     const params = new URLSearchParams();
@@ -259,6 +297,15 @@ export function DashboardPage() {
         </button>
       </div>
 
+      <Card
+        title="Análise de feedback"
+        description={`Elogios vs reclamações no período ${from} → ${to}`}
+      >
+        {sentiment.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
+        {sentiment.isError && <div className="text-sm text-rose-700">Falha ao carregar análise</div>}
+        {sentiment.data && <SentimentAnalysis data={sentiment.data} />}
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-4">
         <button type="button" className="text-left" onClick={() => goKanban({ due: 'overdue' })}>
           <Card title="Vencidos" description="Casos abertos com prazo estourado">
@@ -353,6 +400,173 @@ export function DashboardPage() {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+function SentimentAnalysis(props: { data: SentimentSummary }) {
+  const data = props.data;
+  const classified = data.classified;
+  const empty = classified === 0;
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SentimentStat
+          label={sentimentLabel('elogio')}
+          value={data.counts.elogio}
+          percent={data.percents.elogio}
+          colorClass="text-emerald-600"
+          barClass="bg-emerald-500"
+        />
+        <SentimentStat
+          label={sentimentLabel('reclamacao')}
+          value={data.counts.reclamacao}
+          percent={data.percents.reclamacao}
+          colorClass="text-rose-600"
+          barClass="bg-rose-500"
+        />
+        <SentimentStat
+          label={sentimentLabel('neutro')}
+          value={data.counts.neutro}
+          percent={data.percents.neutro}
+          colorClass="text-slate-600"
+          barClass="bg-slate-500"
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3">
+          <div className="text-sm font-medium text-slate-900">Composição</div>
+          {empty ? (
+            <div className="text-sm text-slate-600">Sem respostas classificadas no período</div>
+          ) : (
+            <SentimentDonut counts={data.counts} percents={data.percents} classified={classified} />
+          )}
+        </div>
+
+        <div className="grid gap-3">
+          <div className="text-sm font-medium text-slate-900">Temas mais citados</div>
+          {data.byTheme.length === 0 ? (
+            <div className="text-sm text-slate-600">Nenhum tema extraído ainda</div>
+          ) : (
+            <div className="grid gap-2">
+              {data.byTheme.slice(0, 8).map((row) => (
+                <ThemeBar key={row.theme} row={row} max={data.byTheme[0]?.total || 1} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <span>
+          {data.classified} classificadas de {data.responses} respostas
+          {data.unclassified > 0 ? ` · ${data.unclassified} aguardando análise` : ''}
+        </span>
+        {!data.groqConfigured && (
+          <span>GROQ_API_KEY não configurada — notas sem comentário usam o NPS</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SentimentStat(props: {
+  label: string;
+  value: number;
+  percent: number;
+  colorClass: string;
+  barClass: string;
+}) {
+  return (
+    <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm text-slate-600">{props.label}</div>
+      <div className="flex items-baseline gap-2">
+        <div className={['text-2xl font-semibold', props.colorClass].join(' ')}>{props.value}</div>
+        <div className="text-sm text-slate-500">{props.percent}%</div>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+        <div className={['h-full', props.barClass].join(' ')} style={{ width: `${props.percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function SentimentDonut(props: {
+  counts: SentimentCounts;
+  percents: SentimentCounts;
+  classified: number;
+}) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const segments: Array<{ key: keyof SentimentCounts; color: string }> = [
+    { key: 'elogio', color: '#10b981' },
+    { key: 'reclamacao', color: '#f43f5e' },
+    { key: 'neutro', color: '#64748b' },
+  ];
+  let offset = 0;
+  const arcs = segments.map((seg) => {
+    const fraction = props.classified > 0 ? props.counts[seg.key] / props.classified : 0;
+    const length = fraction * circumference;
+    const dashOffset = -offset;
+    offset += length;
+    return { ...seg, length, dashOffset, fraction };
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-5">
+      <svg viewBox="0 0 48 48" className="h-28 w-28 shrink-0">
+        <circle cx="24" cy="24" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="7" />
+        {arcs.map((arc) =>
+          arc.length > 0 ? (
+            <circle
+              key={arc.key}
+              cx="24"
+              cy="24"
+              r={radius}
+              fill="none"
+              stroke={arc.color}
+              strokeWidth="7"
+              strokeDasharray={`${arc.length} ${circumference - arc.length}`}
+              strokeDashoffset={arc.dashOffset}
+              strokeLinecap="butt"
+              transform="rotate(-90 24 24)"
+            />
+          ) : null,
+        )}
+      </svg>
+      <div className="grid gap-1.5 text-sm">
+        {segments.map((seg) => (
+          <div key={seg.key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
+            <span className="text-slate-700">{sentimentLabel(seg.key)}</span>
+            <span className="text-slate-500">
+              {props.counts[seg.key]} ({props.percents[seg.key]}%)
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThemeBar(props: { row: SentimentThemeRow; max: number }) {
+  const width = props.max > 0 ? Math.round((props.row.total / props.max) * 100) : 0;
+  const elogioPct = props.row.total > 0 ? (props.row.elogio / props.row.total) * 100 : 0;
+  const reclamacaoPct = props.row.total > 0 ? (props.row.reclamacao / props.row.total) * 100 : 0;
+  const neutroPct = props.row.total > 0 ? (props.row.neutro / props.row.total) * 100 : 0;
+  return (
+    <div className="grid gap-1">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="font-medium text-slate-900">{sentimentThemeLabel(props.row.theme)}</div>
+        <div className="text-slate-600">{props.row.total}</div>
+      </div>
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100" style={{ maxWidth: `${Math.max(width, 12)}%` }}>
+        <div className="h-full bg-emerald-500" style={{ width: `${elogioPct}%` }} />
+        <div className="h-full bg-rose-500" style={{ width: `${reclamacaoPct}%` }} />
+        <div className="h-full bg-slate-500" style={{ width: `${neutroPct}%` }} />
+      </div>
     </div>
   );
 }

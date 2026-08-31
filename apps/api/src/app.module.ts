@@ -20,11 +20,13 @@ import { WhistleblowerModule } from './whistleblower/whistleblower.module';
 import { WebhookOutboxModule } from './webhook-outbox/webhook-outbox.module';
 import { MailerModule } from './mailer/mailer.module';
 import { ReviewSyncModule } from './review-sync/review-sync.module';
+import { SentimentModule } from './sentiment/sentiment.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ReviewSyncModule,
+    SentimentModule,
     MailerModule,
     WebhookOutboxModule,
     PrismaModule,

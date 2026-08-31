@@ -8,6 +8,7 @@ import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
 import { badScoreThresholdFromSettings } from '../common/tenant-settings';
 import { googleBusinessUrlFromSettings } from '../common/unit-settings';
 import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
+import { SentimentService } from '../sentiment/sentiment.service';
 import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 
 type QuestionConfig = {
@@ -30,6 +31,7 @@ export class PublicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhookOutbox: WebhookOutboxService,
+    private readonly sentiment: SentimentService,
   ) {}
 
   async isAllowedDomain(domain: string) {
@@ -461,6 +463,8 @@ export class PublicService {
 
       return returned;
     });
+
+    this.sentiment.classifyLater(distribution.tenantId, response.id);
 
     return {
       responseId: response.id,

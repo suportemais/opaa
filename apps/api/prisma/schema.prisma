@@ -40,6 +40,18 @@ enum NpsClass {
   promoter
 }
 
+enum ResponseSentiment {
+  elogio
+  reclamacao
+  neutro
+}
+
+enum SentimentSource {
+  groq
+  score
+  skipped
+}
+
 enum FeedbackCaseStatus {
   new
   viewed
@@ -513,6 +525,14 @@ model SurveyResponse {
   consents       Json?
   metadata       Json?
   idempotencyKey String
+  sentiment              ResponseSentiment?
+  sentimentTheme         String?
+  sentimentSummary       String?
+  sentimentSource        SentimentSource?
+  sentimentClassifiedAt  DateTime?
+  sentimentAttempts      Int       @default(0)
+  sentimentLastError     String?
+  sentimentNextAttemptAt DateTime?
 
   tenant         Tenant @relation(fields: [tenantId], references: [id])
   survey         Survey @relation(fields: [surveyId], references: [id])
@@ -527,6 +547,8 @@ model SurveyResponse {
 
   @@unique([tenantId, surveyId, idempotencyKey])
   @@index([tenantId, surveyId, startedAt])
+  @@index([tenantId, completedAt, sentiment])
+  @@index([status, sentiment, sentimentNextAttemptAt])
   @@map("survey_responses")
 }
 

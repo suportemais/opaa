@@ -9,6 +9,9 @@ import type { CasesQueryDto } from './dto/cases-query.dto';
 import type { ReviewsQueryDto } from './dto/reviews-query.dto';
 import type { ReviewPlatformCard } from '../units/dto/review-profile.dto';
 import { ReviewPlatform, ReviewSentiment, SyncStatus } from '@prisma/client';
+import { SentimentService } from '../sentiment/sentiment.service';
+import { aggregateSentiment } from '../domain/sentiment/aggregate';
+import type { SentimentBackfillDto } from './dto/sentiment-backfill.dto';
 
 function startOfUtcDay(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
@@ -20,7 +23,10 @@ function endOfUtcDay(d: Date) {
 
 @Injectable()
 export class MetricsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sentiment: SentimentService,
+  ) {}
 
   private resolveRange(query: NpsQueryDto) {
     const toInput = query.to ? new Date(query.to) : new Date();
@@ -447,5 +453,45 @@ export class MetricsService {
       offset,
       items: rows,
     };
+  }
+
+  private responseUnitWhere(scope: {
+    canSeeAllUnits: boolean;
+    unitIds: string[] | null;
+    unitId?: string;
+  }): Prisma.SurveyResponseWhereInput {
+    if (scope.unitId) return { unitId: scope.unitId };
+    if (scope.canSeeAllUnits) return {};
+    return { OR: [{ unitId: { in: scope.unitIds! } }, { unitId: null }] };
+  }
+
+  async sentimentSummary(user: AuthUser, query: NpsQueryDto) {
+    const { from, to } = this.resolveRange(query);
+    const scope = await this.resolveUnitScope(user, query.unitId);
+
+    const rows = await this.prisma.surveyResponse.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: 'completed',
+        completedAt: { gte: from, lte: to },
+        ...this.responseUnitWhere(scope),
+      },
+      select: { sentiment: true, sentimentTheme: true },
+    });
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      unitId: scope.unitId ?? null,
+      groqConfigured: this.sentiment.isGroqConfigured(),
+      ...aggregateSentiment(rows),
+    };
+  }
+
+  async sentimentBackfill(user: AuthUser, dto: SentimentBackfillDto) {
+    return this.sentiment.processPendingBatch({
+      tenantId: user.tenantId,
+      limit: dto.limit ?? 8,
+    });
   }
 }
