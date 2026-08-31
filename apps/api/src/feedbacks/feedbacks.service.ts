@@ -70,6 +70,7 @@ export class FeedbacksService {
     if (params.npsClass === 'detractor' || params.npsClass === 'passive' || params.npsClass === 'promoter') {
       npsClass = params.npsClass;
     } else if (params.npsClass === 'any' || !params.npsClass) {
+      // no NPS class filter
     } else {
       throw new BadRequestException('invalid_nps_class');
     }
@@ -89,7 +90,9 @@ export class FeedbacksService {
     } else if (params.caseFilter === 'closed') {
       caseWhere.status = { in: ['resolved', 'closed', 'dismissed'] };
     } else if (params.caseFilter === 'with') {
+      // responses that have a case, no extra status filter
     } else if (params.caseFilter === 'none') {
+      // handled via relation filter below
     } else if (params.caseFilter) {
       throw new BadRequestException('invalid_case_filter');
     }
@@ -99,6 +102,7 @@ export class FeedbacksService {
     } else if (params.assignee === 'unassigned') {
       caseWhere.assigneeUserId = null;
     } else if (params.assignee === 'any' || !params.assignee) {
+      // no assignee filter
     } else {
       throw new BadRequestException('invalid_assignee');
     }
@@ -110,6 +114,7 @@ export class FeedbacksService {
     } else if (params.due === 'next7') {
       caseWhere.dueAt = { gte: todayStart, lt: next7Start };
     } else if (params.due === 'any' || !params.due) {
+      // no due-date filter
     } else {
       throw new BadRequestException('invalid_due');
     }
@@ -210,6 +215,7 @@ export class FeedbacksService {
     } else if (params.caseFilter === 'closed') {
       where.status = { in: ['resolved', 'closed', 'dismissed'] };
     } else if (params.caseFilter === 'with') {
+      // keep all statuses
     } else {
       throw new BadRequestException('invalid_case_filter');
     }
@@ -219,6 +225,7 @@ export class FeedbacksService {
     } else if (params.assignee === 'unassigned') {
       where.assigneeUserId = null;
     } else if (params.assignee === 'any' || !params.assignee) {
+      // no assignee filter
     } else {
       throw new BadRequestException('invalid_assignee');
     }
@@ -230,6 +237,7 @@ export class FeedbacksService {
     } else if (params.due === 'next7') {
       where.dueAt = { gte: todayStart, lt: next7Start };
     } else if (params.due === 'any' || !params.due) {
+      // no due-date filter
     } else {
       throw new BadRequestException('invalid_due');
     }

@@ -210,11 +210,8 @@ export class WhistleblowerService {
         return this.detail(user, existing.id);
       }
 
-      let updated;
       if (Object.keys(updatePayload).length > 0) {
-        updated = await tx.whistleblowerReport.update({ where: { id: existing.id }, data: updatePayload });
-      } else {
-        updated = existing;
+        await tx.whistleblowerReport.update({ where: { id: existing.id }, data: updatePayload });
       }
 
       if (events.length) {

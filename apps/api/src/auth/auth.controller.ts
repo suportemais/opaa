@@ -16,7 +16,7 @@ export class AuthController {
   private cookieSettings() {
     const basePath = process.env.API_BASE_PATH ?? '';
     const normalizedBase = basePath ? `/${basePath.replace(/^\/+|\/+$/g, '')}` : '';
-    const path = `${normalizedBase}/auth/refresh` || '/auth/refresh';
+    const path = `${normalizedBase}/auth/refresh`;
 
     const secure =
       (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.APP_BASE_URL ?? '').startsWith('https://');

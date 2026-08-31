@@ -82,7 +82,7 @@ export class EmployeesController {
         delimiter: [',', ';', '\t'],
         relax_column_count: true,
       }) as Array<Record<string, string>>;
-    } catch (e) {
+    } catch {
       throw new BadRequestException('invalid_csv');
     }
 

@@ -1,5 +1,5 @@
-import { IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
-import type { WhistleblowerCategory, WhistleblowerPriority, WhistleblowerStatus } from '@prisma/client';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import type { WhistleblowerPriority, WhistleblowerStatus } from '@prisma/client';
 
 export class UpdateWhistleblowerDto {
   @IsOptional()

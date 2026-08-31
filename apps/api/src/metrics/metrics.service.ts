@@ -8,7 +8,7 @@ import type { NpsQueryDto } from './dto/nps-query.dto';
 import type { CasesQueryDto } from './dto/cases-query.dto';
 import type { ReviewsQueryDto } from './dto/reviews-query.dto';
 import type { ReviewPlatformCard } from '../units/dto/review-profile.dto';
-import { ReviewPlatform, ReviewSentiment, SyncStatus } from '@prisma/client';
+import { ReviewPlatform, ReviewSentiment } from '@prisma/client';
 import { SentimentService } from '../sentiment/sentiment.service';
 import { aggregateSentiment } from '../domain/sentiment/aggregate';
 import type { SentimentBackfillDto } from './dto/sentiment-backfill.dto';
@@ -326,7 +326,7 @@ export class MetricsService {
         averageRating: rating,
         totalReviews: agg?._count._all ?? 0,
         lastSyncAt: profileInfo?.lastSyncAt ?? null,
-        syncStatus: profileInfo?.syncStatus ?? ('idle' as SyncStatus),
+        syncStatus: profileInfo?.syncStatus ?? 'idle',
         publicUrl: profileInfo?.publicUrl ?? null,
       };
     });

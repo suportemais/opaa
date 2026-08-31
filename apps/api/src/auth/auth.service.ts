@@ -421,24 +421,20 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(password);
 
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.passwordResetToken.update({
-          where: { id: row.id },
-          data: {
-            usedAt: new Date(),
-            ip: this.requestIp(req),
-            userAgent: this.requestUserAgent(req),
-          },
-        });
-        await tx.user.update({
-          where: { id: row.user!.id },
-          data: { passwordHash, refreshTokenHash: null, updatedAt: new Date() },
-        });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.update({
+        where: { id: row.id },
+        data: {
+          usedAt: new Date(),
+          ip: this.requestIp(req),
+          userAgent: this.requestUserAgent(req),
+        },
       });
-    } catch (e) {
-      throw e;
-    }
+      await tx.user.update({
+        where: { id: row.user!.id },
+        data: { passwordHash, refreshTokenHash: null, updatedAt: new Date() },
+      });
+    });
 
     await this.audit.log({
       tenantId: row.tenantId,
