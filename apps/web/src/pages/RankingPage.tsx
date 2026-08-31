@@ -135,10 +135,10 @@ function fmtHours(value: number | null | undefined) {
 }
 
 function fmtMonth(ym: string) {
+  const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   const [year, month] = ym.split('-').map(Number);
   if (!year || !month) return ym;
-  const d = new Date(Date.UTC(year, month - 1, 1));
-  return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+  return `${months[month - 1]}/${String(year).slice(-2)}`;
 }
 
 function npsClassName(nps: number | null | undefined) {
