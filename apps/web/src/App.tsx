@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -20,6 +20,7 @@ import { DenunciaDetailPage } from './pages/DenunciaDetailPage';
 import { PublicWhistleblowerPage } from './pages/PublicWhistleblowerPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { LandingPage } from './pages/LandingPage';
 import { getAccessToken } from './lib/auth-store';
 
 function RequireAuth(props: { children: React.ReactNode }) {
@@ -28,9 +29,18 @@ function RequireAuth(props: { children: React.ReactNode }) {
   return <>{props.children}</>;
 }
 
+function RedirectToOnboarding() {
+  const [searchParams] = useSearchParams();
+  const search = searchParams.toString();
+  return <Navigate to={search ? `/onboarding?${search}` : '/onboarding'} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/assinar" element={<RedirectToOnboarding />} />
+      <Route path="/register" element={<RedirectToOnboarding />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
