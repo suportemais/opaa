@@ -1,98 +1,8 @@
-export const PLAN_SECTION_TITLE = 'Planos pra sua operação';
-export const PLAN_SECTION_SUBTITLE = 'Preços claros pra rede e restaurante. Sem surpresa na fatura.';
-
 export type PlanFeature = {
   key: string;
   label: string;
   included: boolean;
 };
-
-export type PublicPlan = {
-  name: string;
-  slug: string;
-  amountCents: number;
-  currency: string;
-  badge: string | null;
-  shortDescription: string | null;
-  features: PlanFeature[];
-  trialDays: number;
-  ctaLabel: string;
-  featured: boolean;
-  maxUnits: number | null;
-  maxUsers: number | null;
-  annualAmountCents: number | null;
-  displayOrder: number;
-};
-
-export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
-  {
-    name: 'Start',
-    slug: 'start',
-    amountCents: 14700,
-    currency: 'BRL',
-    badge: 'Ideal para começar',
-    shortDescription: 'NPS e ocorrências para a sua unidade.',
-    features: [
-      { key: 'nps', label: 'Pesquisa NPS', included: true },
-      { key: 'occurrences', label: 'Ocorrências', included: true },
-      { key: 'units', label: '1 unidade', included: true },
-    ],
-    trialDays: 14,
-    ctaLabel: 'Assinar',
-    featured: false,
-    maxUnits: 1,
-    maxUsers: null,
-    annualAmountCents: 147000,
-    displayOrder: 1,
-  },
-  {
-    name: 'Pro',
-    slug: 'pro',
-    amountCents: 29700,
-    currency: 'BRL',
-    badge: 'Mais popular',
-    shortDescription: 'NPS, dashboard e Kanban para a sua unidade.',
-    features: [
-      { key: 'nps', label: 'Pesquisa NPS', included: true },
-      { key: 'occurrences', label: 'Ocorrências', included: true },
-      { key: 'dashboard', label: 'Dashboard', included: true },
-      { key: 'kanban', label: 'Kanban de atendimento', included: true },
-      { key: 'users', label: '5 usuários', included: true },
-      { key: 'units', label: '1 unidade', included: true },
-    ],
-    trialDays: 14,
-    ctaLabel: 'Assinar',
-    featured: true,
-    maxUnits: 1,
-    maxUsers: 5,
-    annualAmountCents: 297000,
-    displayOrder: 2,
-  },
-  {
-    name: 'Redes',
-    slug: 'redes',
-    amountCents: 69700,
-    currency: 'BRL',
-    badge: 'Para redes e franquias',
-    shortDescription: 'NPS e atendimento em todas as suas unidades.',
-    features: [
-      { key: 'nps', label: 'Pesquisa NPS', included: true },
-      { key: 'occurrences', label: 'Ocorrências', included: true },
-      { key: 'dashboard', label: 'Dashboard', included: true },
-      { key: 'kanban', label: 'Kanban de atendimento', included: true },
-      { key: 'unit_metrics', label: 'Métricas por unidade', included: true },
-      { key: 'units', label: 'Unidades ilimitadas', included: true },
-      { key: 'users', label: '20 usuários', included: true },
-    ],
-    trialDays: 14,
-    ctaLabel: 'Assinar',
-    featured: false,
-    maxUnits: null,
-    maxUsers: 20,
-    annualAmountCents: 697000,
-    displayOrder: 3,
-  },
-];
 
 function slugifyFeature(value: string) {
   const ascii = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -125,12 +35,6 @@ export function normalizeFeatures(raw: unknown): PlanFeature[] {
   return features;
 }
 
-function asNullableInt(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
-}
-
 export function formatPriceLabel(amountCents: number, currency = 'BRL'): string {
   const formatted = new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -141,60 +45,89 @@ export function formatPriceLabel(amountCents: number, currency = 'BRL'): string 
   return `${formatted}/mês`;
 }
 
-export function formatAnnualPriceLabel(amountCents: number, currency = 'BRL'): string {
-  const formatted = new Intl.NumberFormat('pt-BR', {
+export type PublicPlan = {
+  slug: string;
+  name: string;
+  badge: string;
+  summary: string;
+  shortDescription?: string | null;
+  priceCents: number;
+  amountCents?: number;
+  currency: string;
+  features: string[];
+  ctaLabel: string;
+  trialDays: number;
+  sortOrder: number;
+  displayOrder?: number;
+  featured?: boolean;
+  maxUnits?: number | null;
+  maxUsers?: number | null;
+  annualAmountCents?: number | null;
+};
+
+/** Catálogo comercial travado (op-20260903-02 / LANDING_COPY). Usado se GET /public/plans falhar. */
+export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
+  {
+    slug: 'start',
+    name: 'Start',
+    badge: 'Ideal para começar',
+    summary: 'NPS e ocorrências para a sua unidade.',
+    priceCents: 14700,
+    currency: 'BRL',
+    features: ['Pesquisa NPS', 'Ocorrências', '1 unidade'],
+    ctaLabel: 'Assinar',
+    trialDays: 14,
+    sortOrder: 1,
+  },
+  {
+    slug: 'pro',
+    name: 'Pro',
+    badge: 'Mais popular',
+    summary: 'NPS, dashboard e Kanban para a sua unidade.',
+    priceCents: 29700,
+    currency: 'BRL',
+    features: ['Pesquisa NPS', 'Ocorrências', 'Dashboard', 'Kanban de atendimento', '5 usuários', '1 unidade'],
+    ctaLabel: 'Assinar',
+    trialDays: 14,
+    sortOrder: 2,
+  },
+  {
+    slug: 'redes',
+    name: 'Redes',
+    badge: 'Para redes e franquias',
+    summary: 'NPS e atendimento em todas as suas unidades.',
+    priceCents: 69700,
+    currency: 'BRL',
+    features: [
+      'Pesquisa NPS',
+      'Ocorrências',
+      'Dashboard',
+      'Kanban de atendimento',
+      'Métricas por unidade',
+      'Unidades ilimitadas',
+      '20 usuários',
+    ],
+    ctaLabel: 'Assinar',
+    trialDays: 14,
+    sortOrder: 3,
+  },
+];
+
+/** Começar / trial: /onboarding. Assinar: /onboarding?plan=slug. */
+export const START_HREF = '/onboarding';
+export const PLAN_SUBSCRIBE_PATH = '/onboarding';
+
+export function subscribeHref(planSlug?: string) {
+  if (!planSlug) return START_HREF;
+  const params = new URLSearchParams({ plan: planSlug });
+  return `${PLAN_SUBSCRIBE_PATH}?${params.toString()}`;
+}
+
+export function formatPlanPrice(priceCents: number, currency = 'BRL') {
+  return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amountCents / 100);
-  return `${formatted}/ano (2 meses grátis)`;
-}
-
-export function trialLabel(trialDays: number): string {
-  return `Teste grátis por ${trialDays} dias`;
-}
-
-export function normalizePublicPlans(rows: unknown[]): PublicPlan[] {
-  if (!Array.isArray(rows)) return [];
-  const plans: PublicPlan[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const record = row as Record<string, unknown>;
-    if (record.isPublic === false || record.isActive === false) continue;
-    const slug = typeof record.slug === 'string' ? record.slug.trim() : '';
-    const name = typeof record.name === 'string' ? record.name.trim() : '';
-    const amountCents = asNullableInt(record.amountCents);
-    if (!slug || !name || amountCents === null || amountCents < 0) continue;
-    plans.push({
-      name,
-      slug,
-      amountCents,
-      currency: typeof record.currency === 'string' && record.currency.trim() ? record.currency.trim() : 'BRL',
-      badge: typeof record.badge === 'string' && record.badge.trim() ? record.badge.trim() : null,
-      shortDescription:
-        typeof record.shortDescription === 'string' && record.shortDescription.trim()
-          ? record.shortDescription.trim()
-          : null,
-      features: normalizeFeatures(record.features),
-      trialDays: asNullableInt(record.trialDays) ?? 14,
-      ctaLabel: typeof record.ctaLabel === 'string' && record.ctaLabel.trim() ? record.ctaLabel.trim() : 'Assinar',
-      featured: record.featured === true,
-      maxUnits: asNullableInt(record.maxUnits),
-      maxUsers: asNullableInt(record.maxUsers),
-      annualAmountCents: asNullableInt(record.annualAmountCents),
-      displayOrder: asNullableInt(record.displayOrder) ?? 0,
-    });
-  }
-  return plans.sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
-}
-
-export function resolvePublicPlans(rows: unknown[] | null | undefined): PublicPlan[] {
-  const normalized = normalizePublicPlans(rows ?? []);
-  return normalized.length > 0 ? normalized : FALLBACK_PUBLIC_PLANS;
-}
-
-export function findFallbackPlan(slug: string | null | undefined): PublicPlan | undefined {
-  if (!slug) return undefined;
-  return FALLBACK_PUBLIC_PLANS.find((plan) => plan.slug === slug);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(priceCents / 100);
 }

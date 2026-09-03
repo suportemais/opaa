@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="320" height="96" viewBox="0 0 320 96" fill="none">
   <defs>
     <linearGradient id="opiina-g-lg" x1="14" y1="14" x2="80" y2="80" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2563EB" />
-      <stop offset="1" stop-color="#7C3AED" />
+      <stop stop-color="#1A94FF" />
+      <stop offset="1" stop-color="#7038F8" />
     </linearGradient>
   </defs>
 

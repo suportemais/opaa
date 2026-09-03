@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
 import { Card } from '../components/ui/Card';
@@ -19,8 +19,16 @@ function slugify(value: string) {
   return sliced || 'tenant';
 }
 
+const PLAN_LABELS: Record<string, string> = {
+  start: 'Start',
+  pro: 'Pro',
+  redes: 'Redes',
+};
+
 export function OnboardingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedPlan = PLAN_LABELS[searchParams.get('plan') ?? ''];
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const baseDomain = env.appBaseDomain ?? hostname;
   const [loading, setLoading] = useState(false);
@@ -91,6 +99,9 @@ export function OnboardingPage() {
           <div>
             <div className="text-lg font-semibold text-slate-900">Onboarding</div>
             <div className="text-sm text-slate-600">Crie seu tenant e o primeiro administrador</div>
+            {selectedPlan && (
+              <div className="mt-2 text-sm text-sky-700">Plano selecionado: {selectedPlan}</div>
+            )}
           </div>
           <Link to="/login" className="text-sm text-slate-600 hover:underline">
             Já tenho conta

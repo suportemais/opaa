@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from './components/layout/AppShell';
 import { AdminShell } from './components/layout/AdminShell';
@@ -27,6 +27,7 @@ import { AdminAccountsPage } from './pages/admin/AdminAccountsPage';
 import { AdminAccountDetailPage } from './pages/admin/AdminAccountDetailPage';
 import { AdminPlansPage } from './pages/admin/AdminPlansPage';
 import { AdminSubscriptionsPage } from './pages/admin/AdminSubscriptionsPage';
+import { LandingPage } from './pages/LandingPage';
 import { getAccessToken } from './lib/auth-store';
 import { apiFetch } from './lib/api';
 import { isPlatformOperator } from './lib/billing-access';
@@ -67,9 +68,18 @@ function RequirePlatformAdmin(props: { children: React.ReactNode }) {
   return <>{props.children}</>;
 }
 
+function RedirectToOnboarding() {
+  const [searchParams] = useSearchParams();
+  const search = searchParams.toString();
+  return <Navigate to={search ? `/onboarding?${search}` : '/onboarding'} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/assinar" element={<RedirectToOnboarding />} />
+      <Route path="/register" element={<RedirectToOnboarding />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -106,6 +116,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="ranking" element={<RankingPage />} />
         <Route path="company" element={<CompanyPage />} />
+        <Route path="plans" element={<Navigate to="/admin/plans" replace />} />
         <Route path="units" element={<UnitsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="employees" element={<EmployeesPage />} />

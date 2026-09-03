@@ -10,6 +10,7 @@ import { googleBusinessUrlFromSettings } from '../common/unit-settings';
 import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
 import { SentimentService } from '../sentiment/sentiment.service';
 import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
+import { listPublicPlans } from './public-plans';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -33,6 +34,10 @@ export class PublicService {
     private readonly webhookOutbox: WebhookOutboxService,
     private readonly sentiment: SentimentService,
   ) {}
+
+  listPublicPlans() {
+    return listPublicPlans();
+  }
 
   async isAllowedDomain(domain: string) {
     const base = baseDomain();

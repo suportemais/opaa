@@ -8,6 +8,11 @@ import type { Request } from 'express';
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}
 
+  @Get('plans')
+  listPlans() {
+    return this.publicService.listPublicPlans();
+  }
+
   @Get('caddy/ask')
   async caddyAsk(@Query('domain') domain?: string, @Req() req?: Request) {
     const fallback = req?.query?.domain;
