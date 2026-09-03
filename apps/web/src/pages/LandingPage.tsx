@@ -153,7 +153,7 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
   return (
     <article className="flex h-full flex-col justify-between gap-4 rounded-[28px] border border-opiina-border bg-white p-5 md:flex-row md:items-end">
       <div className="min-w-0 flex-1">
-        <PlanBadge slug={plan.slug} label={plan.badge} />
+        <PlanBadge slug={plan.slug} label={plan.badge}"} />
         <h3 className="mt-3 text-xl font-semibold text-opiina-navy">{plan.name}</h3>
         <p className="mt-1 text-sm text-opiina-muted">{plan.summary}</p>
         <div className="mt-3 flex items-end gap-1">
