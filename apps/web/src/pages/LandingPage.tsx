@@ -46,6 +46,12 @@ function Hero() {
           >
             {LANDING_COPY.hero.ctaPrimary}
           </Link>
+          <a
+            href="#planos"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-opiina-cta px-5 text-sm font-medium text-opiina-cta hover:bg-opiina-bg"
+          >
+            {LANDING_COPY.hero.ctaPlan}
+          </a>
           <a href="#como-funciona" className="text-sm font-medium text-opiina-cta hover:underline">
             {LANDING_COPY.hero.ctaSecondary}
           </a>
@@ -184,14 +190,21 @@ function Who() {
     <section id="para-quem" className="scroll-mt-20 px-4 py-10 md:px-6">
       <div className="mx-auto w-full max-w-5xl">
         <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.who.title}</h2>
-        <ul className="mt-6 space-y-3">
-          {LANDING_COPY.who.items.map((item) => (
-            <li key={item} className="flex items-start gap-3 text-sm leading-relaxed text-opiina-navy">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-opiina-navy" />
-              <span>{item}</span>
-            </li>
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          {LANDING_COPY.who.blocks.map((block) => (
+            <div key={block.title} className="rounded-[28px] border border-opiina-border bg-white px-5 py-4">
+              <div
+                className={[
+                  'text-base font-semibold',
+                  block.title === 'Rede' ? 'text-opiina-violet' : 'text-opiina-cyan',
+                ].join(' ')}
+              >
+                {block.title}
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-opiina-navy">{block.body}</p>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
     </section>
   );
