@@ -7,13 +7,13 @@ export function MarketingShell(props: { children: React.ReactNode }) {
   return (
     <div className="min-h-full bg-white text-opiina-navy">
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
-          <Link to="/" className="min-w-0">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 overflow-visible px-4 py-3 md:px-6">
+          <Link to="/" className="min-w-0 overflow-visible">
             <BrandMark />
           </Link>
           <Link
             to={subscribeHref()}
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-opiina-cta px-4 text-sm font-medium text-white hover:bg-blue-700"
+            className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-opiina-cta px-4 text-sm font-medium text-white hover:bg-blue-700"
           >
             {LANDING_COPY.cta.primary}
           </Link>
