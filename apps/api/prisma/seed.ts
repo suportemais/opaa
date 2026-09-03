@@ -2,7 +2,14 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { NpsClass, PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
-import { AllPermissionCodes, PermissionCodes } from '../src/rbac/permission-codes';
+import {
+  AllPermissionCodes,
+  PermissionCodes,
+} from '../src/rbac/permission-codes';
+import {
+  ensurePlatformAdminRole,
+  PLATFORM_ADMIN_ROLE_CODE,
+} from '../src/rbac/platform-admin';
 import { randomToken } from '../src/common/crypto';
 import { upsertPlans } from './seed-plans';
 
@@ -91,6 +98,8 @@ async function createTenant(params: {
       tradeName: params.tradeName,
       email: params.email,
       status: 'active',
+      billingMode: 'stripe',
+      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       primaryColor: '#2563eb',
       secondaryColor: '#0ea5e9',
     },
@@ -103,7 +112,12 @@ async function createTenant(params: {
   const adminEmailNormalized = params.adminEmail.trim().toLowerCase();
 
   const admin = await prisma.user.upsert({
-    where: { tenantId_emailNormalized: { tenantId: tenant.id, emailNormalized: adminEmailNormalized } },
+    where: {
+      tenantId_emailNormalized: {
+        tenantId: tenant.id,
+        emailNormalized: adminEmailNormalized,
+      },
+    },
     create: {
       tenantId: tenant.id,
       email: params.adminEmail,
@@ -125,7 +139,9 @@ async function createTenant(params: {
     update: {},
   });
 
-  const existingUnit = await prisma.unit.findFirst({ where: { tenantId: tenant.id } });
+  const existingUnit = await prisma.unit.findFirst({
+    where: { tenantId: tenant.id },
+  });
   const unit =
     existingUnit ??
     (await prisma.unit.create({
@@ -200,7 +216,12 @@ async function createTenant(params: {
   });
 
   const existingDistribution = await prisma.surveyDistribution.findFirst({
-    where: { tenantId: tenant.id, surveyId: survey.id, unitId: unit.id, channel: 'qrcode' },
+    where: {
+      tenantId: tenant.id,
+      surveyId: survey.id,
+      unitId: unit.id,
+      channel: 'qrcode',
+    },
   });
   const distribution =
     existingDistribution ??
@@ -230,19 +251,86 @@ async function createTenant(params: {
       idempotencyKey: randomToken(16),
       answers: {
         create: [
-          { tenantId: tenant.id, questionId: version.questions[0]!.id, value: 10 as any },
-          { tenantId: tenant.id, questionId: version.questions[1]!.id, value: 'Excelente!' as any },
+          {
+            tenantId: tenant.id,
+            questionId: version.questions[0]!.id,
+            value: 10 as any,
+          },
+          {
+            tenantId: tenant.id,
+            questionId: version.questions[1]!.id,
+            value: 'Excelente!' as any,
+          },
         ],
       },
     },
   });
 
-  return { tenantId: tenant.id, adminEmail: admin.email, password: params.password, publicToken: distribution.publicToken };
+  return {
+    tenantId: tenant.id,
+    adminEmail: admin.email,
+    password: params.password,
+    publicToken: distribution.publicToken,
+  };
+}
+
+async function ensurePlatformOperator() {
+  await ensurePlatformAdminRole(prisma);
+
+  const tenant = await prisma.tenant.upsert({
+    where: { email: 'platform@devmais.local' },
+    create: {
+      slug: 'devmais',
+      legalName: 'Dev Mais Tecnologia LTDA',
+      tradeName: 'Dev Mais',
+      email: 'platform@devmais.local',
+      status: 'active',
+      billingMode: 'manual',
+      isPlatform: true,
+      primaryColor: '#06b6d4',
+      secondaryColor: '#8b5cf6',
+    },
+    update: { isPlatform: true, billingMode: 'manual' },
+  });
+
+  const passwordHash = await argon2.hash(
+    process.env.PLATFORM_ADMIN_PASSWORD ?? 'Admin1234!',
+  );
+  const emailNormalized = 'ops@devmais.local';
+
+  const user = await prisma.user.upsert({
+    where: {
+      tenantId_emailNormalized: { tenantId: tenant.id, emailNormalized },
+    },
+    create: {
+      tenantId: tenant.id,
+      email: 'ops@devmais.local',
+      emailNormalized,
+      name: 'Operador Dev Mais',
+      passwordHash,
+      status: 'active',
+    },
+    update: {},
+  });
+
+  const role = await prisma.role.findFirst({
+    where: { tenantId: null, code: PLATFORM_ADMIN_ROLE_CODE },
+  });
+  if (role) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: user.id, roleId: role.id } },
+      create: { userId: user.id, roleId: role.id },
+      update: {},
+    });
+  }
+
+  return { tenantId: tenant.id, email: user.email };
 }
 
 async function main() {
   await ensureGlobalPermissions();
-  await upsertPlans(prisma);
+  const plans = await upsertPlans(prisma);
+  const platform = await ensurePlatformOperator();
 
   const t1 = await createTenant({
     legalName: 'Opiina Demo Restaurante LTDA',
@@ -262,7 +350,7 @@ async function main() {
     password: 'Admin1234!',
   });
 
-  console.log({ t1, t2 });
+  console.log({ t1, t2, platform, plans });
 }
 
 main()

@@ -10,10 +10,10 @@ export class RbacSyncService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap() {
+    await this.rbac.ensurePlatformAdminRole();
     const tenants = await this.prisma.tenant.findMany({ select: { id: true } });
     for (const t of tenants) {
       await this.rbac.ensureTenantDefaultRoles(t.id);
     }
   }
 }
-

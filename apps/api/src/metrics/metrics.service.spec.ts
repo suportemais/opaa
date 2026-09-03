@@ -11,6 +11,7 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     email: 'ana@example.com',
     phone: null,
     permissionCodes: [PermissionCodes.UnitManage, PermissionCodes.ResponseRead],
+    roleCodes: [],
     unitIds: [],
     ...overrides,
   };

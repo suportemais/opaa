@@ -32,16 +32,19 @@ export class OnboardingService {
     const passwordHash = await argon2.hash(dto.adminPassword);
     const adminEmailNormalized = normalizeEmail(dto.adminEmail);
     const normalizedDoc = normalizeBrDocument(dto.document);
-    if (dto.document && !normalizedDoc) throw new ConflictException('Documento inválido.');
+    if (dto.document && !normalizedDoc)
+      throw new ConflictException('Documento inválido.');
 
     const baseSlug = slugify(dto.tenantSlug ?? dto.tradeName);
 
     for (let attempt = 0; attempt < 5; attempt++) {
-      const suffix = attempt === 0 ? '' : `-${Math.random().toString(36).slice(2, 6)}`;
+      const suffix =
+        attempt === 0 ? '' : `-${Math.random().toString(36).slice(2, 6)}`;
       const slug = `${baseSlug}${suffix}`;
 
       try {
         const result = await this.prisma.$transaction(async (tx) => {
+          const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
           const tenant = await tx.tenant.create({
             data: {
               slug,
@@ -54,6 +57,8 @@ export class OnboardingService {
               primaryColor: dto.primaryColor,
               secondaryColor: dto.secondaryColor,
               status: 'trial',
+              billingMode: 'stripe',
+              trialEndsAt,
             },
           });
 
@@ -71,7 +76,9 @@ export class OnboardingService {
           });
 
           const adminRole = await tx.role.findUniqueOrThrow({
-            where: { tenantId_code: { tenantId: tenant.id, code: 'tenant_admin' } },
+            where: {
+              tenantId_code: { tenantId: tenant.id, code: 'tenant_admin' },
+            },
           });
 
           await tx.userRole.create({
@@ -98,20 +105,33 @@ export class OnboardingService {
               action: 'onboarding.tenant_created',
               entity: 'Tenant',
               entityId: tenant.id,
-              summary: { tradeName: tenant.tradeName, slug: tenant.slug } as any,
+              summary: {
+                tradeName: tenant.tradeName,
+                slug: tenant.slug,
+              } as any,
               ip: req?.ip,
               userAgent: req?.headers['user-agent'],
               correlationId:
-                typeof req?.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : 'onboarding',
+                typeof req?.headers['x-correlation-id'] === 'string'
+                  ? req.headers['x-correlation-id']
+                  : 'onboarding',
             },
           });
 
-          return { tenantId: tenant.id, tenantSlug: tenant.slug, adminUserId: user.id, unitId: unit.id };
+          return {
+            tenantId: tenant.id,
+            tenantSlug: tenant.slug,
+            adminUserId: user.id,
+            unitId: unit.id,
+          };
         });
 
         return result;
       } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002'
+        ) {
           const target = (e.meta as any)?.target;
           if (Array.isArray(target) && target.includes('slug')) continue;
           throw new ConflictException('Já existe um registro com este e-mail.');

@@ -5,5 +5,6 @@ export type AuthUser = {
   email: string;
   phone: string | null;
   permissionCodes: string[];
+  roleCodes: string[];
   unitIds: string[];
 };

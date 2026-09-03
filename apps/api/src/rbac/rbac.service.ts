@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AllPermissionCodes, PermissionCodes } from './permission-codes';
+import { ensurePlatformAdminRole } from './platform-admin';
 
 @Injectable()
 export class RbacService {
@@ -28,6 +29,11 @@ export class RbacService {
         update: {},
       });
     }
+  }
+
+  async ensurePlatformAdminRole() {
+    await this.ensureGlobalPermissions();
+    return ensurePlatformAdminRole(this.prisma);
   }
 
   async ensureTenantDefaultRoles(tenantId: string) {
@@ -115,7 +121,9 @@ export class RbacService {
         update: { name: roleDef.name },
       });
 
-      await this.prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+      await this.prisma.rolePermission.deleteMany({
+        where: { roleId: role.id },
+      });
 
       const permissions = await this.prisma.permission.findMany({
         where: { code: { in: [...roleDef.permissions] } },
@@ -124,7 +132,10 @@ export class RbacService {
 
       if (permissions.length) {
         await this.prisma.rolePermission.createMany({
-          data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })),
+          data: permissions.map((p) => ({
+            roleId: role.id,
+            permissionId: p.id,
+          })),
         });
       }
     }

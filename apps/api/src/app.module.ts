@@ -22,6 +22,7 @@ import { MailerModule } from './mailer/mailer.module';
 import { ReviewSyncModule } from './review-sync/review-sync.module';
 import { SentimentModule } from './sentiment/sentiment.module';
 import { PlansModule } from './plans/plans.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { PlansModule } from './plans/plans.module';
     TenantModule,
     EmployeesModule,
     WhistleblowerModule,
+    PlatformModule,
   ],
   controllers: [AppController],
   providers: [AppService],
