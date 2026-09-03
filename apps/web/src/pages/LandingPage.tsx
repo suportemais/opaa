@@ -140,7 +140,8 @@ function Plans() {
   );
 }
 
-function PlanBadge({ slug, label }: { slug: string; label: string }) {
+function PlanBadge({ slug, label }: { slug: string; label: string | null }) {
+  if (!label) return null;
   const tone =
     slug === 'pro'
       ? 'bg-opiina-cta text-white'
