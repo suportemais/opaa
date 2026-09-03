@@ -21,11 +21,11 @@ export function SpeechBubble({ className = 'h-9 w-9' }: { className?: string }) 
 
 export function BrandMark() {
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex min-w-0 items-center gap-2">
       <SpeechBubble className="h-9 w-9 shrink-0" />
       <span className="min-w-0 leading-tight">
         <span className="block text-base font-semibold text-opiina-navy">Opiina</span>
-        <span className="block text-[11px] text-opiina-muted">{LANDING_COPY.brand.tagline}</span>
+        <span className="block text-[11px] leading-tight text-opiina-muted">{LANDING_COPY.brand.tagline}</span>
       </span>
     </span>
   );
