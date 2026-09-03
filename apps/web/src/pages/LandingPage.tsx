@@ -146,10 +146,25 @@ function Plans() {
   );
 }
 
+function PlanBadge({ slug, label }: { slug: string; label: string }) {
+  const solid = slug === 'pro';
+  return (
+    <span
+      className={[
+        'inline-flex w-fit max-w-full rounded-full px-2.5 py-1 text-[11px] font-medium leading-none',
+        solid ? 'bg-opiina-cta text-white' : 'border border-opiina-border bg-opiina-bg text-opiina-navy',
+      ].join(' ')}
+    >
+      {label}
+    </span>
+  );
+}
+
 function PlanCard({ plan }: { plan: PublicPlan }) {
   return (
     <article className="flex h-full flex-col rounded-[28px] border border-opiina-border bg-white p-5 md:p-6">
-      <h3 className="text-xl font-semibold text-opiina-navy">{plan.name}</h3>
+      <PlanBadge slug={plan.slug} label={plan.badge} />
+      <h3 className="mt-3 text-xl font-semibold text-opiina-navy">{plan.name}</h3>
       <p className="mt-2 text-sm text-opiina-muted">{plan.summary}</p>
       <div className="mt-4 flex items-end gap-1">
         <div className="text-3xl font-semibold text-opiina-navy">
