@@ -1,4 +1,8 @@
 export const LANDING_COPY = {
+  brand: {
+    tagline: 'Ouça · Entenda · Fidelize',
+    chips: ['NPS', 'Ocorrências', 'Kanban'],
+  },
   hero: {
     headline: 'O que o cliente sente. O que a casa precisa fazer.',
     sub: 'Capture o NPS, abra a ocorrência e acompanhe o atendimento num fluxo simples — numa unidade ou na rede toda.',
