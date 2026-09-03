@@ -46,6 +46,12 @@ function Hero() {
           >
             {LANDING_COPY.hero.ctaPrimary}
           </Link>
+          <a
+            href="#planos"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-opiina-cta px-5 text-sm font-medium text-opiina-cta hover:bg-opiina-bg"
+          >
+            {LANDING_COPY.hero.ctaPlan}
+          </a>
           <a href="#como-funciona" className="text-sm font-medium text-opiina-cta hover:underline">
             {LANDING_COPY.hero.ctaSecondary}
           </a>
@@ -153,7 +159,7 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
   return (
     <article className="flex h-full flex-col justify-between gap-4 rounded-[28px] border border-opiina-border bg-white p-5 md:flex-row md:items-end">
       <div className="min-w-0 flex-1">
-        <PlanBadge slug={plan.slug} label={plan.badge}"} />
+        <PlanBadge slug={plan.slug} label={plan.badge} />
         <h3 className="mt-3 text-xl font-semibold text-opiina-navy">{plan.name}</h3>
         <p className="mt-1 text-sm text-opiina-muted">{plan.summary}</p>
         <div className="mt-3 flex items-end gap-1">
@@ -171,7 +177,7 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
       </div>
       <Link
         to={subscribeHref(plan.slug)}
-        className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700 md:w-auto md:self-end"
+        className="inline-flex h-10 shrink-0 items-center justify-center self-end rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700"
       >
         {plan.ctaLabel}
       </Link>
@@ -184,7 +190,7 @@ function Who() {
     <section id="para-quem" className="scroll-mt-20 px-4 py-10 md:px-6">
       <div className="mx-auto w-full max-w-5xl">
         <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.who.title}</h2>
-        <div className="mt-6 grid items-stretch gap-3 md:grid-cols-2">
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
           {LANDING_COPY.who.blocks.map((block) => (
             <div key={block.title} className="rounded-[28px] border border-opiina-border bg-white px-5 py-4">
               <div
@@ -195,14 +201,7 @@ function Who() {
               >
                 {block.title}
               </div>
-              <ul className="mt-3 space-y-2">
-                {block.items.map((item) => (
-                  <li key={item} className="flex items-start gap-3 text-sm leading-relaxed text-opiina-navy">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-opiina-navy" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-2 text-sm leading-relaxed text-opiina-navy">{block.body}</p>
             </div>
           ))}
         </div>
