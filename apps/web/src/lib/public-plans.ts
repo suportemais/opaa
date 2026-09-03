@@ -59,10 +59,12 @@ export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
   },
 ];
 
-export const PLAN_SUBSCRIBE_PATH = '/onboarding';
+/** Começar / trial: /register → onboarding. Assinar: /register?plan=slug (Stripe depois). */
+export const START_HREF = '/register';
+export const PLAN_SUBSCRIBE_PATH = '/register';
 
 export function subscribeHref(planSlug?: string) {
-  if (!planSlug) return PLAN_SUBSCRIBE_PATH;
+  if (!planSlug) return START_HREF;
   const params = new URLSearchParams({ plan: planSlug });
   return `${PLAN_SUBSCRIBE_PATH}?${params.toString()}`;
 }
