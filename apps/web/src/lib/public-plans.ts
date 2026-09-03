@@ -11,16 +11,16 @@ export type PublicPlan = {
   sortOrder: number;
 };
 
-/** Catálogo comercial travado (op-20260903-02). Usado se GET /public/plans falhar. */
+/** Catálogo comercial travado (op-20260903-02 / LANDING_COPY). Usado se GET /public/plans falhar. */
 export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
   {
     slug: 'start',
     name: 'Start',
     badge: 'Ideal para começar',
-    summary: '[COPY]',
+    summary: 'NPS e ocorrências para a sua unidade.',
     priceCents: 14700,
     currency: 'BRL',
-    features: ['[COPY]', '[COPY]', '[COPY]'],
+    features: ['Pesquisa NPS', 'Ocorrências', '1 unidade'],
     ctaLabel: 'Assinar',
     trialDays: 14,
     sortOrder: 1,
@@ -29,10 +29,10 @@ export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
     slug: 'pro',
     name: 'Pro',
     badge: 'Mais popular',
-    summary: '[COPY]',
+    summary: 'NPS, dashboard e Kanban para a sua unidade.',
     priceCents: 29700,
     currency: 'BRL',
-    features: ['[COPY]', '[COPY]', '[COPY]', '[COPY]'],
+    features: ['Pesquisa NPS', 'Ocorrências', 'Dashboard', 'Kanban de atendimento', '5 usuários', '1 unidade'],
     ctaLabel: 'Assinar',
     trialDays: 14,
     sortOrder: 2,
@@ -41,10 +41,18 @@ export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
     slug: 'redes',
     name: 'Redes',
     badge: 'Para redes e franquias',
-    summary: '[COPY]',
+    summary: 'NPS e atendimento em todas as suas unidades.',
     priceCents: 69700,
     currency: 'BRL',
-    features: ['[COPY]', '[COPY]', '[COPY]', '[COPY]'],
+    features: [
+      'Pesquisa NPS',
+      'Ocorrências',
+      'Dashboard',
+      'Kanban de atendimento',
+      'Métricas por unidade',
+      'Unidades ilimitadas',
+      '20 usuários',
+    ],
     ctaLabel: 'Assinar',
     trialDays: 14,
     sortOrder: 3,

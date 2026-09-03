@@ -17,19 +17,16 @@ export type CommercialPlan = {
 
 export type PublicPlan = Omit<CommercialPlan, 'status' | 'isPublic'>;
 
-/**
- * Catálogo comercial travado (op-20260903-02).
- * summary/features ficam como [COPY] até o texto aprovado ser colado nestes campos.
- */
+/** Catálogo comercial travado (op-20260903-02 / LANDING_COPY). */
 export const COMMERCIAL_PLANS: CommercialPlan[] = [
   {
     slug: 'start',
     name: 'Start',
     badge: 'Ideal para começar',
-    summary: '[COPY]',
+    summary: 'NPS e ocorrências para a sua unidade.',
     priceCents: 14700,
     currency: 'BRL',
-    features: ['[COPY]', '[COPY]', '[COPY]'],
+    features: ['Pesquisa NPS', 'Ocorrências', '1 unidade'],
     ctaLabel: 'Assinar',
     trialDays: 14,
     status: 'ACTIVE',
@@ -40,10 +37,10 @@ export const COMMERCIAL_PLANS: CommercialPlan[] = [
     slug: 'pro',
     name: 'Pro',
     badge: 'Mais popular',
-    summary: '[COPY]',
+    summary: 'NPS, dashboard e Kanban para a sua unidade.',
     priceCents: 29700,
     currency: 'BRL',
-    features: ['[COPY]', '[COPY]', '[COPY]', '[COPY]'],
+    features: ['Pesquisa NPS', 'Ocorrências', 'Dashboard', 'Kanban de atendimento', '5 usuários', '1 unidade'],
     ctaLabel: 'Assinar',
     trialDays: 14,
     status: 'ACTIVE',
@@ -54,10 +51,18 @@ export const COMMERCIAL_PLANS: CommercialPlan[] = [
     slug: 'redes',
     name: 'Redes',
     badge: 'Para redes e franquias',
-    summary: '[COPY]',
+    summary: 'NPS e atendimento em todas as suas unidades.',
     priceCents: 69700,
     currency: 'BRL',
-    features: ['[COPY]', '[COPY]', '[COPY]', '[COPY]'],
+    features: [
+      'Pesquisa NPS',
+      'Ocorrências',
+      'Dashboard',
+      'Kanban de atendimento',
+      'Métricas por unidade',
+      'Unidades ilimitadas',
+      '20 usuários',
+    ],
     ctaLabel: 'Assinar',
     trialDays: 14,
     status: 'ACTIVE',

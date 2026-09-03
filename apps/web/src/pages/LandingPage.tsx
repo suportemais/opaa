@@ -3,28 +3,10 @@ import { Link, Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
 import { env } from '../lib/env';
+import { LANDING_COPY } from '../lib/landing-copy';
 import { FALLBACK_PUBLIC_PLANS, formatPlanPrice, subscribeHref, type PublicPlan } from '../lib/public-plans';
 import { MarketingShell } from '../components/layout/MarketingShell';
 import { Button } from '../components/ui/Button';
-
-const STEPS = [
-  { title: '[COPY] Passo 1', body: '[COPY] Descrição do primeiro passo.' },
-  { title: '[COPY] Passo 2', body: '[COPY] Descrição do segundo passo.' },
-  { title: '[COPY] Passo 3', body: '[COPY] Descrição do terceiro passo.' },
-] as const;
-
-const BENEFITS = [
-  { title: '[COPY] Benefício 1', body: '[COPY] Texto do benefício 1.' },
-  { title: '[COPY] Benefício 2', body: '[COPY] Texto do benefício 2.' },
-  { title: '[COPY] Benefício 3', body: '[COPY] Texto do benefício 3.' },
-] as const;
-
-const FAQS = [
-  { q: '[COPY] Pergunta 1?', a: '[COPY] Resposta 1.' },
-  { q: '[COPY] Pergunta 2?', a: '[COPY] Resposta 2.' },
-  { q: '[COPY] Pergunta 3?', a: '[COPY] Resposta 3.' },
-  { q: '[COPY] Pergunta 4?', a: '[COPY] Resposta 4.' },
-] as const;
 
 function isTenantSubdomain() {
   if (typeof window === 'undefined') return false;
@@ -44,6 +26,7 @@ export function LandingPage() {
       <Steps />
       <Benefits />
       <Plans />
+      <Who />
       <Faq />
       <FinalCta />
     </MarketingShell>
@@ -60,29 +43,32 @@ function Hero() {
         <div>
           <div className="text-sm font-medium text-sky-700">OPIINA</div>
           <h1 className="mt-3 text-4xl font-semibold leading-tight text-slate-900 md:text-5xl">
-            [COPY] Título do hero
+            {LANDING_COPY.hero.headline}
           </h1>
-          <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-600">
-            [COPY] Subtítulo do hero — uma ou duas frases sobre NPS e ocorrências para restaurantes e
-            redes.
-          </p>
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-600">{LANDING_COPY.hero.sub}</p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <a href="#planos">
-              <Button className="px-5 py-2.5">Assinar</Button>
-            </a>
-            <Link to="/login">
-              <Button variant="secondary" className="px-5 py-2.5">
-                Entrar
-              </Button>
+            <Link to={subscribeHref()}>
+              <Button className="px-5 py-2.5">{LANDING_COPY.hero.ctaPrimary}</Button>
             </Link>
+            <a href="#como-funciona">
+              <Button variant="secondary" className="px-5 py-2.5">
+                {LANDING_COPY.hero.ctaSecondary}
+              </Button>
+            </a>
           </div>
+          <div className="mt-3 text-sm text-slate-500">{LANDING_COPY.hero.micro}</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="text-sm font-medium text-slate-500">[COPY] Destaque</div>
+          <div className="text-sm font-medium text-slate-500">{LANDING_COPY.steps.eyebrow}</div>
           <div className="mt-3 space-y-3 text-sm text-slate-700">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">[COPY] Ponto 1</div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">[COPY] Ponto 2</div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">[COPY] Ponto 3</div>
+            {LANDING_COPY.steps.items.map((step, index) => (
+              <div key={step.title} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <span className="font-medium text-slate-900">
+                  {index + 1}. {step.title}
+                </span>
+                <span className="text-slate-600"> — {step.body}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -94,10 +80,10 @@ function Steps() {
   return (
     <section id="como-funciona" className="scroll-mt-20 border-t border-slate-100 bg-white">
       <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-        <h2 className="text-3xl font-semibold text-slate-900">[COPY] Como funciona</h2>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">[COPY] Subtítulo da seção de 3 passos.</p>
+        <div className="text-sm font-medium text-sky-700">{LANDING_COPY.steps.eyebrow}</div>
+        <h2 className="mt-2 text-3xl font-semibold text-slate-900">{LANDING_COPY.steps.title}</h2>
         <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {STEPS.map((step, index) => (
+          {LANDING_COPY.steps.items.map((step, index) => (
             <div key={step.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
               <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-sm font-semibold text-white">
                 {index + 1}
@@ -116,13 +102,11 @@ function Benefits() {
   return (
     <section id="beneficios" className="scroll-mt-20 bg-slate-50">
       <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-        <h2 className="text-3xl font-semibold text-slate-900">[COPY] Benefícios</h2>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">[COPY] Subtítulo da seção de benefícios.</p>
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {BENEFITS.map((item) => (
-            <div key={item.title} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-base font-semibold text-slate-900">{item.title}</div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.body}</p>
+        <h2 className="text-3xl font-semibold text-slate-900">{LANDING_COPY.benefits.title}</h2>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {LANDING_COPY.benefits.items.map((item) => (
+            <div key={item} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="text-base font-semibold text-slate-900">{item}</div>
             </div>
           ))}
         </div>
@@ -141,8 +125,8 @@ function Plans() {
     return (
       <section id="planos" className="scroll-mt-20 bg-white">
         <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-          <h2 className="text-3xl font-semibold text-slate-900">Planos pra sua operação</h2>
-          <p className="mt-2 text-sm text-slate-600">Carregando planos…</p>
+          <h2 className="text-3xl font-semibold text-slate-900">{LANDING_COPY.plans.title}</h2>
+          <p className="mt-2 text-sm text-slate-600">{LANDING_COPY.plans.subtitle}</p>
         </div>
       </section>
     );
@@ -154,10 +138,8 @@ function Plans() {
   return (
     <section id="planos" className="scroll-mt-20 bg-white">
       <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-        <h2 className="text-3xl font-semibold text-slate-900">Planos pra sua operação</h2>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Preços claros pra rede e restaurante. Sem surpresa na fatura.
-        </p>
+        <h2 className="text-3xl font-semibold text-slate-900">{LANDING_COPY.plans.title}</h2>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">{LANDING_COPY.plans.subtitle}</p>
         <div className="mt-10 grid gap-4 lg:grid-cols-3">
           {items.map((plan) => (
             <PlanCard key={plan.slug} plan={plan} />
@@ -206,8 +188,28 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
           {plan.ctaLabel}
         </Button>
       </Link>
-      <div className="mt-3 text-center text-sm text-slate-500">Teste grátis por 14 dias</div>
+      <div className="mt-3 text-center text-sm text-slate-500">{LANDING_COPY.plans.trialLine}</div>
     </article>
+  );
+}
+
+function Who() {
+  return (
+    <section id="para-quem" className="scroll-mt-20 bg-slate-50">
+      <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
+        <h2 className="text-3xl font-semibold text-slate-900">{LANDING_COPY.who.title}</h2>
+        <ul className="mt-8 grid gap-3 md:grid-cols-2">
+          {LANDING_COPY.who.items.map((item) => (
+            <li
+              key={item}
+              className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm leading-relaxed text-slate-700 shadow-sm"
+            >
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
 
@@ -215,12 +217,12 @@ function Faq() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="scroll-mt-20 bg-slate-50">
+    <section id="faq" className="scroll-mt-20 bg-white">
       <div className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
-        <h2 className="text-3xl font-semibold text-slate-900">[COPY] Perguntas frequentes</h2>
-        <p className="mt-2 text-sm text-slate-600">[COPY] Subtítulo da FAQ.</p>
+        <div className="text-sm font-medium text-sky-700">{LANDING_COPY.faq.eyebrow}</div>
+        <h2 className="mt-2 text-3xl font-semibold text-slate-900">{LANDING_COPY.faq.title}</h2>
         <div className="mt-8 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
-          {FAQS.map((item, index) => {
+          {LANDING_COPY.faq.items.map((item, index) => {
             const open = openIndex === index;
             return (
               <div key={item.q}>
@@ -248,18 +250,18 @@ function FinalCta() {
     <section className="bg-sky-600">
       <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-6 px-4 py-14 md:flex-row md:items-center md:px-6">
         <div>
-          <h2 className="text-3xl font-semibold text-white">[COPY] CTA final</h2>
-          <p className="mt-2 max-w-xl text-sm text-sky-100">[COPY] Texto de reforço do CTA.</p>
+          <h2 className="text-3xl font-semibold text-white">{LANDING_COPY.footer.microcopy}</h2>
+          <p className="mt-2 max-w-xl text-sm text-sky-100">{LANDING_COPY.hero.micro}</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <a href="#planos">
-            <Button className="bg-white text-sky-700 hover:bg-sky-50">Assinar</Button>
-          </a>
-          <Link to="/login">
-            <Button variant="ghost" className="text-white hover:bg-sky-500">
-              Entrar
-            </Button>
+          <Link to={subscribeHref()}>
+            <Button className="bg-white text-sky-700 hover:bg-sky-50">{LANDING_COPY.cta.primary}</Button>
           </Link>
+          <a href="#como-funciona">
+            <Button variant="ghost" className="text-white hover:bg-sky-500">
+              {LANDING_COPY.cta.secondary}
+            </Button>
+          </a>
         </div>
       </div>
     </section>

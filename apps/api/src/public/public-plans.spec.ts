@@ -31,5 +31,9 @@ describe('listPublicPlans', () => {
     expect(bySlug.redes?.badge).toBe('Para redes e franquias');
     expect(bySlug.pro?.ctaLabel).toBe('Assinar');
     expect(bySlug.start?.trialDays).toBe(14);
+    expect(bySlug.start?.summary).toBe('NPS e ocorrências para a sua unidade.');
+    expect(bySlug.pro?.summary).toBe('NPS, dashboard e Kanban para a sua unidade.');
+    expect(bySlug.redes?.summary).toBe('NPS e atendimento em todas as suas unidades.');
+    expect(bySlug.start?.features).toEqual(['Pesquisa NPS', 'Ocorrências', '1 unidade']);
   });
 });
