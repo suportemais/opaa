@@ -171,7 +171,7 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
       </div>
       <Link
         to={subscribeHref(plan.slug)}
-        className="inline-flex h-10 shrink-0 items-center justify-center self-end rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700"
+        className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700 md:w-auto md:self-end"
       >
         {plan.ctaLabel}
       </Link>
