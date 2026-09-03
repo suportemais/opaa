@@ -6,6 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { setAccessToken, setTenantId } from '../lib/auth-store';
+import { isPlatformOperator } from '../lib/billing-access';
 
 type TenantOption = { tenantId: string; tenantSlug?: string | null; tradeName?: string | null; legalName?: string | null };
 
@@ -48,7 +49,8 @@ export function LoginPage() {
       });
       setAccessToken(result.accessToken);
       setTenantId(result.tenantId);
-      navigate('/app');
+      const me = await apiFetch<{ permissionCodes: string[]; roleCodes?: string[] }>('/auth/me');
+      navigate(isPlatformOperator(me) ? '/admin' : '/app');
     } catch (err) {
       if (err instanceof ApiError) {
         const body = err.body as any;

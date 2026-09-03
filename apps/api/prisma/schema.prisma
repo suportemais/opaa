@@ -14,6 +14,17 @@ enum TenantStatus {
   cancelled
 }
 
+enum BillingMode {
+  stripe
+  manual
+}
+
+enum ManualAccessReason {
+  manual
+  cortesia
+  trial_grant
+}
+
 enum UserStatus {
   active
   disabled
@@ -165,7 +176,16 @@ model Tenant {
   cancelledAt   DateTime?
   settings      Json?
   limits        Json?
+  billingMode   BillingMode  @default(stripe)
+  planId        String?      @db.Uuid
+  trialEndsAt   DateTime?
+  accessValidUntil DateTime?
+  manualAccessReason ManualAccessReason?
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  isPlatform    Boolean      @default(false)
 
+  plan          Plan?        @relation(fields: [planId], references: [id])
   logoAsset     FileAsset?   @relation("TenantLogoAsset", fields: [logoAssetId], references: [id])
   users         User[]
   units         Unit[]
@@ -200,6 +220,8 @@ model Tenant {
   @@unique([email])
   @@unique([slug])
   @@index([status])
+  @@index([billingMode])
+  @@index([planId])
   @@map("tenants")
 }
 
@@ -1021,4 +1043,34 @@ model PasswordResetToken {
   @@index([tenantId, createdAt])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+model Plan {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String   @unique
+  shortDescription  String?
+  description       String?
+  badge             String?
+  ctaLabel          String   @default("Assinar")
+  amountCents       Int
+  currency          String   @default("BRL")
+  billingInterval   String   @default("MONTH")
+  trialDays         Int      @default(14)
+  features          Json
+  maxUnits          Int?
+  maxUsers          Int?
+  featured          Boolean  @default(false)
+  isPublic          Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  displayOrder      Int      @default(0)
+  annualAmountCents Int?
+  stripePriceId     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenants           Tenant[]
+
+  @@index([isPublic, displayOrder])
+  @@map("plans")
 }

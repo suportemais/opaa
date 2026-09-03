@@ -4,15 +4,26 @@ import { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { setAccessToken } from '../../lib/auth-store';
 import { apiFetch } from '../../lib/api';
+import { TenantBillingPrompts } from '../billing/TenantBillingPrompts';
+import type { TenantBilling } from '../../lib/billing-access';
 
 type AuthMe = {
   name: string;
   permissionCodes: string[];
 };
 
+type TenantMe = {
+  billing?: TenantBilling;
+};
+
 export function AppShell() {
   const navigate = useNavigate();
   const me = useQuery({ queryKey: ['authMe'], queryFn: () => apiFetch<AuthMe>('/auth/me') });
+  const tenant = useQuery({
+    queryKey: ['tenantMe'],
+    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ billing: undefined })),
+    staleTime: 60 * 1000,
+  });
 
   const permissionCodes = me.data?.permissionCodes ?? [];
   const canManageTenant = permissionCodes.includes('tenant:settings:manage');
@@ -162,6 +173,7 @@ export function AppShell() {
 
       <main className="flex-1 overflow-auto">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-4 md:p-8">
+          <TenantBillingPrompts billing={tenant.data?.billing} />
           <Outlet />
           <footer className="border-t border-slate-200 pt-6 text-center text-xs text-slate-500">
             Desenvolvido por{' '}

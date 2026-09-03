@@ -1,8 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
-import { badScoreThresholdFromSettings, withBadScoreThreshold } from '../common/tenant-settings';
+import {
+  badScoreThresholdFromSettings,
+  withBadScoreThreshold,
+} from '../common/tenant-settings';
 import { normalizeBrDocument } from '../common/br-document';
+import { shouldShowStripePrompts } from '../billing/billing-access';
 import type { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
@@ -26,6 +30,12 @@ export class TenantService {
         status: true,
         settings: true,
         createdAt: true,
+        billingMode: true,
+        planId: true,
+        trialEndsAt: true,
+        accessValidUntil: true,
+        manualAccessReason: true,
+        plan: { select: { id: true, name: true, slug: true } },
       },
     });
 
@@ -33,6 +43,18 @@ export class TenantService {
       ...tenant,
       settings: {
         badScoreThreshold: badScoreThresholdFromSettings(tenant.settings),
+      },
+      billing: {
+        billingMode: tenant.billingMode,
+        status: tenant.status,
+        plan: tenant.plan,
+        trialEndsAt: tenant.trialEndsAt,
+        accessValidUntil: tenant.accessValidUntil,
+        manualAccessReason: tenant.manualAccessReason,
+        requiresStripeCheckout: shouldShowStripePrompts({
+          billingMode: tenant.billingMode,
+          status: tenant.status,
+        }),
       },
     };
   }
@@ -44,7 +66,9 @@ export class TenantService {
     });
 
     const nextSettings =
-      typeof dto.badScoreThreshold === 'number' ? withBadScoreThreshold(current.settings, dto.badScoreThreshold) : current.settings;
+      typeof dto.badScoreThreshold === 'number'
+        ? withBadScoreThreshold(current.settings, dto.badScoreThreshold)
+        : current.settings;
 
     let nextDocument: string | null | undefined = dto.document;
     let nextLegalName: string | undefined = dto.legalName;
@@ -52,20 +76,37 @@ export class TenantService {
 
     if (dto.document !== undefined) {
       const normalized = normalizeBrDocument(dto.document);
-      if (dto.document && !normalized) throw new BadRequestException('invalid_document');
+      if (dto.document && !normalized)
+        throw new BadRequestException('invalid_document');
       nextDocument = normalized ? normalized.value : null;
 
       if (normalized?.type === 'cnpj') {
-        const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${normalized.value}`);
+        const res = await fetch(
+          `https://brasilapi.com.br/api/cnpj/v1/${normalized.value}`,
+        );
         if (!res.ok) throw new BadRequestException('cnpj_lookup_failed');
-        const data = (await res.json()) as any;
-        const razao = typeof data?.razao_social === 'string' && data.razao_social.trim() ? data.razao_social.trim() : null;
-        const fantasia = typeof data?.nome_fantasia === 'string' && data.nome_fantasia.trim() ? data.nome_fantasia.trim() : null;
+        const data = await res.json();
+        const razao =
+          typeof data?.razao_social === 'string' && data.razao_social.trim()
+            ? data.razao_social.trim()
+            : null;
+        const fantasia =
+          typeof data?.nome_fantasia === 'string' && data.nome_fantasia.trim()
+            ? data.nome_fantasia.trim()
+            : null;
 
-        if (!nextLegalName && (!current.legalName || !current.legalName.trim()) && razao) {
+        if (
+          !nextLegalName &&
+          (!current.legalName || !current.legalName.trim()) &&
+          razao
+        ) {
           nextLegalName = razao;
         }
-        if (!nextTradeName && (!current.tradeName || !current.tradeName.trim()) && fantasia) {
+        if (
+          !nextTradeName &&
+          (!current.tradeName || !current.tradeName.trim()) &&
+          fantasia
+        ) {
           nextTradeName = fantasia;
         }
       }
@@ -82,7 +123,7 @@ export class TenantService {
         segment: dto.segment,
         primaryColor: dto.primaryColor,
         secondaryColor: dto.secondaryColor,
-        settings: nextSettings as any,
+        settings: nextSettings,
       },
       select: {
         id: true,
@@ -98,6 +139,12 @@ export class TenantService {
         status: true,
         settings: true,
         createdAt: true,
+        billingMode: true,
+        planId: true,
+        trialEndsAt: true,
+        accessValidUntil: true,
+        manualAccessReason: true,
+        plan: { select: { id: true, name: true, slug: true } },
       },
     });
 
@@ -105,6 +152,18 @@ export class TenantService {
       ...updated,
       settings: {
         badScoreThreshold: badScoreThresholdFromSettings(updated.settings),
+      },
+      billing: {
+        billingMode: updated.billingMode,
+        status: updated.status,
+        plan: updated.plan,
+        trialEndsAt: updated.trialEndsAt,
+        accessValidUntil: updated.accessValidUntil,
+        manualAccessReason: updated.manualAccessReason,
+        requiresStripeCheckout: shouldShowStripePrompts({
+          billingMode: updated.billingMode,
+          status: updated.status,
+        }),
       },
     };
   }
