@@ -1,14 +1,68 @@
+export type PlanFeature = {
+  key: string;
+  label: string;
+  included: boolean;
+};
+
+function slugifyFeature(value: string) {
+  const ascii = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return ascii
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function normalizeFeatures(raw: unknown): PlanFeature[] {
+  if (!Array.isArray(raw)) return [];
+  const features: PlanFeature[] = [];
+  for (const [index, item] of raw.entries()) {
+    if (typeof item === 'string') {
+      const label = item.trim();
+      if (!label) continue;
+      features.push({ key: slugifyFeature(label) || `feature-${index}`, label, included: true });
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const record = item as { key?: unknown; label?: unknown; included?: unknown };
+    const label = typeof record.label === 'string' ? record.label.trim() : '';
+    if (!label) continue;
+    const key =
+      typeof record.key === 'string' && record.key.trim()
+        ? record.key.trim()
+        : slugifyFeature(label) || `feature-${index}`;
+    features.push({ key, label, included: record.included !== false });
+  }
+  return features;
+}
+
+export function formatPriceLabel(amountCents: number, currency = 'BRL'): string {
+  const formatted = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amountCents / 100);
+  return `${formatted}/mês`;
+}
+
 export type PublicPlan = {
   slug: string;
   name: string;
-  badge: string;
+  badge: string | null;
   summary: string;
+  shortDescription?: string | null;
   priceCents: number;
+  amountCents?: number;
   currency: string;
   features: string[];
   ctaLabel: string;
   trialDays: number;
   sortOrder: number;
+  displayOrder?: number;
+  featured?: boolean;
+  maxUnits?: number | null;
+  maxUsers?: number | null;
+  annualAmountCents?: number | null;
 };
 
 /** Catálogo comercial travado (op-20260903-02 / LANDING_COPY). Usado se GET /public/plans falhar. */
