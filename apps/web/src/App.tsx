@@ -21,6 +21,7 @@ import { PublicWhistleblowerPage } from './pages/PublicWhistleblowerPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { LandingPage } from './pages/LandingPage';
+import { PlansAdminPage } from './pages/PlansAdminPage';
 import { getAccessToken } from './lib/auth-store';
 
 function RequireAuth(props: { children: React.ReactNode }) {
@@ -60,6 +61,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="ranking" element={<RankingPage />} />
         <Route path="company" element={<CompanyPage />} />
+        <Route path="plans" element={<PlansAdminPage />} />
         <Route path="units" element={<UnitsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="employees" element={<EmployeesPage />} />
