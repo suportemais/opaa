@@ -73,7 +73,7 @@ export function formatPlanPrice(priceCents: number, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(priceCents / 100);
 }

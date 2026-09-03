@@ -7,7 +7,6 @@ export const LANDING_COPY = {
     headline: 'O que o cliente sente. O que a casa precisa fazer.',
     sub: 'Capture o NPS, abra a ocorrência e acompanhe o atendimento num fluxo simples — numa unidade ou na rede toda.',
     ctaPrimary: 'Começar',
-    ctaPlan: 'Assinar',
     ctaSecondary: 'Ver como funciona',
     micro: 'Teste grátis por 14 dias. Sem cartão.',
   },
@@ -48,8 +47,21 @@ export const LANDING_COPY = {
   who: {
     title: 'Feito pra quem atende e quer ouvir de verdade',
     blocks: [
-      { title: 'Unidade', body: 'Restaurante que quer ouvir e resolver no dia.' },
-      { title: 'Rede', body: 'Grupo que precisa do mesmo fluxo em todas.' },
+      {
+        title: 'Unidade',
+        items: [
+          'Quem pergunta o NPS e não sabe o que fazer com a resposta',
+          'Quem mistura reclamação no WhatsApp, caderno e planilha',
+          'Quem opera uma casa só e quer o básico bem feito',
+        ],
+      },
+      {
+        title: 'Rede',
+        items: [
+          'Redes e franquias que precisam comparar unidade sem esperar o fechamento',
+          'Gestor que quer ver nota e atendimento no mesmo lugar',
+        ],
+      },
     ],
   },
   faq: {
