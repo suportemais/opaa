@@ -48,7 +48,7 @@ export function formatPriceLabel(amountCents: number, currency = 'BRL'): string 
 export type PublicPlan = {
   slug: string;
   name: string;
-  badge: string | null;
+  badge: string;
   summary: string;
   shortDescription?: string | null;
   priceCents: number;
