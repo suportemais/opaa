@@ -35,5 +35,22 @@ describe('listPublicPlans', () => {
     expect(bySlug.pro?.summary).toBe('NPS, dashboard e Kanban para a sua unidade.');
     expect(bySlug.redes?.summary).toBe('NPS e atendimento em todas as suas unidades.');
     expect(bySlug.start?.features).toEqual(['Pesquisa NPS', 'Ocorrências', '1 unidade']);
+    expect(bySlug.pro?.features).toEqual([
+      'Pesquisa NPS',
+      'Ocorrências',
+      'Dashboard',
+      'Kanban de atendimento',
+      '5 usuários',
+      '1 unidade',
+    ]);
+    expect(bySlug.redes?.features).toEqual([
+      'Pesquisa NPS',
+      'Ocorrências',
+      'Dashboard',
+      'Kanban de atendimento',
+      'Métricas por unidade',
+      'Unidades ilimitadas',
+      '20 usuários',
+    ]);
   });
 });
