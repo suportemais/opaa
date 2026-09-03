@@ -4,6 +4,7 @@ import { NpsClass, PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
 import { AllPermissionCodes, PermissionCodes } from '../src/rbac/permission-codes';
 import { randomToken } from '../src/common/crypto';
+import { upsertPlans } from './seed-plans';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -241,6 +242,7 @@ async function createTenant(params: {
 
 async function main() {
   await ensureGlobalPermissions();
+  await upsertPlans(prisma);
 
   const t1 = await createTenant({
     legalName: 'Opiina Demo Restaurante LTDA',

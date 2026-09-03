@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { findFallbackPlan, formatPriceLabel } from '../lib/public-plans';
 
 type Result = { tenantId: string; tenantSlug: string; adminUserId: string; unitId: string };
 
@@ -21,6 +22,8 @@ function slugify(value: string) {
 
 export function OnboardingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedPlan = findFallbackPlan(searchParams.get('plan'));
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const baseDomain = env.appBaseDomain ?? hostname;
   const [loading, setLoading] = useState(false);
@@ -96,6 +99,14 @@ export function OnboardingPage() {
             Já tenho conta
           </Link>
         </div>
+
+        {selectedPlan && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            Plano selecionado: <span className="font-semibold">{selectedPlan.name}</span>
+            {' — '}
+            {formatPriceLabel(selectedPlan.amountCents, selectedPlan.currency)}
+          </div>
+        )}
 
         {result ? (
           <Card title="Tenant criado" description="Acesse pelo subdomínio da sua empresa.">

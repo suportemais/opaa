@@ -16,6 +16,7 @@ export function AppShell() {
 
   const permissionCodes = me.data?.permissionCodes ?? [];
   const canManageTenant = permissionCodes.includes('tenant:settings:manage');
+  const canManagePlatformPlans = permissionCodes.includes('platform:tenant:manage');
   const canManageUsers = permissionCodes.includes('user:manage');
   const canManageUnits = permissionCodes.includes('unit:manage');
   const canReadUnits = permissionCodes.includes('unit:read') || canManageUnits;
@@ -114,6 +115,15 @@ export function AppShell() {
                       onClick={() => setSettingsOpen(false)}
                     >
                       Empresa
+                    </NavLink>
+                  )}
+                  {canManagePlatformPlans && (
+                    <NavLink
+                      to="/app/plans"
+                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
+                      onClick={() => setSettingsOpen(false)}
+                    >
+                      Planos
                     </NavLink>
                   )}
                   {canReadUnits && (
