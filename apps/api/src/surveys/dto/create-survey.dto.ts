@@ -31,6 +31,10 @@ export class CreateSurveyDto {
 
   @IsOptional()
   @IsBoolean()
+  anonymousAllowed?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   collectEmployee?: boolean;
 
   @IsArray()

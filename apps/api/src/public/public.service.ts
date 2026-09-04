@@ -11,6 +11,7 @@ import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
 import { SentimentService } from '../sentiment/sentiment.service';
 import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 import { listPublicPlans } from './public-plans';
+import { hasCustomerIdentity, isCustomerIdentityRequired } from '../domain/surveys/customer-identity';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -105,6 +106,7 @@ export class PublicService {
         introMessage: survey.introMessage,
         outroMessage: survey.outroMessage,
         collectCustomer: survey.collectCustomer,
+        anonymousAllowed: survey.anonymousAllowed,
         collectEmployee: (survey as any).collectEmployee ?? false,
         questions: survey.publishedVersion.questions.map((q) => ({
           id: q.id,
@@ -178,6 +180,10 @@ export class PublicService {
 
     const badScoreThreshold = badScoreThresholdFromSettings(distribution.tenant.settings);
     const collectEmployee = Boolean((survey as any).collectEmployee);
+
+    if (isCustomerIdentityRequired(survey) && !hasCustomerIdentity(dto.customer)) {
+      throw new BadRequestException('customer_identity_required');
+    }
 
     let finalEmployeeId: string | null = distribution.employeeId ?? null;
     if (dto.employeeId) {
