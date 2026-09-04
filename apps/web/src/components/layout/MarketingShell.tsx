@@ -11,12 +11,17 @@ export function MarketingShell(props: { children: React.ReactNode }) {
           <Link to="/" className="min-w-0">
             <BrandMark />
           </Link>
-          <Link
-            to={subscribeHref()}
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-opiina-cta px-4 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            {LANDING_COPY.cta.primary}
-          </Link>
+          <nav className="flex shrink-0 items-center gap-3">
+            <Link to="/login" className="text-sm font-medium text-opiina-cta hover:underline">
+              {LANDING_COPY.cta.login}
+            </Link>
+            <Link
+              to={subscribeHref()}
+              className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-opiina-cta px-4 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              {LANDING_COPY.cta.primary}
+            </Link>
+          </nav>
         </div>
         <div className="h-px bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
       </header>
