@@ -7,7 +7,11 @@ import { LANDING_COPY } from '../lib/landing-copy';
 import { FALLBACK_PUBLIC_PLANS, formatPlanPrice, subscribeHref, type PublicPlan } from '../lib/public-plans';
 import { MarketingShell } from '../components/layout/MarketingShell';
 
-const FEATURE_ACCENTS = ['#1A94FF', '#7038F8', '#E11D48'] as const;
+const FEATURE_ACCENTS = [
+  'var(--opiina-feature-1)',
+  'var(--opiina-feature-2)',
+  'var(--opiina-feature-3)',
+] as const;
 
 function isTenantSubdomain() {
   if (typeof window === 'undefined') return false;

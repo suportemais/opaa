@@ -1,0 +1,13 @@
+/* OPIINA landing visual v2 — locked palette (zero green MM). */
+:root {
+  --opiina-cyan: #1a94ff;
+  --opiina-violet: #7038f8;
+  --opiina-cta: #2563eb;
+  --opiina-navy: #0f172a;
+  --opiina-muted: #64748b;
+  --opiina-bg: #f8fafc;
+  --opiina-border: #e2e8f0;
+  --opiina-feature-1: #1a94ff;
+  --opiina-feature-2: #7038f8;
+  --opiina-feature-3: #e11d48;
+}
