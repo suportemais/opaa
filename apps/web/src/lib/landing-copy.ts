@@ -1,3 +1,17 @@
+/** Copy v1.1 — Além do NPS / Features (op-02, canônico). Não parafrasear. */
+export const FEATURES_TITLE = 'Mais do que ouvir: entender, comparar e cuidar';
+export const FEATURE_1_TITLE = 'A IA organiza o que veio nas respostas';
+export const FEATURE_1_BODY =
+  'Comentários abertos viram temas — demora, atendimento, comida, elogio. Em vez de ler um por um, você vê o que mais aparece e onde agir primeiro.';
+export const FEATURE_2_TITLE = 'Unidades lado a lado, com ranking claro';
+export const FEATURE_2_BODY =
+  'Compare nota, volume de respostas e desempenho entre casas. O ranking mostra quem lidera e quem precisa de atenção — sem montar planilha no fim do mês.';
+export const FEATURE_3_TITLE = 'Denúncia em canal próprio, fora do NPS';
+export const FEATURE_3_BODY =
+  'Cada unidade tem um link só pra isso. O colaborador fala com segurança; a ocorrência não se mistura com a pesquisa do cliente.';
+export const FEATURE_3_MICRO = 'Canal alinhado às obrigações trabalhistas.';
+export const FEATURES_CTA = 'Ver planos';
+
 export const LANDING_COPY = {
   brand: {
     tagline: 'Ouça · Entenda · Fidelize',
@@ -37,6 +51,15 @@ export const LANDING_COPY = {
       'Métricas por unidade',
       'Rede e franquia na mesma leitura',
     ],
+  },
+  features: {
+    title: FEATURES_TITLE,
+    items: [
+      { title: FEATURE_1_TITLE, body: FEATURE_1_BODY },
+      { title: FEATURE_2_TITLE, body: FEATURE_2_BODY },
+      { title: FEATURE_3_TITLE, body: FEATURE_3_BODY, micro: FEATURE_3_MICRO },
+    ],
+    cta: FEATURES_CTA,
   },
   plans: {
     title: 'Planos pra sua operação',
