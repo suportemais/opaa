@@ -7,7 +7,7 @@ export function MarketingShell(props: { children: React.ReactNode }) {
   return (
     <div className="min-h-full bg-opiina-bg text-opiina-navy">
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 md:px-6">
           <Link to="/" className="min-w-0">
             <BrandMark />
           </Link>
@@ -29,7 +29,7 @@ export function MarketingShell(props: { children: React.ReactNode }) {
       <main>{props.children}</main>
 
       <footer className="border-t border-opiina-border">
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-start justify-between gap-4 px-4 py-10 md:flex-row md:items-center md:px-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 px-4 py-10 md:flex-row md:items-center md:px-6">
           <p className="text-sm text-opiina-muted">{LANDING_COPY.footer.microcopy}</p>
           <Link to="/login" className="text-sm font-medium text-opiina-cta hover:underline">
             {LANDING_COPY.cta.login}

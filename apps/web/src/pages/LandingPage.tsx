@@ -40,7 +40,7 @@ export function LandingPage() {
 
 function Hero() {
   return (
-    <section className="px-4 py-10 pb-16 md:px-6 md:py-16 md:pb-20">
+    <section className="px-4 py-10 md:px-6 md:py-16">
       <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2">
         <div>
           <h1 className="max-w-xl text-3xl font-semibold leading-tight text-opiina-navy md:text-5xl">
@@ -84,11 +84,13 @@ function HeroVisual() {
         <img
           src="/landing/hero-usage.jpg"
           alt="Atendimento no balcão — uso do OPIINA na operação"
-          className="aspect-[4/3] h-full w-full object-cover"
+          className="aspect-[4/3] h-full w-full object-cover object-[center_20%]"
         />
       </div>
-      <div className="pointer-events-none absolute -bottom-6 right-3 w-[214px] sm:right-6 md:-right-2 md:w-[236px]">
-        <NpsPhoneMock />
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center sm:bottom-6 sm:justify-end sm:pr-6 lg:bottom-8 lg:pr-8">
+        <div className="w-[200px] sm:w-[220px] md:w-[236px]">
+          <NpsPhoneMock />
+        </div>
       </div>
     </div>
   );
@@ -100,32 +102,38 @@ function NpsPhoneMock() {
   return (
     <div
       data-hero-slot="nps-mock"
-      className="rounded-[32px] border-[8px] border-[#0F172A] bg-white p-3 shadow-[0_18px_40px_-16px_rgba(15,23,42,0.45)]"
+      className="rounded-[36px] border-[8px] border-[#0F172A] bg-white p-3.5 shadow-[0_18px_40px_-16px_rgba(15,23,42,0.45)]"
       aria-hidden
     >
       <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" />
-      <div className="text-[10px] font-medium uppercase tracking-wide text-opiina-muted">Sua opinião</div>
+      <div className="text-[10px] font-medium text-opiina-muted">Sua opinião</div>
       <div className="mt-1 text-sm font-semibold text-opiina-navy">Como foi sua visita?</div>
       <div className="mt-0.5 text-[11px] text-opiina-muted">Em uma palavra:</div>
       <div className="mt-3 grid grid-cols-11 gap-0.5">
-        {Array.from({ length: 11 }, (_, value) => (
-          <div
-            key={value}
-            className={[
-              'flex h-6 items-center justify-center rounded-sm text-[9px] font-semibold',
-              value === selected ? 'bg-opiina-cta text-white' : 'bg-[#E8F3FF] text-opiina-cta',
-            ].join(' ')}
-          >
-            {value}
-          </div>
-        ))}
+        {Array.from({ length: 11 }, (_, value) => {
+          const near = value >= 6 && value <= 8;
+          return (
+            <div
+              key={value}
+              className={[
+                'flex h-6 items-center justify-center rounded-sm text-[9px] font-semibold',
+                value === selected
+                  ? 'bg-opiina-cta text-white'
+                  : near
+                    ? 'bg-[#E8F3FF] text-opiina-cta'
+                    : 'border border-opiina-border bg-white text-opiina-navy',
+              ].join(' ')}
+            >
+              {value}
+            </div>
+          );
+        })}
       </div>
-      <div className="mt-1 flex items-center justify-between text-[9px] text-opiina-muted">
-        <span>0</span>
-        <span>10</span>
-      </div>
-      <div className="mt-3 rounded-lg border border-opiina-border bg-opiina-bg px-2.5 py-2 text-[11px] text-opiina-navy">
-        Atendimento rápido..
+      <div className="mt-3">
+        <div className="mb-1 text-[10px] text-opiina-muted">Comentário (opcional)</div>
+        <div className="rounded-lg border border-opiina-border bg-opiina-bg px-2.5 py-2 text-[11px] text-opiina-navy">
+          Atendimento rápido..
+        </div>
       </div>
     </div>
   );
@@ -185,7 +193,7 @@ function Features() {
             return (
               <article
                 key={item.title}
-                className="overflow-hidden rounded-[28px] border border-opiina-border bg-white"
+                className="overflow-hidden rounded-2xl border border-opiina-border bg-white shadow-[0_8px_24px_-18px_rgba(15,23,42,0.35)]"
               >
                 <div className="flex">
                   <div className="w-1.5 shrink-0" style={{ backgroundColor: accent }} />
