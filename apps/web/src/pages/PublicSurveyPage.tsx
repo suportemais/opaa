@@ -26,6 +26,7 @@ type PublicSurvey = {
     introMessage: string | null;
     outroMessage: string | null;
     collectCustomer: boolean;
+    anonymousAllowed?: boolean;
     collectEmployee?: boolean;
     questions: PublicQuestion[];
   };
@@ -65,6 +66,8 @@ export function PublicSurveyPage() {
   const [customerPhone, setCustomerPhone] = useState('');
 
   const collectEmployee = Boolean(survey.data?.survey.collectEmployee);
+  const collectCustomer = Boolean(survey.data?.survey.collectCustomer);
+  const identityRequired = collectCustomer && survey.data?.survey.anonymousAllowed === false;
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [employeeQuery, setEmployeeQuery] = useState('');
   const [employeeOpen, setEmployeeOpen] = useState(false);
@@ -74,6 +77,10 @@ export function PublicSurveyPage() {
     const t = setTimeout(() => setEmployeeQuery(employeeSearch), 250);
     return () => clearTimeout(t);
   }, [employeeSearch]);
+
+  useEffect(() => {
+    if (identityRequired) setIdentify(true);
+  }, [identityRequired]);
 
   useEffect(() => {
     if (!employeeOpen) return;
@@ -168,7 +175,7 @@ export function PublicSurveyPage() {
         }
       }
 
-      const customer = identify
+      const customer = identify || identityRequired
         ? {
             name: customerName.trim() || undefined,
             email: customerEmail.trim() || undefined,
@@ -177,6 +184,9 @@ export function PublicSurveyPage() {
         : undefined;
 
       const hasCustomerField = Boolean(customer?.name || customer?.email || customer?.phone);
+      if (identityRequired && !hasCustomerField) {
+        throw new Error('missing_identity');
+      }
 
       return apiFetch<{ responseId: string; npsClass: string }>('/public/responses', {
         method: 'POST',
@@ -236,7 +246,7 @@ export function PublicSurveyPage() {
 
   return (
     <div className="min-h-full bg-slate-50 p-4 md:p-10">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-6 pb-44">
+      <div className={['mx-auto flex w-full max-w-xl flex-col gap-6', collectCustomer ? 'pb-44' : 'pb-8'].join(' ')}>
         <div className="text-center">
           <img
             src="/logo-opiina.png"
@@ -515,12 +525,23 @@ export function PublicSurveyPage() {
                   <Button
                     disabled={submit.isPending || !canGoNext()}
                     onClick={() => {
+                      const hasIdentityField = Boolean(
+                        customerName.trim() || customerEmail.trim() || customerPhone.trim(),
+                      );
+                      if (identityRequired && !hasIdentityField) {
+                        setFormError('Informe nome, e-mail ou telefone para se identificar.');
+                        return;
+                      }
                       setFormError(null);
                       submit.mutate(undefined, {
                         onError: (err) => {
                           const code = err instanceof Error ? err.message : '';
                           if (code === 'missing_required') {
                             setFormError('Preencha os campos obrigatórios para continuar.');
+                            return;
+                          }
+                          if (code === 'missing_identity' || code === 'customer_identity_required') {
+                            setFormError('Informe nome, e-mail ou telefone para se identificar.');
                             return;
                           }
                           setFormError('Falha ao enviar. Tente novamente.');
@@ -545,27 +566,35 @@ export function PublicSurveyPage() {
         </footer>
       </div>
 
-      {!submitted && (
+      {!submitted && collectCustomer && (
         <div className="fixed bottom-4 left-1/2 w-[min(640px,calc(100%-2rem))] -translate-x-1/2">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-medium text-slate-900">Identificação (opcional)</div>
-                <div className="text-xs text-slate-500">Você pode se identificar em qualquer momento.</div>
+                <div className="text-sm font-medium text-slate-900">
+                  {identityRequired ? 'Identificação (obrigatória)' : 'Identificação (opcional)'}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {identityRequired
+                    ? 'Informe ao menos um dos campos abaixo para enviar a pesquisa.'
+                    : 'Você pode se identificar em qualquer momento.'}
+                </div>
               </div>
-              <button
-                type="button"
-                className={[
-                  'h-10 rounded-md border px-4 text-sm font-medium',
-                  identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                ].join(' ')}
-                onClick={() => setIdentify((v) => !v)}
-              >
-                {identify ? 'Não quero me identificar' : 'Quero me identificar'}
-              </button>
+              {!identityRequired && (
+                <button
+                  type="button"
+                  className={[
+                    'h-10 rounded-md border px-4 text-sm font-medium',
+                    identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                  ].join(' ')}
+                  onClick={() => setIdentify((v) => !v)}
+                >
+                  {identify ? 'Não quero me identificar' : 'Quero me identificar'}
+                </button>
+              )}
             </div>
 
-            {identify && (
+            {(identify || identityRequired) && (
               <div className="mt-4 grid gap-3">
                 <div>
                   <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>

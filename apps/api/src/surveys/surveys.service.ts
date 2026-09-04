@@ -89,6 +89,7 @@ export class SurveysService {
       description: survey.description,
       status: survey.status,
       collectCustomer: survey.collectCustomer,
+      anonymousAllowed: survey.anonymousAllowed,
       collectEmployee: survey.collectEmployee,
       createdAt: survey.createdAt,
       units,
@@ -123,6 +124,7 @@ export class SurveysService {
         description: dto.description,
         status: 'draft',
         collectCustomer: dto.collectCustomer ?? false,
+        anonymousAllowed: dto.anonymousAllowed ?? true,
         collectEmployee: dto.collectEmployee ?? false,
         units: {
           createMany: { data: dto.unitIds.map((unitId) => ({ unitId })) },
@@ -192,6 +194,7 @@ export class SurveysService {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.description !== undefined ? { description: dto.description } : {}),
           ...(dto.collectCustomer !== undefined ? { collectCustomer: dto.collectCustomer } : {}),
+          ...(dto.anonymousAllowed !== undefined ? { anonymousAllowed: dto.anonymousAllowed } : {}),
           ...(dto.collectEmployee !== undefined ? { collectEmployee: dto.collectEmployee } : {}),
         },
       });

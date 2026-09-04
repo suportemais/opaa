@@ -14,6 +14,7 @@ type SurveyDetail = {
   description: string | null;
   status: string;
   collectCustomer: boolean;
+  anonymousAllowed: boolean;
   collectEmployee: boolean;
   units: Array<{ unitId: string; unit: Unit }>;
   draftVersion: {
@@ -72,6 +73,8 @@ export function SurveysPage() {
   const [name, setName] = useState('Pesquisa de satisfação');
   const [description, setDescription] = useState('Conte como foi sua experiência.');
   const [collectEmployee, setCollectEmployee] = useState(true);
+  const [collectCustomer, setCollectCustomer] = useState(true);
+  const [requireCustomerIdentity, setRequireCustomerIdentity] = useState(false);
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [
     { id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false },
   ]);
@@ -95,6 +98,8 @@ export function SurveysPage() {
     setName(s.name);
     setDescription(s.description ?? '');
     setCollectEmployee(s.collectEmployee);
+    setCollectCustomer(s.collectCustomer);
+    setRequireCustomerIdentity(Boolean(s.collectCustomer) && s.anonymousAllowed === false);
     const firstUnit = s.units[0]?.unitId ?? null;
     if (firstUnit) setUnitId(firstUnit);
     const extras: QuestionDraft[] =
@@ -119,6 +124,8 @@ export function SurveysPage() {
     setName('Pesquisa de satisfação');
     setDescription('Conte como foi sua experiência.');
     setCollectEmployee(true);
+    setCollectCustomer(true);
+    setRequireCustomerIdentity(false);
     setQuestions([{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
     setUnitId(null);
     qc.invalidateQueries({ queryKey: ['surveyDetail'] });
@@ -144,7 +151,8 @@ export function SurveysPage() {
         json: {
           name,
           description,
-          collectCustomer: true,
+          collectCustomer,
+          anonymousAllowed: collectCustomer ? !requireCustomerIdentity : true,
           collectEmployee,
           unitIds: [u],
           questions: buildQuestionsPayload(),
@@ -172,6 +180,8 @@ export function SurveysPage() {
         json: {
           name,
           description,
+          collectCustomer,
+          anonymousAllowed: collectCustomer ? !requireCustomerIdentity : true,
           collectEmployee,
           unitIds: [u],
           questions: buildQuestionsPayload(),
@@ -194,6 +204,8 @@ export function SurveysPage() {
         json: {
           name,
           description,
+          collectCustomer,
+          anonymousAllowed: collectCustomer ? !requireCustomerIdentity : true,
           collectEmployee,
           unitIds: [u],
           questions: buildQuestionsPayload(),
@@ -265,7 +277,7 @@ export function SurveysPage() {
             <div className="mb-1 text-sm font-medium text-slate-700">Descrição</div>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 grid gap-2">
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
@@ -274,6 +286,34 @@ export function SurveysPage() {
                 onChange={(e) => setCollectEmployee(e.target.checked)}
               />
               Perguntar “Atendente” na pesquisa
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={collectCustomer}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setCollectCustomer(checked);
+                  if (!checked) setRequireCustomerIdentity(false);
+                }}
+              />
+              Coletar identificação do cliente
+            </label>
+            <label
+              className={[
+                'flex items-center gap-2 text-sm text-slate-700',
+                collectCustomer ? '' : 'opacity-50',
+              ].join(' ')}
+            >
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={requireCustomerIdentity}
+                disabled={!collectCustomer}
+                onChange={(e) => setRequireCustomerIdentity(e.target.checked)}
+              />
+              Obrigar o cliente a se identificar
             </label>
           </div>
           <div className="md:col-span-2">
