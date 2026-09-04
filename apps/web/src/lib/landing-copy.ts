@@ -38,6 +38,25 @@ export const LANDING_COPY = {
       'Rede e franquia na mesma leitura',
     ],
   },
+  features: {
+    title: 'Mais do que ouvir: entender, comparar e cuidar',
+    items: [
+      {
+        title: 'A IA organiza o que veio nas respostas',
+        body: 'Comentários abertos viram temas — demora, atendimento, comida, elogio. Em vez de ler um por um, você vê o que mais aparece e onde agir primeiro.',
+      },
+      {
+        title: 'Unidades lado a lado, com ranking claro',
+        body: 'Compare nota, volume de respostas e desempenho entre casas. O ranking mostra quem lidera e quem precisa de atenção — sem montar planilha no fim do mês.',
+      },
+      {
+        title: 'Denúncia em canal próprio, fora do NPS',
+        body: 'Cada unidade tem um link só pra isso. O colaborador fala com segurança; a ocorrência não se mistura com a pesquisa do cliente.',
+        micro: 'Canal alinhado às obrigações trabalhistas.',
+      },
+    ],
+    cta: 'Ver planos',
+  },
   plans: {
     title: 'Planos pra sua operação',
     subtitle: 'Preços claros pra rede e restaurante. Sem surpresa na fatura.',

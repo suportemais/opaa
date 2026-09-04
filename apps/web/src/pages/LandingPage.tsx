@@ -7,6 +7,8 @@ import { LANDING_COPY } from '../lib/landing-copy';
 import { FALLBACK_PUBLIC_PLANS, formatPlanPrice, subscribeHref, type PublicPlan } from '../lib/public-plans';
 import { MarketingShell } from '../components/layout/MarketingShell';
 
+const FEATURE_ACCENTS = ['#1A94FF', '#7038F8', '#E11D48'] as const;
+
 function isTenantSubdomain() {
   if (typeof window === 'undefined') return false;
   const hostname = window.location.hostname;
@@ -24,6 +26,7 @@ export function LandingPage() {
       <Hero />
       <Steps />
       <Benefits />
+      <Features />
       <Plans />
       <Who />
       <Faq />
@@ -33,33 +36,101 @@ export function LandingPage() {
 
 function Hero() {
   return (
-    <section className="px-4 py-10 md:px-6 md:py-16">
-      <div className="mx-auto w-full max-w-5xl">
-        <h1 className="max-w-3xl text-3xl font-semibold leading-tight text-opiina-navy md:text-5xl">
-          {LANDING_COPY.hero.headline}
-        </h1>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-opiina-muted">{LANDING_COPY.hero.sub}</p>
-        <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-          <Link
-            to={subscribeHref()}
-            className="inline-flex h-11 items-center justify-center rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            {LANDING_COPY.hero.ctaPrimary}
-          </Link>
-          <a href="#como-funciona" className="text-sm font-medium text-opiina-cta hover:underline">
-            {LANDING_COPY.hero.ctaSecondary}
-          </a>
+    <section className="px-4 py-10 pb-16 md:px-6 md:py-16 md:pb-20">
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2">
+        <div>
+          <h1 className="max-w-xl text-3xl font-semibold leading-tight text-opiina-navy md:text-5xl">
+            {LANDING_COPY.hero.headline}
+          </h1>
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-opiina-muted">{LANDING_COPY.hero.sub}</p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Link
+              to={subscribeHref()}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              {LANDING_COPY.hero.ctaPrimary}
+            </Link>
+            <Link
+              to="/login"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-opiina-cta px-5 text-sm font-medium text-opiina-cta hover:bg-white"
+            >
+              {LANDING_COPY.cta.login}
+            </Link>
+          </div>
+          <div className="mt-3 text-sm text-opiina-muted">
+            {LANDING_COPY.hero.micro} ·{' '}
+            <a href="#como-funciona" className="font-medium text-opiina-cta hover:underline">
+              {LANDING_COPY.hero.ctaSecondary}
+            </a>
+          </div>
         </div>
-        <div className="mt-3 text-sm text-opiina-muted">{LANDING_COPY.hero.micro}</div>
+        <HeroVisual />
       </div>
     </section>
+  );
+}
+
+function HeroVisual() {
+  return (
+    <div className="relative" data-hero-visual="usage-and-nps">
+      <div
+        data-hero-slot="usage-photo"
+        className="overflow-hidden rounded-[28px] border border-opiina-border bg-[#E8F3FF] shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]"
+      >
+        <img
+          src="/landing/hero-usage.jpg"
+          alt="Atendimento no balcão — uso do OPIINA na operação"
+          className="aspect-[4/3] h-full w-full object-cover"
+        />
+      </div>
+      <div className="pointer-events-none absolute -bottom-6 right-3 w-[214px] sm:right-6 md:-right-2 md:w-[236px]">
+        <NpsPhoneMock />
+      </div>
+    </div>
+  );
+}
+
+function NpsPhoneMock() {
+  const selected = 9;
+
+  return (
+    <div
+      data-hero-slot="nps-mock"
+      className="rounded-[32px] border-[8px] border-[#0F172A] bg-white p-3 shadow-[0_18px_40px_-16px_rgba(15,23,42,0.45)]"
+      aria-hidden
+    >
+      <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" />
+      <div className="text-[10px] font-medium uppercase tracking-wide text-opiina-muted">Sua opinião</div>
+      <div className="mt-1 text-sm font-semibold text-opiina-navy">Como foi sua visita?</div>
+      <div className="mt-0.5 text-[11px] text-opiina-muted">Em uma palavra:</div>
+      <div className="mt-3 grid grid-cols-11 gap-0.5">
+        {Array.from({ length: 11 }, (_, value) => (
+          <div
+            key={value}
+            className={[
+              'flex h-6 items-center justify-center rounded-sm text-[9px] font-semibold',
+              value === selected ? 'bg-opiina-cta text-white' : 'bg-[#E8F3FF] text-opiina-cta',
+            ].join(' ')}
+          >
+            {value}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[9px] text-opiina-muted">
+        <span>0</span>
+        <span>10</span>
+      </div>
+      <div className="mt-3 rounded-lg border border-opiina-border bg-opiina-bg px-2.5 py-2 text-[11px] text-opiina-navy">
+        Atendimento rápido..
+      </div>
+    </div>
   );
 }
 
 function Steps() {
   return (
     <section id="como-funciona" className="scroll-mt-20 px-4 py-10 md:px-6">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <div className="text-sm font-semibold text-opiina-cta">{LANDING_COPY.steps.eyebrow}</div>
         <h2 className="mt-1 text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.steps.title}</h2>
         <div className="mt-6 grid items-stretch gap-3 md:grid-cols-3">
@@ -81,7 +152,7 @@ function Steps() {
 function Benefits() {
   return (
     <section id="beneficios" className="scroll-mt-20 px-4 py-10 md:px-6">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.benefits.title}</h2>
         <ul className="mt-6 space-y-2">
           {LANDING_COPY.benefits.items.map((item) => (
@@ -99,6 +170,46 @@ function Benefits() {
   );
 }
 
+function Features() {
+  return (
+    <section id="alem-do-nps" className="scroll-mt-20 px-4 py-10 md:px-6">
+      <div className="mx-auto w-full max-w-6xl">
+        <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.features.title}</h2>
+        <div className="mt-6 space-y-3">
+          {LANDING_COPY.features.items.map((item, index) => {
+            const accent = FEATURE_ACCENTS[index] ?? FEATURE_ACCENTS[0];
+            return (
+              <article
+                key={item.title}
+                className="overflow-hidden rounded-[28px] border border-opiina-border bg-white"
+              >
+                <div className="flex">
+                  <div className="w-1.5 shrink-0" style={{ backgroundColor: accent }} />
+                  <div className="min-w-0 flex-1 px-5 py-4">
+                    <h3 className="text-base font-semibold text-opiina-navy">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-opiina-muted">{item.body}</p>
+                    {'micro' in item && item.micro ? (
+                      <p className="mt-2 text-xs font-medium" style={{ color: accent }}>
+                        {item.micro}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        <a
+          href="#planos"
+          className="mt-6 inline-flex h-11 items-center justify-center rounded-full border border-opiina-cta px-5 text-sm font-medium text-opiina-cta hover:bg-white"
+        >
+          {LANDING_COPY.features.cta}
+        </a>
+      </div>
+    </section>
+  );
+}
+
 function Plans() {
   const plans = useQuery({
     queryKey: ['publicPlans'],
@@ -108,7 +219,7 @@ function Plans() {
   if (plans.isLoading) {
     return (
       <section id="planos" className="scroll-mt-20 px-4 py-10 md:px-6">
-        <div className="mx-auto w-full max-w-5xl">
+        <div className="mx-auto w-full max-w-6xl">
           <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.plans.title}</h2>
           <p className="mt-2 text-sm text-opiina-muted">{LANDING_COPY.plans.subtitle}</p>
         </div>
@@ -121,10 +232,10 @@ function Plans() {
 
   return (
     <section id="planos" className="scroll-mt-20 px-4 py-10 md:px-6">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.plans.title}</h2>
         <p className="mt-2 max-w-2xl text-sm text-opiina-muted">{LANDING_COPY.plans.subtitle}</p>
-        <div className="mt-6 grid items-stretch gap-3">
+        <div className="mt-6 grid items-stretch gap-3 md:grid-cols-3">
           {items.map((plan) => (
             <PlanCard key={plan.slug} plan={plan} />
           ))}
@@ -152,8 +263,8 @@ function PlanBadge({ slug, label }: { slug: string; label: string | null }) {
 
 function PlanCard({ plan }: { plan: PublicPlan }) {
   return (
-    <article className="flex h-full flex-col justify-between gap-4 rounded-[28px] border border-opiina-border bg-white p-5 md:flex-row md:items-end">
-      <div className="min-w-0 flex-1">
+    <article className="flex h-full flex-col justify-between gap-4 rounded-[28px] border border-opiina-border bg-white p-5">
+      <div className="min-w-0">
         <PlanBadge slug={plan.slug} label={plan.badge} />
         <h3 className="mt-3 text-xl font-semibold text-opiina-navy">{plan.name}</h3>
         <p className="mt-1 text-sm text-opiina-muted">{plan.summary}</p>
@@ -172,7 +283,7 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
       </div>
       <Link
         to={subscribeHref(plan.slug)}
-        className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700 md:w-auto md:self-end"
+        className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-full bg-opiina-cta px-5 text-sm font-medium text-white hover:bg-blue-700"
       >
         {plan.ctaLabel}
       </Link>
@@ -183,7 +294,7 @@ function PlanCard({ plan }: { plan: PublicPlan }) {
 function Who() {
   return (
     <section id="para-quem" className="scroll-mt-20 px-4 py-10 md:px-6">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.who.title}</h2>
         <div className="mt-6 grid items-stretch gap-3 md:grid-cols-2">
           {LANDING_COPY.who.blocks.map((block) => (
@@ -217,7 +328,7 @@ function Faq() {
 
   return (
     <section id="faq" className="scroll-mt-20 px-4 py-10 md:px-6">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <h2 className="text-2xl font-semibold text-opiina-navy md:text-3xl">{LANDING_COPY.faq.title}</h2>
         <div className="mt-6 space-y-2">
           {LANDING_COPY.faq.items.map((item, index) => {

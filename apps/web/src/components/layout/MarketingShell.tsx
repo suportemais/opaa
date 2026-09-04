@@ -5,7 +5,7 @@ import { subscribeHref } from '../../lib/public-plans';
 
 export function MarketingShell(props: { children: React.ReactNode }) {
   return (
-    <div className="min-h-full bg-white text-opiina-navy">
+    <div className="min-h-full bg-opiina-bg text-opiina-navy">
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
           <Link to="/" className="min-w-0">
