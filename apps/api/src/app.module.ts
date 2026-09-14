@@ -23,6 +23,7 @@ import { ReviewSyncModule } from './review-sync/review-sync.module';
 import { SentimentModule } from './sentiment/sentiment.module';
 import { PlansModule } from './plans/plans.module';
 import { PlatformModule } from './platform/platform.module';
+import { RewardsModule } from './rewards/rewards.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PlatformModule } from './platform/platform.module';
     EmployeesModule,
     WhistleblowerModule,
     PlatformModule,
+    RewardsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

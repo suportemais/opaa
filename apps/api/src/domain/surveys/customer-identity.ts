@@ -2,6 +2,7 @@ export type CustomerIdentityInput = {
   name?: string | null;
   email?: string | null;
   phone?: string | null;
+  document?: string | null;
 };
 
 export function hasCustomerIdentity(
@@ -11,7 +12,8 @@ export function hasCustomerIdentity(
   return (
     (typeof customer.name === 'string' && customer.name.trim().length > 0) ||
     (typeof customer.email === 'string' && customer.email.trim().length > 0) ||
-    (typeof customer.phone === 'string' && customer.phone.trim().length > 0)
+    (typeof customer.phone === 'string' && customer.phone.trim().length > 0) ||
+    (typeof customer.document === 'string' && customer.document.trim().length > 0)
   );
 }
 

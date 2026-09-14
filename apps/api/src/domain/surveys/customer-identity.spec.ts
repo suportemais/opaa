@@ -26,7 +26,7 @@ describe('customer identity', () => {
     expect(isCustomerIdentityRequired({ collectCustomer: true })).toBe(false);
   });
 
-  it('accepts any of name, email or phone', () => {
+  it('accepts any of name, email, phone or document', () => {
     expect(hasCustomerIdentity(undefined)).toBe(false);
     expect(hasCustomerIdentity({})).toBe(false);
     expect(hasCustomerIdentity({ name: '  ', email: '', phone: null })).toBe(
@@ -35,5 +35,6 @@ describe('customer identity', () => {
     expect(hasCustomerIdentity({ name: 'Ana' })).toBe(true);
     expect(hasCustomerIdentity({ email: 'ana@example.com' })).toBe(true);
     expect(hasCustomerIdentity({ phone: '11999999999' })).toBe(true);
+    expect(hasCustomerIdentity({ document: '390.533.447-05' })).toBe(true);
   });
 });

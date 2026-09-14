@@ -70,6 +70,14 @@ export function feedbackCasePriorityLabel(value: string | null | undefined) {
   return value ?? '—';
 }
 
+export function couponCampaignStatusLabel(value: string | null | undefined) {
+  if (value === 'draft') return 'Rascunho';
+  if (value === 'active') return 'Ativa';
+  if (value === 'paused') return 'Pausada';
+  if (value === 'finished') return 'Encerrada';
+  return value ?? '—';
+}
+
 export function interactionChannelLabel(value: string | null | undefined) {
   if (value === 'whatsapp') return 'WhatsApp';
   if (value === 'phone') return 'Telefone';

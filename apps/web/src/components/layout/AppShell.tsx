@@ -81,6 +81,9 @@ export function AppShell() {
               <NavLink to="/app/surveys" className={({ isActive }) => navClass(isActive)}>
                 Pesquisas
               </NavLink>
+              <NavLink to="/app/premios" className={({ isActive }) => navClass(isActive)}>
+                Prêmios
+              </NavLink>
               <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
                 Clientes
               </NavLink>
