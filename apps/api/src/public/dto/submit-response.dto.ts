@@ -13,6 +13,10 @@ export class SubmitCustomerDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  document?: string;
 }
 
 export class SubmitAnswerDto {

@@ -397,6 +397,7 @@ model Survey {
   publishedVersion SurveyVersion? @relation("PublishedSurveyVersion", fields: [publishedVersionId], references: [id])
   distributions SurveyDistribution[]
   responses    SurveyResponse[]
+  couponCampaigns CouponCampaign[]
 
   @@index([tenantId, status])
   @@map("surveys")
@@ -566,6 +567,7 @@ model SurveyResponse {
 
   answers        Answer[]
   feedbackCase   FeedbackCase?
+  issuedCoupons  Coupon[]
 
   @@unique([tenantId, surveyId, idempotencyKey])
   @@index([tenantId, surveyId, startedAt])
@@ -696,6 +698,7 @@ model Customer {
   doNotContactReason String?
   tags            Json?
   notes           String?
+  documentNormalized String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -709,6 +712,7 @@ model Customer {
   couponRedemptions CouponRedemption[]
 
   @@index([tenantId])
+  @@index([tenantId, documentNormalized])
   @@map("customers")
 }
 
@@ -852,13 +856,20 @@ model CouponCampaign {
   criteria     Json?
   status       CouponCampaignStatus @default(draft)
   message      String?
+  surveyId     String? @db.Uuid
+  mmCompanyId  String?
+  rewardEnabled Boolean @default(false)
+  rewardAmountCents Int?
+  validityDays Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   tenant       Tenant @relation(fields: [tenantId], references: [id])
+  survey       Survey? @relation(fields: [surveyId], references: [id], onDelete: SetNull)
   coupons      Coupon[]
 
   @@index([tenantId, status])
+  @@index([tenantId, surveyId, status])
   @@map("coupon_campaigns")
 }
 
@@ -874,14 +885,21 @@ model Coupon {
   redeemedAt   DateTime?
   expiresAt    DateTime?
   cancelledAt  DateTime?
+  customerKey  String?
+  amountCents  Int?
+  mmCompanyId  String?
+  surveyResponseId String? @db.Uuid
 
   tenant       Tenant @relation(fields: [tenantId], references: [id])
   campaign     CouponCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  surveyResponse SurveyResponse? @relation(fields: [surveyResponseId], references: [id], onDelete: SetNull)
   redemptions  CouponRedemption[]
 
   @@unique([tenantId, code])
+  @@unique([campaignId, customerKey])
   @@index([tenantId, status])
+  @@index([tenantId, customerKey])
   @@map("coupons")
 }
 

@@ -1,14 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { NpsClass } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { classifyNps } from '../domain/metrics/nps';
 import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { normalizeEmail, normalizePhone } from '../common/normalize';
+import { normalizeBrDocument } from '../common/br-document';
 import { baseDomain, tenantSlugFromHost } from '../common/tenant-host';
 import { badScoreThresholdFromSettings } from '../common/tenant-settings';
 import { googleBusinessUrlFromSettings } from '../common/unit-settings';
 import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
 import { SentimentService } from '../sentiment/sentiment.service';
+import { RewardEmitService } from '../rewards/reward-emit.service';
 import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 import { listPublicPlans } from './public-plans';
 import { hasCustomerIdentity, isCustomerIdentityRequired } from '../domain/surveys/customer-identity';
@@ -30,10 +32,13 @@ function isQuestionVisible(q: { config: unknown }, ctx: { npsScore?: number }) {
 
 @Injectable()
 export class PublicService {
+  private readonly logger = new Logger(PublicService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhookOutbox: WebhookOutboxService,
     private readonly sentiment: SentimentService,
+    private readonly rewards: RewardEmitService,
   ) {}
 
   listPublicPlans() {
@@ -284,10 +289,7 @@ export class PublicService {
 
       let customerId: string | null = null;
       if (dto.customer) {
-        const anyField =
-          (typeof dto.customer.name === 'string' && dto.customer.name.trim().length > 0) ||
-          (typeof dto.customer.email === 'string' && dto.customer.email.trim().length > 0) ||
-          (typeof dto.customer.phone === 'string' && dto.customer.phone.trim().length > 0);
+        const anyField = hasCustomerIdentity(dto.customer);
 
         if (anyField) {
           const emailNormalized =
@@ -298,13 +300,23 @@ export class PublicService {
             typeof dto.customer.phone === 'string' && dto.customer.phone.trim()
               ? normalizePhone(dto.customer.phone)
               : null;
+          const parsedDocument =
+            typeof dto.customer.document === 'string' && dto.customer.document.trim()
+              ? normalizeBrDocument(dto.customer.document)
+              : null;
+          const documentNormalized =
+            parsedDocument?.type === 'cpf' ? parsedDocument.value : null;
 
           const existingCustomer =
-            emailNormalized || phoneNormalized
+            emailNormalized || phoneNormalized || documentNormalized
               ? await tx.customer.findFirst({
                   where: {
                     tenantId: distribution.tenantId,
-                    ...(emailNormalized ? { emailNormalized } : { phoneNormalized: phoneNormalized! }),
+                    OR: [
+                      ...(emailNormalized ? [{ emailNormalized }] : []),
+                      ...(phoneNormalized ? [{ phoneNormalized }] : []),
+                      ...(documentNormalized ? [{ documentNormalized }] : []),
+                    ],
                   },
                 })
               : null;
@@ -327,6 +339,7 @@ export class PublicService {
                       ? dto.customer.phone.trim()
                       : existingCustomer.phone,
                   phoneNormalized: phoneNormalized ?? existingCustomer.phoneNormalized,
+                  documentNormalized: documentNormalized ?? existingCustomer.documentNormalized,
                   firstInteractionAt: existingCustomer.firstInteractionAt ?? new Date(),
                   lastInteractionAt: new Date(),
                   originUnitId: existingCustomer.originUnitId ?? distribution.unitId,
@@ -340,6 +353,7 @@ export class PublicService {
                   emailNormalized: emailNormalized ?? undefined,
                   phone: typeof dto.customer.phone === 'string' ? dto.customer.phone.trim() : undefined,
                   phoneNormalized: phoneNormalized ?? undefined,
+                  documentNormalized: documentNormalized ?? undefined,
                   originUnitId: distribution.unitId,
                   firstInteractionAt: new Date(),
                   lastInteractionAt: new Date(),
@@ -476,6 +490,16 @@ export class PublicService {
     });
 
     this.sentiment.classifyLater(distribution.tenantId, response.id);
+    void this.emitPostSurveyReward({
+      tenantId: distribution.tenantId,
+      surveyId: survey.id,
+      surveyResponseId: response.id,
+      customerId: response.customerId,
+      identity: {
+        phone: dto.customer?.phone ?? null,
+        document: dto.customer?.document ?? null,
+      },
+    });
 
     return {
       responseId: response.id,
@@ -483,6 +507,39 @@ export class PublicService {
       npsScore: response.npsScore,
       npsClass: response.npsClass,
     };
+  }
+
+  private async emitPostSurveyReward(input: {
+    tenantId: string;
+    surveyId: string;
+    surveyResponseId: string;
+    customerId: string | null;
+    identity: { phone?: string | null; document?: string | null };
+  }) {
+    try {
+      let phone = input.identity.phone ?? null;
+      let document = input.identity.document ?? null;
+      if (input.customerId && (!phone || !document)) {
+        const customer = await this.prisma.customer.findUnique({
+          where: { id: input.customerId },
+          select: { phone: true, phoneNormalized: true, documentNormalized: true },
+        });
+        phone = phone || customer?.phoneNormalized || customer?.phone || null;
+        document = document || customer?.documentNormalized || null;
+      }
+
+      await this.rewards.emitForCompletedResponse({
+        tenantId: input.tenantId,
+        surveyId: input.surveyId,
+        surveyResponseId: input.surveyResponseId,
+        customerId: input.customerId,
+        identity: { phone, document },
+      });
+    } catch (err: unknown) {
+      this.logger.error(
+        `Reward emit failed for response ${input.surveyResponseId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   async getWhistleblowerForm(tenantSlug: string) {

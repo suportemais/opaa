@@ -64,6 +64,7 @@ export function PublicSurveyPage() {
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerDocument, setCustomerDocument] = useState('');
 
   const collectEmployee = Boolean(survey.data?.survey.collectEmployee);
   const collectCustomer = Boolean(survey.data?.survey.collectCustomer);
@@ -180,10 +181,11 @@ export function PublicSurveyPage() {
             name: customerName.trim() || undefined,
             email: customerEmail.trim() || undefined,
             phone: customerPhone.trim() || undefined,
+            document: customerDocument.trim() || undefined,
           }
         : undefined;
 
-      const hasCustomerField = Boolean(customer?.name || customer?.email || customer?.phone);
+      const hasCustomerField = Boolean(customer?.name || customer?.email || customer?.phone || customer?.document);
       if (identityRequired && !hasCustomerField) {
         throw new Error('missing_identity');
       }
@@ -526,7 +528,7 @@ export function PublicSurveyPage() {
                     disabled={submit.isPending || !canGoNext()}
                     onClick={() => {
                       const hasIdentityField = Boolean(
-                        customerName.trim() || customerEmail.trim() || customerPhone.trim(),
+                        customerName.trim() || customerEmail.trim() || customerPhone.trim() || customerDocument.trim(),
                       );
                       if (identityRequired && !hasIdentityField) {
                         setFormError('Informe nome, e-mail ou telefone para se identificar.');
@@ -623,6 +625,16 @@ export function PublicSurveyPage() {
                       inputMode="tel"
                     />
                   </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-slate-700">CPF (se não tiver telefone)</div>
+                  <input
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                    value={customerDocument}
+                    onChange={(e) => setCustomerDocument(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Somente se o telefone não for informado"
+                  />
                 </div>
               </div>
             )}
