@@ -371,10 +371,10 @@ export function RewardCampaignsPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-opiina-navy md:text-3xl">Prêmios</h1>
             <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
               Prêmios Muito Mais
             </span>
@@ -384,7 +384,7 @@ export function RewardCampaignsPage() {
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex h-11 items-center justify-center rounded-full bg-opiina-navy px-5 text-sm font-medium text-white hover:bg-slate-800"
+          className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-full bg-opiina-navy px-5 text-sm font-medium text-white hover:bg-slate-800 sm:w-auto"
         >
           Nova campanha
         </button>
