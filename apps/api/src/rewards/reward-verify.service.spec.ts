@@ -24,7 +24,11 @@ function setup(row: Record<string, unknown> | null) {
   const findFirst = jest.fn().mockResolvedValue(row);
   const service = new RewardVerifyService(
     { coupon: { findFirst } } as never,
-    { get: jest.fn((key: string) => (key === 'MM_REWARD_HMAC_SECRET' ? secret : undefined)) } as never,
+    {
+      get: jest.fn((key: string) =>
+        key === 'MM_REWARD_HMAC_SECRET' ? secret : undefined,
+      ),
+    } as never,
   );
   return { service, findFirst };
 }
@@ -48,7 +52,9 @@ describe('RewardVerifyService', () => {
       expiresAt: expiresAt.toISOString(),
       mmCompanyId: 'mm-co-1',
     });
-    expect(result.signature).toBe(signRewardPayload(result.signedPayload!, secret));
+    expect(result.signature).toBe(
+      signRewardPayload(result.signedPayload!, secret),
+    );
   });
 
   it('rejects unknown, expired and redeemed codes', async () => {
@@ -58,14 +64,22 @@ describe('RewardVerifyService', () => {
       reason: 'not_found',
     });
 
-    const expired = setup(couponRow({ expiresAt: new Date('2020-01-01T00:00:00.000Z') }));
-    await expect(expired.service.verify({ code: 'MMABC12D' })).resolves.toMatchObject({
+    const expired = setup(
+      couponRow({ expiresAt: new Date('2020-01-01T00:00:00.000Z') }),
+    );
+    await expect(
+      expired.service.verify({ code: 'MMABC12D' }),
+    ).resolves.toMatchObject({
       valid: false,
       reason: 'expired',
     });
 
-    const redeemed = setup(couponRow({ status: 'redeemed', redeemedAt: new Date() }));
-    await expect(redeemed.service.verify({ code: 'MMABC12D' })).resolves.toMatchObject({
+    const redeemed = setup(
+      couponRow({ status: 'redeemed', redeemedAt: new Date() }),
+    );
+    await expect(
+      redeemed.service.verify({ code: 'MMABC12D' }),
+    ).resolves.toMatchObject({
       valid: false,
       reason: 'redeemed',
     });

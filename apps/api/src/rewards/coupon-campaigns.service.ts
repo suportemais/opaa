@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CouponCampaignStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
@@ -36,7 +40,8 @@ export class CouponCampaignsService {
     if (!mmCompanyId) throw new BadRequestException('mm_company_id_required');
     await this.assertSurvey(user.tenantId, dto.surveyId);
 
-    const status: CouponCampaignStatus = dto.activate === false ? 'draft' : 'active';
+    const status: CouponCampaignStatus =
+      dto.activate === false ? 'draft' : 'active';
     const benefit = `Muito Mais ${formatRewardAmountBrl(dto.rewardAmountCents)}`;
 
     const created = await this.prisma.couponCampaign.create({
@@ -83,7 +88,8 @@ export class CouponCampaignsService {
       throw new BadRequestException('mm_company_id_required');
     }
 
-    const rewardAmountCents = dto.rewardAmountCents ?? existing.rewardAmountCents ?? undefined;
+    const rewardAmountCents =
+      dto.rewardAmountCents ?? existing.rewardAmountCents ?? undefined;
     const benefit =
       typeof rewardAmountCents === 'number'
         ? `Muito Mais ${formatRewardAmountBrl(rewardAmountCents)}`
@@ -93,18 +99,36 @@ export class CouponCampaignsService {
       where: { id: existing.id },
       data: {
         name: dto.name?.trim() ?? existing.name,
-        description: dto.description !== undefined ? dto.description.trim() || null : existing.description,
+        description:
+          dto.description !== undefined
+            ? dto.description.trim() || null
+            : existing.description,
         benefit,
-        prefix: dto.prefix !== undefined ? dto.prefix.trim() || 'MM' : existing.prefix,
-        startsAt: dto.startsAt !== undefined ? parseOptionalDate(dto.startsAt) : existing.startsAt,
-        endsAt: dto.endsAt !== undefined ? parseOptionalDate(dto.endsAt) : existing.endsAt,
+        prefix:
+          dto.prefix !== undefined
+            ? dto.prefix.trim() || 'MM'
+            : existing.prefix,
+        startsAt:
+          dto.startsAt !== undefined
+            ? parseOptionalDate(dto.startsAt)
+            : existing.startsAt,
+        endsAt:
+          dto.endsAt !== undefined
+            ? parseOptionalDate(dto.endsAt)
+            : existing.endsAt,
         perCustomerLimit: V1_PER_CUSTOMER_LIMIT,
-        message: dto.message !== undefined ? dto.message.trim() || null : existing.message,
+        message:
+          dto.message !== undefined
+            ? dto.message.trim() || null
+            : existing.message,
         surveyId: dto.surveyId ?? existing.surveyId,
         mmCompanyId: dto.mmCompanyId?.trim() ?? existing.mmCompanyId,
         rewardEnabled: true,
         rewardAmountCents: rewardAmountCents ?? existing.rewardAmountCents,
-        validityDays: dto.validityDays !== undefined ? dto.validityDays : existing.validityDays,
+        validityDays:
+          dto.validityDays !== undefined
+            ? dto.validityDays
+            : existing.validityDays,
         status: dto.status ?? existing.status,
       },
       include: { survey: { select: { id: true, name: true } } },
@@ -165,8 +189,12 @@ export class CouponCampaignsService {
             _count: { _all: true },
           });
 
-    const issuedBy = new Map(issued.map((row) => [row.campaignId, row._count._all]));
-    const redeemedBy = new Map(redeemed.map((row) => [row.campaignId, row._count._all]));
+    const issuedBy = new Map(
+      issued.map((row) => [row.campaignId, row._count._all]),
+    );
+    const redeemedBy = new Map(
+      redeemed.map((row) => [row.campaignId, row._count._all]),
+    );
 
     return rows.map((row) => ({
       ...row,

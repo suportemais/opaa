@@ -1,4 +1,8 @@
-import { normalizeRewardCpf, normalizeRewardPhone, resolveCustomerKey } from './customer-key';
+import {
+  normalizeRewardCpf,
+  normalizeRewardPhone,
+  resolveCustomerKey,
+} from './customer-key';
 
 describe('customerKey normalization', () => {
   it('prefers phone over CPF and prefixes BR country code', () => {
@@ -19,7 +23,9 @@ describe('customerKey normalization', () => {
       value: '39053344705',
       key: 'cpf:39053344705',
     });
-    expect(resolveCustomerKey({ phone: 'abc', document: '39053344705' })?.kind).toBe('cpf');
+    expect(
+      resolveCustomerKey({ phone: 'abc', document: '39053344705' })?.kind,
+    ).toBe('cpf');
   });
 
   it('rejects invalid identifiers', () => {

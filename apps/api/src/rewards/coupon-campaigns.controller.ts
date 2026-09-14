@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/require-permissions.decorator';
@@ -34,7 +42,11 @@ export class CouponCampaignsController {
 
   @Patch(':id')
   @RequirePermissions(PermissionCodes.SurveyManage)
-  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateCouponCampaignDto) {
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateCouponCampaignDto,
+  ) {
     return this.campaigns.update(user, id, dto);
   }
 

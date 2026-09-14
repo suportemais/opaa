@@ -3,7 +3,10 @@ import { join } from 'node:path';
 
 describe('mm reward emit migration', () => {
   const sql = readFileSync(
-    join(__dirname, '../../prisma/migrations/20260914180000_mm_reward_emit/migration.sql'),
+    join(
+      __dirname,
+      '../../prisma/migrations/20260914180000_mm_reward_emit/migration.sql',
+    ),
     'utf8',
   );
 
@@ -12,7 +15,9 @@ describe('mm reward emit migration', () => {
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS "rewardAmountCents"/);
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS "rewardEnabled"/);
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS "customerKey"/);
-    expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS "coupons_campaignId_customerKey_key"/);
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX IF NOT EXISTS "coupons_campaignId_customerKey_key"/,
+    );
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS "surveyId"/);
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS "documentNormalized"/);
 

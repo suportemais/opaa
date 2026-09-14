@@ -32,7 +32,9 @@ export function normalizeRewardCpf(document?: string | null): string | null {
   return parsed.value;
 }
 
-export function resolveCustomerKey(input: CustomerKeyInput): ResolvedCustomerKey | null {
+export function resolveCustomerKey(
+  input: CustomerKeyInput,
+): ResolvedCustomerKey | null {
   const phone = normalizeRewardPhone(input.phone);
   if (phone) return { kind: 'phone', value: phone, key: `phone:${phone}` };
 

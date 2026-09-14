@@ -1,5 +1,8 @@
 import { Prisma } from '@prisma/client';
-import { RewardEmitService, REWARD_WHATSAPP_EVENT_TYPE } from './reward-emit.service';
+import {
+  RewardEmitService,
+  REWARD_WHATSAPP_EVENT_TYPE,
+} from './reward-emit.service';
 
 const CAMPAIGN_ID = '22222222-2222-4222-8222-222222222222';
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
@@ -23,26 +26,39 @@ function setup(opts?: {
   existing?: { id: string; code: string } | null;
   createImpl?: jest.Mock;
 }) {
-  const couponStore: Array<{ id: string; code: string; customerKey: string }> = [];
-  const findUnique = jest.fn().mockImplementation(async ({ where }: { where: { campaignId_customerKey?: { customerKey: string } } }) => {
-    if (opts?.existing) return opts.existing;
-    const key = where.campaignId_customerKey?.customerKey;
-    return couponStore.find((row) => row.customerKey === key) ?? null;
-  });
+  const couponStore: Array<{ id: string; code: string; customerKey: string }> =
+    [];
+  const findUnique = jest
+    .fn()
+    .mockImplementation(
+      async ({
+        where,
+      }: {
+        where: { campaignId_customerKey?: { customerKey: string } };
+      }) => {
+        if (opts?.existing) return opts.existing;
+        const key = where.campaignId_customerKey?.customerKey;
+        return couponStore.find((row) => row.customerKey === key) ?? null;
+      },
+    );
   const create =
     opts?.createImpl ??
-    jest.fn().mockImplementation(async ({ data }: { data: { code: string; customerKey: string } }) => {
-      const row = {
-        id: `coupon-${couponStore.length + 1}`,
-        code: data.code,
-        customerKey: data.customerKey,
-        amountCents: 1500,
-        mmCompanyId: 'mm-co-1',
-        expiresAt: new Date('2026-10-14T00:00:00.000Z'),
-      };
-      couponStore.push(row);
-      return row;
-    });
+    jest
+      .fn()
+      .mockImplementation(
+        async ({ data }: { data: { code: string; customerKey: string } }) => {
+          const row = {
+            id: `coupon-${couponStore.length + 1}`,
+            code: data.code,
+            customerKey: data.customerKey,
+            amountCents: 1500,
+            mmCompanyId: 'mm-co-1',
+            expiresAt: new Date('2026-10-14T00:00:00.000Z'),
+          };
+          couponStore.push(row);
+          return row;
+        },
+      );
   const update = jest.fn().mockResolvedValue({});
   const count = jest.fn().mockResolvedValue(0);
   const prisma = {
@@ -83,11 +99,17 @@ describe('RewardEmitService', () => {
     expect(enqueue).toHaveBeenCalledTimes(1);
     const event = enqueue.mock.calls[0][0] as {
       eventType: string;
-      payload: { deepLink: string; to: string; signedPayload: { customerKey: string } };
+      payload: {
+        deepLink: string;
+        to: string;
+        signedPayload: { customerKey: string };
+      };
     };
     expect(event.eventType).toBe(REWARD_WHATSAPP_EVENT_TYPE);
     expect(event.payload.to).toBe('5511988887777');
-    expect(event.payload.deepLink).toMatch(/^https:\/\/app\.muitomais\.example\/app\?voucher=/);
+    expect(event.payload.deepLink).toMatch(
+      /^https:\/\/app\.muitomais\.example\/app\?voucher=/,
+    );
     expect(event.payload.signedPayload.customerKey).toBe('phone:5511988887777');
   });
 
@@ -116,7 +138,7 @@ describe('RewardEmitService', () => {
         meta: { target: ['campaignId', 'customerKey'] },
       }),
     );
-    const { service, enqueue } = setup({
+    const { enqueue } = setup({
       createImpl: create,
     });
     // After the failed create, findUnique returns the winner.
@@ -135,7 +157,9 @@ describe('RewardEmitService', () => {
       } as never,
       { enqueue } as never,
       {
-        get: jest.fn((key: string) => (key === 'MM_REWARD_HMAC_SECRET' ? 'test-mm-secret' : '')),
+        get: jest.fn((key: string) =>
+          key === 'MM_REWARD_HMAC_SECRET' ? 'test-mm-secret' : '',
+        ),
       } as never,
     );
 

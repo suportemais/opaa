@@ -1,4 +1,7 @@
-import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { signVerifyRequest } from '../domain/rewards/hmac';
 import { MmRewardHmacGuard } from './mm-reward-hmac.guard';
 

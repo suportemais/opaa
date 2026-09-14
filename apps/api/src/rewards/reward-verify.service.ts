@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { signRewardPayload, type RewardSignedPayload } from '../domain/rewards/hmac';
+import {
+  signRewardPayload,
+  type RewardSignedPayload,
+} from '../domain/rewards/hmac';
 
 export type VerifyRewardInput = {
   code: string;
@@ -10,7 +13,8 @@ export type VerifyRewardInput = {
 
 export type VerifyRewardResult = {
   valid: boolean;
-  reason?: 'not_found' | 'expired' | 'cancelled' | 'redeemed' | 'company_mismatch';
+  reason?:
+    'not_found' | 'expired' | 'cancelled' | 'redeemed' | 'company_mismatch';
   code?: string;
   amountCents?: number;
   mmCompanyId?: string;
@@ -34,7 +38,9 @@ export class RewardVerifyService {
     const coupon = await this.prisma.coupon.findFirst({
       where: {
         code,
-        ...(input.mmCompanyId?.trim() ? { mmCompanyId: input.mmCompanyId.trim() } : {}),
+        ...(input.mmCompanyId?.trim()
+          ? { mmCompanyId: input.mmCompanyId.trim() }
+          : {}),
       },
       select: {
         id: true,
@@ -54,20 +60,41 @@ export class RewardVerifyService {
       return { valid: false, reason: 'not_found' };
     }
 
-    if (input.mmCompanyId?.trim() && coupon.mmCompanyId !== input.mmCompanyId.trim()) {
+    if (
+      input.mmCompanyId?.trim() &&
+      coupon.mmCompanyId !== input.mmCompanyId.trim()
+    ) {
       return { valid: false, reason: 'company_mismatch' };
     }
 
     if (coupon.cancelledAt || coupon.status === 'cancelled') {
-      return { valid: false, reason: 'cancelled', code: coupon.code, campaignId: coupon.campaignId };
+      return {
+        valid: false,
+        reason: 'cancelled',
+        code: coupon.code,
+        campaignId: coupon.campaignId,
+      };
     }
 
     if (coupon.redeemedAt || coupon.status === 'redeemed') {
-      return { valid: false, reason: 'redeemed', code: coupon.code, campaignId: coupon.campaignId };
+      return {
+        valid: false,
+        reason: 'redeemed',
+        code: coupon.code,
+        campaignId: coupon.campaignId,
+      };
     }
 
-    if (coupon.status === 'expired' || (coupon.expiresAt && coupon.expiresAt.getTime() <= Date.now())) {
-      return { valid: false, reason: 'expired', code: coupon.code, campaignId: coupon.campaignId };
+    if (
+      coupon.status === 'expired' ||
+      (coupon.expiresAt && coupon.expiresAt.getTime() <= Date.now())
+    ) {
+      return {
+        valid: false,
+        reason: 'expired',
+        code: coupon.code,
+        campaignId: coupon.campaignId,
+      };
     }
 
     if (
@@ -87,7 +114,9 @@ export class RewardVerifyService {
       mmCompanyId: coupon.mmCompanyId,
     };
 
-    const secret = (this.config.get<string>('MM_REWARD_HMAC_SECRET') ?? '').trim();
+    const secret = (
+      this.config.get<string>('MM_REWARD_HMAC_SECRET') ?? ''
+    ).trim();
     const signature = secret ? signRewardPayload(signedPayload, secret) : null;
 
     return {

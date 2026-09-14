@@ -49,11 +49,15 @@ function setup() {
       findMany: jest.fn().mockResolvedValue([created]),
       findFirst: jest.fn().mockResolvedValue(created),
       create: jest.fn().mockResolvedValue(created),
-      update: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
-        ...created,
-        ...data,
-        survey: created.survey,
-      })),
+      update: jest
+        .fn()
+        .mockImplementation(
+          async ({ data }: { data: Record<string, unknown> }) => ({
+            ...created,
+            ...data,
+            survey: created.survey,
+          }),
+        ),
     },
     coupon: {
       groupBy: jest
@@ -62,7 +66,11 @@ function setup() {
         .mockResolvedValueOnce([{ campaignId: 'camp-1', _count: { _all: 1 } }]),
     },
   };
-  return { service: new CouponCampaignsService(prisma as never), prisma, created };
+  return {
+    service: new CouponCampaignsService(prisma as never),
+    prisma,
+    created,
+  };
 }
 
 describe('CouponCampaignsService', () => {
@@ -119,7 +127,10 @@ describe('CouponCampaignsService', () => {
     expect(paused.perCustomerLimit).toBe(1);
     expect(prisma.couponCampaign.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'paused', perCustomerLimit: 1 }),
+        data: expect.objectContaining({
+          status: 'paused',
+          perCustomerLimit: 1,
+        }),
       }),
     );
   });

@@ -14,7 +14,9 @@ export type VerifyRequestBody = {
   mmCompanyId?: string;
 };
 
-export function canonicalizeRewardPayload(payload: RewardSignedPayload): string {
+export function canonicalizeRewardPayload(
+  payload: RewardSignedPayload,
+): string {
   return JSON.stringify({
     amountCents: payload.amountCents,
     campaignId: payload.campaignId,
@@ -37,7 +39,10 @@ export function signHmacSha256Hex(secret: string, value: string): string {
   return createHmac('sha256', secret).update(value).digest('hex');
 }
 
-export function signRewardPayload(payload: RewardSignedPayload, secret: string): string {
+export function signRewardPayload(
+  payload: RewardSignedPayload,
+  secret: string,
+): string {
   return signHmacSha256Hex(secret, canonicalizeRewardPayload(payload));
 }
 
@@ -87,7 +92,11 @@ export function timingSafeEqualHex(expected: string, actual: string): boolean {
   }
 }
 
-export function isTimestampFresh(timestamp: string, nowMs: number, maxSkewSeconds: number): boolean {
+export function isTimestampFresh(
+  timestamp: string,
+  nowMs: number,
+  maxSkewSeconds: number,
+): boolean {
   if (!/^\d+$/.test(timestamp)) return false;
   const ts = Number(timestamp);
   if (!Number.isFinite(ts)) return false;

@@ -17,14 +17,17 @@ export class MmRewardHmacGuard implements CanActivate {
   constructor(private readonly config: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const secret = (this.config.get<string>('MM_REWARD_HMAC_SECRET') ?? '').trim();
+    const secret = (
+      this.config.get<string>('MM_REWARD_HMAC_SECRET') ?? ''
+    ).trim();
     if (!secret) {
       throw new ServiceUnavailableException('mm_reward_hmac_not_configured');
     }
 
     const maxSkew = Math.max(
       30,
-      Number(this.config.get<string>('MM_REWARD_MAX_SKEW_SECONDS') ?? '300') || 300,
+      Number(this.config.get<string>('MM_REWARD_MAX_SKEW_SECONDS') ?? '300') ||
+        300,
     );
 
     const req = context.switchToHttp().getRequest<{

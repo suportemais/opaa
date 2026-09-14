@@ -7,7 +7,10 @@ export function renderRewardWhatsappMessage(
   template: string | null | undefined,
   vars: { code: string; link: string; amountCents: number },
 ): string {
-  const src = typeof template === 'string' && template.trim() ? template : DEFAULT_REWARD_WHATSAPP_TEMPLATE;
+  const src =
+    typeof template === 'string' && template.trim()
+      ? template
+      : DEFAULT_REWARD_WHATSAPP_TEMPLATE;
   return src
     .split('{{code}}')
     .join(vars.code)

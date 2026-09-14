@@ -10,7 +10,12 @@ import { RbacModule } from '../rbac/rbac.module';
 @Module({
   imports: [RbacModule],
   controllers: [MmRewardsController, CouponCampaignsController],
-  providers: [RewardEmitService, RewardVerifyService, MmRewardHmacGuard, CouponCampaignsService],
+  providers: [
+    RewardEmitService,
+    RewardVerifyService,
+    MmRewardHmacGuard,
+    CouponCampaignsService,
+  ],
   exports: [RewardEmitService, CouponCampaignsService],
 })
 export class RewardsModule {}

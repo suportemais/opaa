@@ -1,5 +1,8 @@
 import { buildRewardDeepLink, formatRewardAmountBrl } from './code';
-import { DEFAULT_REWARD_WHATSAPP_TEMPLATE, renderRewardWhatsappMessage } from './whatsapp-message';
+import {
+  DEFAULT_REWARD_WHATSAPP_TEMPLATE,
+  renderRewardWhatsappMessage,
+} from './whatsapp-message';
 
 describe('reward WhatsApp message', () => {
   it('renders the default template with deep link /app?voucher=CODE', () => {
