@@ -1,4 +1,8 @@
-import { buildRewardDeepLink, formatRewardAmountBrl } from './code';
+import {
+  buildRewardDeepLink,
+  formatRewardAmountBrl,
+  formatRewardAmountDecimal,
+} from './code';
 import {
   DEFAULT_REWARD_WHATSAPP_TEMPLATE,
   renderRewardWhatsappMessage,
@@ -11,6 +15,7 @@ describe('reward WhatsApp message', () => {
       code: 'MMABC12D',
     });
     expect(link).toBe('https://app.muitomais.example/app?voucher=MMABC12D');
+    expect(formatRewardAmountDecimal(1500)).toBe('15.00');
     expect(formatRewardAmountBrl(1500)).toBe('R$ 15,00');
     expect(
       renderRewardWhatsappMessage(null, {

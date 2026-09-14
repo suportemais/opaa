@@ -19,7 +19,7 @@ function corsBaseDomain() {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const httpAdapter = app.getHttpAdapter();
 
   const basePath = (process.env.API_BASE_PATH ?? '').trim().replace(/^\/+|\/+$/g, '');

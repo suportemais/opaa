@@ -8,9 +8,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   isTimestampFresh,
+  rawRequestBody,
   verifyVerifyRequestSignature,
   type VerifyRequestBody,
 } from '../domain/rewards/hmac';
+
+const TIMESTAMP_HEADERS = ['x-mm-timestamp', 'x-opiina-timestamp'] as const;
+const SIGNATURE_HEADERS = ['x-mm-signature', 'x-opiina-signature'] as const;
 
 @Injectable()
 export class MmRewardHmacGuard implements CanActivate {
@@ -35,10 +39,11 @@ export class MmRewardHmacGuard implements CanActivate {
       headers: Record<string, string | string[] | undefined>;
       body?: { code?: string; mmCompanyId?: string };
       query?: { code?: string; mmCompanyId?: string };
+      rawBody?: Buffer | string;
     }>();
 
-    const timestamp = headerValue(req.headers, 'x-opiina-timestamp');
-    const signature = headerValue(req.headers, 'x-opiina-signature');
+    const timestamp = firstHeader(req.headers, TIMESTAMP_HEADERS);
+    const signature = firstHeader(req.headers, SIGNATURE_HEADERS);
     if (!timestamp || !signature) {
       throw new UnauthorizedException('mm_reward_signature_required');
     }
@@ -64,12 +69,24 @@ export class MmRewardHmacGuard implements CanActivate {
       body,
       signature,
       secret,
+      rawBody: rawRequestBody(req.rawBody),
     });
     if (!ok) {
       throw new UnauthorizedException('mm_reward_signature_invalid');
     }
     return true;
   }
+}
+
+function firstHeader(
+  headers: Record<string, string | string[] | undefined>,
+  names: readonly string[],
+): string | null {
+  for (const name of names) {
+    const value = headerValue(headers, name);
+    if (value) return value;
+  }
+  return null;
 }
 
 function headerValue(

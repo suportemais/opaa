@@ -90,52 +90,74 @@ If the customer is identified only by CPF, the code is still issued; WhatsApp is
 
 ## Verify API
 
-Shared secret: `MM_REWARD_HMAC_SECRET`.
+Locked to the Muito Mais client (`opiina-reward.client.ts` / `opiina-reward.hmac.ts`). Shared secret: `MM_REWARD_HMAC_SECRET`.
 
 ```
 POST /internal/mm/rewards/verify
 GET  /internal/mm/rewards/verify?code=MMABC12D
 ```
 
-### Headers
+MM calls **POST** with the exact JSON body `{"code":"..."}` and expects **HTTP 200** (not 201). GET remains available for the same code lookup.
+
+### Request headers (inbound)
+
+Prefer MM headers. Legacy OPIINA headers are still accepted.
 
 | Header | Value |
 | --- | --- |
-| `X-OPIINA-Timestamp` | Unix seconds (or ms). Must be within `MM_REWARD_MAX_SKEW_SECONDS` (default 300). |
-| `X-OPIINA-Signature` | hex HMAC-SHA256 of `` `${timestamp}.${canonicalJson}` `` |
+| `X-MM-Timestamp` | Unix seconds (or ms). Must be within `MM_REWARD_MAX_SKEW_SECONDS` (default 300). **Preferred.** |
+| `X-MM-Signature` | `sha256=<hex>` HMAC-SHA256 of `` `${timestamp}.${rawBody}` ``. **Preferred.** |
+| `X-OPIINA-Timestamp` | Legacy alias of `X-MM-Timestamp`. |
+| `X-OPIINA-Signature` | Legacy alias of `X-MM-Signature` (bare hex still accepted). |
 | `Content-Type` | `application/json` (POST) |
 
-`canonicalJson` is `JSON.stringify` with keys in this order:
+Signature is verified against the **raw request body string** when Nest captures it (`rawBody: true`). Fallbacks:
 
-```json
-{"code":"MMABC12D"}
-```
+1. exact MM compact JSON `{"code":"..."}`
+2. canonical `{"code":"...","mmCompanyId":"..."}` when `mmCompanyId` is present
 
-or, when scoping to a company:
+`sha256=` prefix is stripped before compare; bare hex still works.
 
-```json
-{"code":"MMABC12D","mmCompanyId":"mm-co-1"}
-```
-
-Signing string example:
+Signing string example (MM):
 
 ```
 1726332840.{"code":"MMABC12D"}
 ```
 
+Header example:
+
+```
+X-MM-Timestamp: 1726332840
+X-MM-Signature: sha256=<hex>
+```
+
 ### POST body
 
 ```json
-{ "code": "MMABC12D", "mmCompanyId": "mm-co-1" }
+{ "code": "MMABC12D" }
 ```
 
 `mmCompanyId` is optional. When present, the code must belong to that company.
 
+### Response headers (outbound)
+
+Every 200 verify JSON body is signed so the MM client can check it:
+
+| Header | Value |
+| --- | --- |
+| `X-Opiina-Timestamp` | Unix seconds when OPIINA signed the response |
+| `X-Opiina-Signature` | `sha256=<hex>` HMAC-SHA256 of `` `${timestamp}.${rawResponseBody}` `` |
+
+`rawResponseBody` is the exact `JSON.stringify` of the response object.
+
 ### Success body (`valid: true`)
+
+MM schema (required fields). Extra OPIINA fields are additive and kept for offline HMAC of `signedPayload`.
 
 ```json
 {
   "valid": true,
+  "amount": "15.00",
   "code": "MMABC12D",
   "amountCents": 1500,
   "mmCompanyId": "mm-co-1",
@@ -155,7 +177,9 @@ Signing string example:
 }
 ```
 
-`signature` = hex HMAC-SHA256 of the canonical `signedPayload` JSON (keys in the order above, `expiresAt` ISO-8601 or `null`) using `MM_REWARD_HMAC_SECRET`. MM can cache this and verify offline without mirroring codes.
+- `amount` is a decimal string with 2 places (`1500` cents → `"15.00"`).
+- `expiresAt` is ISO-8601 (or `null` when the campaign has no expiry).
+- Body `signature` = hex HMAC-SHA256 of the canonical `signedPayload` JSON (keys in the order above) using `MM_REWARD_HMAC_SECRET`. Separate from the `X-Opiina-Signature` response header.
 
 ### Failure body (`valid: false`)
 

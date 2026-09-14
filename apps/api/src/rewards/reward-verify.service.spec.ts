@@ -38,6 +38,7 @@ describe('RewardVerifyService', () => {
     const { service } = setup(couponRow());
     const result = await service.verify({ code: 'MMABC12D' });
     expect(result.valid).toBe(true);
+    expect(result.amount).toBe('15.00');
     expect(result.code).toBe('MMABC12D');
     expect(result.amountCents).toBe(1500);
     expect(result.mmCompanyId).toBe('mm-co-1');
