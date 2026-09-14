@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
+import { BrandMark } from '../components/BrandMark';
+import { TenantBillingPrompts } from '../components/billing/TenantBillingPrompts';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
+import type { TenantBilling } from '../lib/billing-access';
 
 type Survey = { id: string; name: string; status: string };
 type RewardCampaign = {
@@ -27,6 +31,7 @@ type TenantMe = {
   tradeName?: string;
   legalName?: string;
   settings?: { mmCompanyId?: string };
+  billing?: TenantBilling;
 };
 
 type MmCompanyOption = { id: string; label: string };
@@ -170,6 +175,23 @@ function buildMmCompanyOptions(
   return [{ id, label }];
 }
 
+function PremiosChrome(props: { action?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="min-h-full bg-opiina-bg text-opiina-navy">
+      <header className="bg-white">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-5 py-3">
+          <Link to="/app" className="min-w-0">
+            <BrandMark />
+          </Link>
+          {props.action}
+        </div>
+        <div className="h-0.5 bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
+      </header>
+      <main className="mx-auto w-full max-w-5xl px-5 py-8">{props.children}</main>
+    </div>
+  );
+}
+
 function StatusChip({ status }: { status: string }) {
   return (
     <span
@@ -198,7 +220,7 @@ export function RewardCampaignsPage() {
   });
   const tenant = useQuery({
     queryKey: ['tenantMe'],
-    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ id: '' })),
+    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ id: '' }) as TenantMe),
     staleTime: 60 * 1000,
     enabled: !preview,
   });
@@ -336,9 +358,21 @@ export function RewardCampaignsPage() {
   const rows = campaignRows;
   const listLoading = preview ? false : campaigns.isLoading;
 
+  const novaCampanha = (
+    <button
+      type="button"
+      onClick={openCreate}
+      className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-opiina-navy px-5 text-sm font-medium text-white hover:bg-slate-800"
+    >
+      Nova campanha
+    </button>
+  );
+
   if (mode === 'form') {
     return (
-      <CampaignForm
+      <PremiosChrome>
+        {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
+        <CampaignForm
         editing={Boolean(editingId)}
         name={name}
         setName={setName}
@@ -372,28 +406,22 @@ export function RewardCampaignsPage() {
           }
         }}
       />
+      </PremiosChrome>
     );
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-semibold tracking-tight text-opiina-navy md:text-3xl">Prêmios</h1>
-            <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-              Prêmios Muito Mais
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-opiina-muted">Campanhas de recompensa vinculadas às pesquisas.</p>
+    <PremiosChrome action={novaCampanha}>
+      {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
+      <div className="grid gap-6">
+      <div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
+          <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
+            Prêmios Muito Mais
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-full bg-opiina-navy px-5 text-sm font-medium text-white hover:bg-slate-800 sm:w-auto"
-        >
-          Nova campanha
-        </button>
+        <p className="mt-2 text-sm text-opiina-muted md:hidden">Campanhas de recompensa vinculadas às pesquisas.</p>
       </div>
 
       {listLoading ? (
@@ -458,9 +486,14 @@ export function RewardCampaignsPage() {
               </tbody>
             </table>
           </div>
+
+          <p className="text-sm text-opiina-muted md:hidden">
+            Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
+          </p>
         </>
       )}
     </div>
+    </PremiosChrome>
   );
 }
 
@@ -517,7 +550,10 @@ function CampaignActions(props: {
   const active = props.row.status === 'active';
   const pill =
     'inline-flex h-9 items-center justify-center rounded-full border border-opiina-border bg-white px-4 text-sm font-medium text-opiina-navy hover:bg-slate-50 disabled:opacity-50';
-  const link = 'text-sm font-medium text-opiina-cta hover:underline disabled:opacity-50';
+  const link =
+    props.layout === 'card'
+      ? 'text-sm font-medium text-opiina-navy hover:underline disabled:opacity-50'
+      : 'text-sm font-medium text-opiina-cta hover:underline disabled:opacity-50';
   const muted = 'text-sm font-medium text-opiina-navy hover:underline disabled:opacity-50';
 
   return (
@@ -571,7 +607,7 @@ function CampaignForm(props: {
 }) {
   return (
     <div className="mx-auto w-full max-w-xl">
-      <button type="button" onClick={props.onBack} className="text-sm font-medium text-opiina-cta hover:underline">
+      <button type="button" onClick={props.onBack} className="text-sm font-medium text-opiina-navy hover:underline">
         ← Voltar à lista
       </button>
       <h1 className="mt-4 text-3xl font-semibold tracking-tight text-opiina-navy">
@@ -658,20 +694,22 @@ function CampaignForm(props: {
         <label>
           <FieldLabel>Texto WhatsApp</FieldLabel>
           <textarea
-            className="min-h-28 w-full resize-none rounded-2xl border border-opiina-border bg-white p-4 text-sm text-opiina-navy outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100"
+            className="min-h-[3rem] w-full resize-none rounded-[28px] border border-opiina-border bg-white px-4 py-3 text-sm text-opiina-navy outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100"
             value={props.message}
             onChange={(e) => props.setMessage(e.target.value)}
             placeholder={DEFAULT_WHATSAPP}
+            rows={3}
           />
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-opiina-muted">Placeholders:</span>
-            {WHATSAPP_TOKENS.map((token) => (
+          <div className="mt-2 text-xs text-opiina-muted">
+            Placeholders:{' '}
+            {WHATSAPP_TOKENS.map((token, i) => (
               <button
                 key={token}
                 type="button"
                 onClick={() => props.onInsertToken(token)}
-                className="rounded-full bg-[#E8F4FF] px-2.5 py-0.5 font-mono text-xs text-opiina-cyan"
+                className="font-mono text-opiina-cyan hover:underline"
               >
+                {i > 0 ? ' ' : ''}
                 {token}
               </button>
             ))}
