@@ -202,8 +202,14 @@ export function RewardCampaignsPage() {
     staleTime: 60 * 1000,
     enabled: !preview,
   });
-  const surveyRows = preview ? DESIGN_PREVIEW_SURVEYS : (surveys.data ?? []);
-  const campaignRows = preview ? DESIGN_PREVIEW_CAMPAIGNS : (campaigns.data ?? []);
+  const surveyRows = useMemo(
+    () => (preview ? DESIGN_PREVIEW_SURVEYS : (surveys.data ?? [])),
+    [preview, surveys.data],
+  );
+  const campaignRows = useMemo(
+    () => (preview ? DESIGN_PREVIEW_CAMPAIGNS : (campaigns.data ?? [])),
+    [preview, campaigns.data],
+  );
   const tenantRow = preview ? DESIGN_PREVIEW_TENANT : tenant.data;
 
   const [mode, setMode] = useState<'list' | 'form'>('list');
