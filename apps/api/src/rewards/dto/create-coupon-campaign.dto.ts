@@ -22,6 +22,7 @@ export class CreateCouponCampaignDto {
   @IsUUID('4')
   surveyId!: string;
 
+  /** Muito Mais `Company.id` (not Establishment.id / OPIINA unit). */
   @IsString()
   @MinLength(1)
   mmCompanyId!: string;

@@ -13,7 +13,9 @@ import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MmRewardHmacGuard } from './mm-reward-hmac.guard';
 import { MmRewardVerifyResponseInterceptor } from './mm-reward-verify-response.interceptor';
 import { RewardVerifyService } from './reward-verify.service';
+import { RewardRedeemService } from './reward-redeem.service';
 import { VerifyRewardDto } from './dto/verify-reward.dto';
+import { RedeemRewardDto } from './dto/redeem-reward.dto';
 
 @ApiTags('internal-mm-rewards')
 @ApiHeader({
@@ -40,7 +42,10 @@ import { VerifyRewardDto } from './dto/verify-reward.dto';
 @UseGuards(MmRewardHmacGuard)
 @UseInterceptors(MmRewardVerifyResponseInterceptor)
 export class MmRewardsController {
-  constructor(private readonly verifyService: RewardVerifyService) {}
+  constructor(
+    private readonly verifyService: RewardVerifyService,
+    private readonly redeemService: RewardRedeemService,
+  ) {}
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
@@ -57,5 +62,15 @@ export class MmRewardsController {
   })
   verifyGet(@Query() dto: VerifyRewardDto) {
     return this.verifyService.verify(dto);
+  }
+
+  @Post('redeemed')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Muito Mais → OPIINA mark reward redeemed (sets redeemedAt/status + KPI)',
+  })
+  redeemed(@Body() dto: RedeemRewardDto) {
+    return this.redeemService.markRedeemed(dto);
   }
 }
