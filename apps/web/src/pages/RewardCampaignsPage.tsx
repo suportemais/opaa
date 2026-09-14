@@ -30,10 +30,11 @@ type TenantMe = {
   id: string;
   tradeName?: string;
   legalName?: string;
-  settings?: { mmCompanyId?: string };
   billing?: TenantBilling;
 };
 
+/** Muito Mais Company.id + Company.tradeName — never an establishment. */
+type MmCompany = { id: string; tradeName: string };
 type MmCompanyOption = { id: string; label: string };
 
 const DEFAULT_WHATSAPP = 'Seu prêmio de R$ {{amount}}:\n{{code}}\nResgate: {{link}}';
@@ -51,13 +52,17 @@ const DESIGN_PREVIEW_SURVEYS: Survey[] = [
   { id: 's3', name: 'NPS unidade Centro', status: 'active' },
 ];
 
+const DESIGN_PREVIEW_COMPANIES: MmCompany[] = [
+  { id: 'mm-company-gepos', tradeName: 'Grupo Geppos' },
+];
+
 const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
   {
     id: 'c1',
     name: 'NPS Setembro — R$10',
     surveyId: 's1',
     surveyName: 'NPS pós-visita',
-    mmCompanyId: 'preview-mm',
+    mmCompanyId: 'mm-company-gepos',
     rewardAmountCents: 1000,
     validityDays: 30,
     startsAt: '2026-09-15T12:00:00.000Z',
@@ -74,7 +79,7 @@ const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
     name: 'CSAT delivery — R$20',
     surveyId: 's2',
     surveyName: 'CSAT delivery',
-    mmCompanyId: 'preview-mm',
+    mmCompanyId: 'mm-company-gepos',
     rewardAmountCents: 2000,
     validityDays: 30,
     startsAt: null,
@@ -91,7 +96,7 @@ const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
     name: 'Campanha piloto — R$10',
     surveyId: 's3',
     surveyName: 'NPS unidade Centro',
-    mmCompanyId: 'preview-mm',
+    mmCompanyId: 'mm-company-gepos',
     rewardAmountCents: 1000,
     validityDays: 30,
     startsAt: null,
@@ -149,30 +154,19 @@ function fromDateTimeLocal(value: string) {
   return d.toISOString();
 }
 
-function looksLikeRawId(value: string | null | undefined) {
-  if (!value) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
-}
-
-function tenantCompanyLabel(tenant: TenantMe | undefined) {
-  const name = tenant?.tradeName?.trim() || tenant?.legalName?.trim();
-  if (name && !looksLikeRawId(name)) return `${name} — MM`;
-  return 'Empresa Muito Mais';
-}
-
+/** Operator label = MM Company.tradeName. Never tenant/unit/establishment names. */
 function buildMmCompanyOptions(
-  tenant: TenantMe | undefined,
-  campaigns: RewardCampaign[],
-  preferredId?: string | null,
+  companies: MmCompany[],
+  selectedId?: string | null,
 ): MmCompanyOption[] {
-  const label = tenantCompanyLabel(tenant);
-  const id =
-    preferredId?.trim() ||
-    tenant?.settings?.mmCompanyId?.trim() ||
-    campaigns.find((row) => row.mmCompanyId?.trim())?.mmCompanyId?.trim() ||
-    tenant?.id?.trim();
-  if (!id) return [];
-  return [{ id, label }];
+  const options = companies
+    .filter((row) => row.id.trim() && row.tradeName.trim())
+    .map((row) => ({ id: row.id.trim(), label: `${row.tradeName.trim()} — MM` }));
+  const selected = selectedId?.trim();
+  if (selected && !options.some((row) => row.id === selected)) {
+    options.push({ id: selected, label: 'Empresa Muito Mais' });
+  }
+  return options;
 }
 
 function PremiosChrome(props: { action?: ReactNode; children: ReactNode }) {
@@ -224,6 +218,12 @@ export function RewardCampaignsPage() {
     staleTime: 60 * 1000,
     enabled: !preview,
   });
+  const mmCompanies = useQuery({
+    queryKey: ['mm-companies'],
+    queryFn: () => apiFetch<MmCompany[]>('/mm-companies'),
+    staleTime: 60 * 1000,
+    enabled: !preview,
+  });
   const surveyRows = useMemo(
     () => (preview ? DESIGN_PREVIEW_SURVEYS : (surveys.data ?? [])),
     [preview, surveys.data],
@@ -231,6 +231,10 @@ export function RewardCampaignsPage() {
   const campaignRows = useMemo(
     () => (preview ? DESIGN_PREVIEW_CAMPAIGNS : (campaigns.data ?? [])),
     [preview, campaigns.data],
+  );
+  const companyRows = useMemo(
+    () => (preview ? DESIGN_PREVIEW_COMPANIES : (mmCompanies.data ?? [])),
+    [preview, mmCompanies.data],
   );
   const tenantRow = preview ? DESIGN_PREVIEW_TENANT : tenant.data;
 
@@ -248,8 +252,8 @@ export function RewardCampaignsPage() {
 
   const companyOptions = useMemo(() => {
     const editingRow = campaignRows.find((row) => row.id === editingId);
-    return buildMmCompanyOptions(tenantRow, campaignRows, editingRow?.mmCompanyId);
-  }, [tenantRow, campaignRows, editingId]);
+    return buildMmCompanyOptions(companyRows, editingRow?.mmCompanyId ?? mmCompanyId);
+  }, [companyRows, campaignRows, editingId, mmCompanyId]);
 
   const defaultSurveyId = useMemo(() => surveyRows[0]?.id ?? '', [surveyRows]);
   const defaultCompanyId = companyOptions[0]?.id ?? '';
@@ -306,7 +310,8 @@ export function RewardCampaignsPage() {
     if (!mmCompanyId.trim()) throw new Error('Selecione a empresa Muito Mais.');
     if (!rewardAmountCents) throw new Error('Informe um valor em R$ maior que zero.');
     const days = validityDays.trim() ? Number(validityDays) : undefined;
-    if (days != null && (!Number.isInteger(days) || days < 1)) throw new Error('Validade deve ser um número de dias.');
+    if (days != null && (!Number.isInteger(days) || days < 1))
+      throw new Error('Validade deve ser um número de dias.');
     return {
       name: name.trim(),
       surveyId,
@@ -324,9 +329,15 @@ export function RewardCampaignsPage() {
     mutationFn: async () => {
       const body = payload();
       if (editingId) {
-        return apiFetch<RewardCampaign>(`/coupon-campaigns/${editingId}`, { method: 'PATCH', json: body });
+        return apiFetch<RewardCampaign>(`/coupon-campaigns/${editingId}`, {
+          method: 'PATCH',
+          json: body,
+        });
       }
-      return apiFetch<RewardCampaign>('/coupon-campaigns', { method: 'POST', json: { ...body, activate: true } });
+      return apiFetch<RewardCampaign>('/coupon-campaigns', {
+        method: 'POST',
+        json: { ...body, activate: true },
+      });
     },
     onSuccess: async () => {
       backToList();
@@ -338,14 +349,16 @@ export function RewardCampaignsPage() {
   });
 
   const pause = useMutation({
-    mutationFn: (id: string) => apiFetch<RewardCampaign>(`/coupon-campaigns/${id}/pause`, { method: 'POST' }),
+    mutationFn: (id: string) =>
+      apiFetch<RewardCampaign>(`/coupon-campaigns/${id}/pause`, { method: 'POST' }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
     },
   });
 
   const activate = useMutation({
-    mutationFn: (id: string) => apiFetch<RewardCampaign>(`/coupon-campaigns/${id}/activate`, { method: 'POST' }),
+    mutationFn: (id: string) =>
+      apiFetch<RewardCampaign>(`/coupon-campaigns/${id}/activate`, { method: 'POST' }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
     },
@@ -373,39 +386,41 @@ export function RewardCampaignsPage() {
       <PremiosChrome>
         {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
         <CampaignForm
-        editing={Boolean(editingId)}
-        name={name}
-        setName={setName}
-        surveyId={surveyId}
-        setSurveyId={setSurveyId}
-        surveys={surveyRows}
-        mmCompanyId={mmCompanyId}
-        setMmCompanyId={setMmCompanyId}
-        companyOptions={companyOptions}
-        amountReais={amountReais}
-        setAmountReais={setAmountReais}
-        validityDays={validityDays}
-        setValidityDays={setValidityDays}
-        startsAt={startsAt}
-        setStartsAt={setStartsAt}
-        endsAt={endsAt}
-        setEndsAt={setEndsAt}
-        message={message}
-        setMessage={setMessage}
-        formError={formError}
-        pending={save.isPending}
-        onBack={backToList}
-        onInsertToken={insertToken}
-        onSubmit={() => {
-          try {
-            setFormError(null);
-            payload();
-            save.mutate();
-          } catch (err) {
-            setFormError(err instanceof Error ? err.message : 'Dados inválidos');
-          }
-        }}
-      />
+          editing={Boolean(editingId)}
+          name={name}
+          setName={setName}
+          surveyId={surveyId}
+          setSurveyId={setSurveyId}
+          surveys={surveyRows}
+          mmCompanyId={mmCompanyId}
+          setMmCompanyId={setMmCompanyId}
+          companyOptions={companyOptions}
+          companiesLoading={preview ? false : mmCompanies.isLoading}
+          companiesError={preview ? false : mmCompanies.isError}
+          amountReais={amountReais}
+          setAmountReais={setAmountReais}
+          validityDays={validityDays}
+          setValidityDays={setValidityDays}
+          startsAt={startsAt}
+          setStartsAt={setStartsAt}
+          endsAt={endsAt}
+          setEndsAt={setEndsAt}
+          message={message}
+          setMessage={setMessage}
+          formError={formError}
+          pending={save.isPending}
+          onBack={backToList}
+          onInsertToken={insertToken}
+          onSubmit={() => {
+            try {
+              setFormError(null);
+              payload();
+              save.mutate();
+            } catch (err) {
+              setFormError(err instanceof Error ? err.message : 'Dados inválidos');
+            }
+          }}
+        />
       </PremiosChrome>
     );
   }
@@ -414,85 +429,89 @@ export function RewardCampaignsPage() {
     <PremiosChrome action={novaCampanha}>
       {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
       <div className="grid gap-6">
-      <div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
-          <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-            Prêmios Muito Mais
-          </span>
-        </div>
-        <p className="mt-2 text-sm text-opiina-muted md:hidden">Campanhas de recompensa vinculadas às pesquisas.</p>
-      </div>
-
-      {listLoading ? (
-        <div className="text-sm text-opiina-muted">Carregando...</div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-2xl border border-opiina-border bg-white px-5 py-8 text-sm text-opiina-muted">
-          Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-4 md:hidden">
-            {rows.map((row) => (
-              <CampaignCard
-                key={row.id}
-                row={row}
-                onEdit={() => openEdit(row)}
-                onPause={() => pause.mutate(row.id)}
-                onActivate={() => activate.mutate(row.id)}
-                pausePending={pause.isPending}
-                activatePending={activate.isPending}
-              />
-            ))}
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
+            <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
+              Prêmios Muito Mais
+            </span>
           </div>
-
-          <div className="hidden overflow-hidden rounded-2xl border border-opiina-border bg-white md:block">
-            <table className="min-w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-opiina-border text-opiina-muted">
-                  <th className="px-5 py-3.5 font-medium">Nome</th>
-                  <th className="px-5 py-3.5 font-medium">Pesquisa</th>
-                  <th className="px-5 py-3.5 font-medium">Valor</th>
-                  <th className="px-5 py-3.5 font-medium">Status</th>
-                  <th className="px-5 py-3.5 font-medium">Emitidos</th>
-                  <th className="px-5 py-3.5 font-medium">Resgatados</th>
-                  <th className="px-5 py-3.5 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-t border-opiina-border">
-                    <td className="px-5 py-4 font-medium text-opiina-navy">{row.name}</td>
-                    <td className="px-5 py-4 text-opiina-navy">{row.surveyName ?? '—'}</td>
-                    <td className="px-5 py-4 text-opiina-navy">{formatBRL(row.rewardAmountCents)}</td>
-                    <td className="px-5 py-4">
-                      <StatusChip status={row.status} />
-                    </td>
-                    <td className="px-5 py-4 text-opiina-navy">{row.issuedCount}</td>
-                    <td className="px-5 py-4 text-opiina-navy">{row.redeemedCount}</td>
-                    <td className="px-5 py-4">
-                      <CampaignActions
-                        row={row}
-                        layout="inline"
-                        onEdit={() => openEdit(row)}
-                        onPause={() => pause.mutate(row.id)}
-                        onActivate={() => activate.mutate(row.id)}
-                        pausePending={pause.isPending}
-                        activatePending={activate.isPending}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="text-sm text-opiina-muted md:hidden">
-            Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
+          <p className="mt-2 text-sm text-opiina-muted md:hidden">
+            Campanhas de recompensa vinculadas às pesquisas.
           </p>
-        </>
-      )}
-    </div>
+        </div>
+
+        {listLoading ? (
+          <div className="text-sm text-opiina-muted">Carregando...</div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-2xl border border-opiina-border bg-white px-5 py-8 text-sm text-opiina-muted">
+            Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 md:hidden">
+              {rows.map((row) => (
+                <CampaignCard
+                  key={row.id}
+                  row={row}
+                  onEdit={() => openEdit(row)}
+                  onPause={() => pause.mutate(row.id)}
+                  onActivate={() => activate.mutate(row.id)}
+                  pausePending={pause.isPending}
+                  activatePending={activate.isPending}
+                />
+              ))}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-2xl border border-opiina-border bg-white md:block">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-opiina-border text-opiina-muted">
+                    <th className="px-5 py-3.5 font-medium">Nome</th>
+                    <th className="px-5 py-3.5 font-medium">Pesquisa</th>
+                    <th className="px-5 py-3.5 font-medium">Valor</th>
+                    <th className="px-5 py-3.5 font-medium">Status</th>
+                    <th className="px-5 py-3.5 font-medium">Emitidos</th>
+                    <th className="px-5 py-3.5 font-medium">Resgatados</th>
+                    <th className="px-5 py-3.5 font-medium">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.id} className="border-t border-opiina-border">
+                      <td className="px-5 py-4 font-medium text-opiina-navy">{row.name}</td>
+                      <td className="px-5 py-4 text-opiina-navy">{row.surveyName ?? '—'}</td>
+                      <td className="px-5 py-4 text-opiina-navy">
+                        {formatBRL(row.rewardAmountCents)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <StatusChip status={row.status} />
+                      </td>
+                      <td className="px-5 py-4 text-opiina-navy">{row.issuedCount}</td>
+                      <td className="px-5 py-4 text-opiina-navy">{row.redeemedCount}</td>
+                      <td className="px-5 py-4">
+                        <CampaignActions
+                          row={row}
+                          layout="inline"
+                          onEdit={() => openEdit(row)}
+                          onPause={() => pause.mutate(row.id)}
+                          onActivate={() => activate.mutate(row.id)}
+                          pausePending={pause.isPending}
+                          activatePending={activate.isPending}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-sm text-opiina-muted md:hidden">
+              Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
+            </p>
+          </>
+        )}
+      </div>
     </PremiosChrome>
   );
 }
@@ -519,7 +538,9 @@ function CampaignCard(props: {
         </div>
         <div>
           <dt className="text-opiina-muted">Valor</dt>
-          <dd className="mt-0.5 font-medium text-opiina-navy">{formatBRL(row.rewardAmountCents)}</dd>
+          <dd className="mt-0.5 font-medium text-opiina-navy">
+            {formatBRL(row.rewardAmountCents)}
+          </dd>
         </div>
         <div>
           <dt className="text-opiina-muted">Emitidos</dt>
@@ -557,17 +578,33 @@ function CampaignActions(props: {
   const muted = 'text-sm font-medium text-opiina-navy hover:underline disabled:opacity-50';
 
   return (
-    <div className={props.layout === 'card' ? 'flex items-center justify-between gap-3' : 'flex flex-wrap items-center gap-4'}>
+    <div
+      className={
+        props.layout === 'card'
+          ? 'flex items-center justify-between gap-3'
+          : 'flex flex-wrap items-center gap-4'
+      }
+    >
       <button type="button" className={link} onClick={props.onEdit}>
         Editar
       </button>
       {!finished &&
         (active ? (
-          <button type="button" className={props.layout === 'card' ? pill : muted} disabled={props.pausePending} onClick={props.onPause}>
+          <button
+            type="button"
+            className={props.layout === 'card' ? pill : muted}
+            disabled={props.pausePending}
+            onClick={props.onPause}
+          >
             Pausar
           </button>
         ) : (
-          <button type="button" className={props.layout === 'card' ? pill : muted} disabled={props.activatePending} onClick={props.onActivate}>
+          <button
+            type="button"
+            className={props.layout === 'card' ? pill : muted}
+            disabled={props.activatePending}
+            onClick={props.onActivate}
+          >
             Ativar
           </button>
         ))}
@@ -589,6 +626,8 @@ function CampaignForm(props: {
   mmCompanyId: string;
   setMmCompanyId: (v: string) => void;
   companyOptions: MmCompanyOption[];
+  companiesLoading: boolean;
+  companiesError: boolean;
   amountReais: string;
   setAmountReais: (v: string) => void;
   validityDays: string;
@@ -607,14 +646,20 @@ function CampaignForm(props: {
 }) {
   return (
     <div className="mx-auto w-full max-w-xl">
-      <button type="button" onClick={props.onBack} className="text-sm font-medium text-opiina-navy hover:underline">
+      <button
+        type="button"
+        onClick={props.onBack}
+        className="text-sm font-medium text-opiina-navy hover:underline"
+      >
         ← Voltar à lista
       </button>
       <h1 className="mt-4 text-3xl font-semibold tracking-tight text-opiina-navy">
         {props.editing ? 'Editar campanha' : 'Nova campanha'}
       </h1>
       <p className="mt-2 text-sm text-opiina-muted">
-        {props.editing ? 'Atualize e salve a campanha de prêmio.' : 'Crie e ative uma campanha de prêmio.'}
+        {props.editing
+          ? 'Atualize e salve a campanha de prêmio.'
+          : 'Crie e ative uma campanha de prêmio.'}
       </p>
 
       <div className="mt-6 grid gap-4">
@@ -629,7 +674,11 @@ function CampaignForm(props: {
         </label>
         <label>
           <FieldLabel>Pesquisa</FieldLabel>
-          <select className={FIELD_CLASS} value={props.surveyId} onChange={(e) => props.setSurveyId(e.target.value)}>
+          <select
+            className={FIELD_CLASS}
+            value={props.surveyId}
+            onChange={(e) => props.setSurveyId(e.target.value)}
+          >
             <option value="">Selecione</option>
             {props.surveys.map((s) => (
               <option key={s.id} value={s.id}>
@@ -644,14 +693,33 @@ function CampaignForm(props: {
             className={FIELD_CLASS}
             value={props.mmCompanyId}
             onChange={(e) => props.setMmCompanyId(e.target.value)}
+            disabled={props.companiesLoading}
           >
-            <option value="">Selecione a empresa</option>
+            <option value="">
+              {props.companiesLoading ? 'Carregando empresas...' : 'Selecione a empresa'}
+            </option>
             {props.companyOptions.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.label}
               </option>
             ))}
           </select>
+          <div className="mt-1.5 text-xs text-opiina-muted">
+            Nome fantasia da empresa no Muito Mais (Company.id). Estabelecimentos não entram nesta
+            lista.
+          </div>
+          {props.companiesError && (
+            <div className="mt-1.5 text-xs text-rose-700">
+              Não foi possível carregar as empresas do Muito Mais.
+            </div>
+          )}
+          {!props.companiesLoading &&
+            !props.companiesError &&
+            props.companyOptions.length === 0 && (
+              <div className="mt-1.5 text-xs text-opiina-muted">
+                Nenhuma empresa do Muito Mais disponível.
+              </div>
+            )}
         </label>
         <label>
           <FieldLabel>Valor R$ (fixo)</FieldLabel>
@@ -721,7 +789,9 @@ function CampaignForm(props: {
         </div>
 
         {props.formError && (
-          <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{props.formError}</div>
+          <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {props.formError}
+          </div>
         )}
 
         <button

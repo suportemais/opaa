@@ -24,6 +24,7 @@ export class UpdateCouponCampaignDto {
   @IsUUID('4')
   surveyId?: string;
 
+  /** Muito Mais `Company.id` (not Establishment.id / OPIINA unit). */
   @IsOptional()
   @IsString()
   @MinLength(1)

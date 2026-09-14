@@ -16,35 +16,52 @@ Post-survey reward **emit** is owned by OPIINA. Muito Mais does not generate or 
 
 Tenant operators manage campaigns at **`/app/premios`** (API `/coupon-campaigns`). Pause instead of delete.
 
-| Field | Notes |
-| --- | --- |
-| name | Required |
-| surveyId | Eligible survey |
-| startsAt / endsAt | Optional window |
-| rewardAmountCents | Fixed BRL |
-| mmCompanyId | Required |
-| perCustomerLimit | Always `1` in v1 |
-| status | `active` / `paused` (also `draft`) |
-| message | WhatsApp template (`{{code}}`, `{{link}}`, `{{amount}}`) |
-| issuedCount / redeemedCount | Read-only KPIs |
+| Field                       | Notes                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| name                        | Required                                                                                        |
+| surveyId                    | Eligible survey                                                                                 |
+| startsAt / endsAt           | Optional window                                                                                 |
+| rewardAmountCents           | Fixed BRL                                                                                       |
+| mmCompanyId                 | Required. **Muito Mais `Company.id`** (never Establishment.id, OPIINA `Tenant.id`, or unit id). |
+| perCustomerLimit            | Always `1` in v1                                                                                |
+| status                      | `active` / `paused` (also `draft`)                                                              |
+| message                     | WhatsApp template (`{{code}}`, `{{link}}`, `{{amount}}`)                                        |
+| issuedCount / redeemedCount | Read-only KPIs                                                                                  |
 
 `POST /coupon-campaigns` creates and activates by default (`activate: true`). `POST /coupon-campaigns/:id/pause` and `/activate` toggle status. Activating sets `surveys.enableCoupon = true`.
+
+### Empresa Muito Mais (`mmCompanyId`)
+
+`mmCompanyId` is **`Company.id` on Muito Mais**. It is not an establishment, OPIINA tenant, or unit.
+
+`GET /mm-companies` (tenant JWT, `survey:read`) is the picker source for `/app/premios`:
+
+- Label: MM company **trade name** (e.g. `Grupo Geppos — MM`)
+- Value: `Company.id`
+- Establishments (e.g. PRIMO JARDINS) are filtered out even if MM returns a mixed payload
+
+Catalog sources, in order:
+
+1. `GET {MM_API_BASE_URL}/internal/opiina/companies` (optional; HMAC `X-Opiina-Timestamp` + `X-Opiina-Signature` over `{}`)
+2. `MM_COMPANIES_JSON` — `[{"id":"<Company.id>","tradeName":"Grupo Geppos"}]`
+
+The page must not fall back to OPIINA `tenant.tradeName` / `tenant.id` or `/units`.
 
 ## Campaign config (operator)
 
 Extend existing `coupon_campaigns` (additive columns):
 
-| Field | Required when reward is on | Notes |
-| --- | --- | --- |
-| `surveyId` | yes | Eligible survey for emit |
-| `rewardEnabled` | yes (`true`) | Plus survey.`enableCoupon` |
-| `mmCompanyId` | yes | Operator-configured MM company |
-| `rewardAmountCents` | yes | Fixed BRL amount in cents |
-| `validityDays` | optional | `expiresAt = issuedAt + validityDays`; else campaign `endsAt` |
-| `status` | `active` | Also honors `startsAt` / `endsAt` |
-| `message` | optional | WhatsApp template with `{{code}}`, `{{link}}`, `{{amount}}` |
-| `prefix` | optional | Code prefix (default `MM`) |
-| `perCustomerLimit` | existing | Unique `(campaignId, customerKey)` is the hard cap of 1 |
+| Field               | Required when reward is on | Notes                                                                                                                                                           |
+| ------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `surveyId`          | yes                        | Eligible survey for emit                                                                                                                                        |
+| `rewardEnabled`     | yes (`true`)               | Plus survey.`enableCoupon`                                                                                                                                      |
+| `mmCompanyId`       | yes                        | Muito Mais **`Company.id`**. Operator picks the company trade name on `/app/premios` (e.g. Grupo Geppos). Establishments such as PRIMO JARDINS must not appear. |
+| `rewardAmountCents` | yes                        | Fixed BRL amount in cents                                                                                                                                       |
+| `validityDays`      | optional                   | `expiresAt = issuedAt + validityDays`; else campaign `endsAt`                                                                                                   |
+| `status`            | `active`                   | Also honors `startsAt` / `endsAt`                                                                                                                               |
+| `message`           | optional                   | WhatsApp template with `{{code}}`, `{{link}}`, `{{amount}}`                                                                                                     |
+| `prefix`            | optional                   | Code prefix (default `MM`)                                                                                                                                      |
+| `perCustomerLimit`  | existing                   | Unique `(campaignId, customerKey)` is the hard cap of 1                                                                                                         |
 
 ## Identity
 
@@ -103,13 +120,13 @@ MM calls **POST** with the exact JSON body `{"code":"..."}` and expects **HTTP 2
 
 Prefer MM headers. Legacy OPIINA headers are still accepted.
 
-| Header | Value |
-| --- | --- |
-| `X-MM-Timestamp` | Unix seconds (or ms). Must be within `MM_REWARD_MAX_SKEW_SECONDS` (default 300). **Preferred.** |
-| `X-MM-Signature` | `sha256=<hex>` HMAC-SHA256 of `` `${timestamp}.${rawBody}` ``. **Preferred.** |
-| `X-OPIINA-Timestamp` | Legacy alias of `X-MM-Timestamp`. |
-| `X-OPIINA-Signature` | Legacy alias of `X-MM-Signature` (bare hex still accepted). |
-| `Content-Type` | `application/json` (POST) |
+| Header               | Value                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| `X-MM-Timestamp`     | Unix seconds (or ms). Must be within `MM_REWARD_MAX_SKEW_SECONDS` (default 300). **Preferred.** |
+| `X-MM-Signature`     | `sha256=<hex>` HMAC-SHA256 of `` `${timestamp}.${rawBody}` ``. **Preferred.**                   |
+| `X-OPIINA-Timestamp` | Legacy alias of `X-MM-Timestamp`.                                                               |
+| `X-OPIINA-Signature` | Legacy alias of `X-MM-Signature` (bare hex still accepted).                                     |
+| `Content-Type`       | `application/json` (POST)                                                                       |
 
 Signature is verified against the **raw request body string** when Nest captures it (`rawBody: true`). Fallbacks:
 
@@ -143,9 +160,9 @@ X-MM-Signature: sha256=<hex>
 
 Every 200 verify JSON body is signed so the MM client can check it:
 
-| Header | Value |
-| --- | --- |
-| `X-Opiina-Timestamp` | Unix seconds when OPIINA signed the response |
+| Header               | Value                                                                 |
+| -------------------- | --------------------------------------------------------------------- |
+| `X-Opiina-Timestamp` | Unix seconds when OPIINA signed the response                          |
 | `X-Opiina-Signature` | `sha256=<hex>` HMAC-SHA256 of `` `${timestamp}.${rawResponseBody}` `` |
 
 `rawResponseBody` is the exact `JSON.stringify` of the response object.
@@ -191,10 +208,54 @@ Auth succeeded, code not redeemable:
 
 Auth failures: `401` (`mm_reward_signature_required` / `mm_reward_timestamp_skew` / `mm_reward_signature_invalid`). Secret missing: `503` (`mm_reward_hmac_not_configured`).
 
+## Redeemed callback (MM → OPIINA)
+
+When MM redeems a code, it notifies OPIINA so `coupons.redeemedAt` / `status=redeemed` and the campaign **Resgatados** KPI stay in sync. HMAC is the same as verify.
+
+```
+POST /internal/mm/rewards/redeemed
+```
+
+Headers and signing are identical to verify (`X-MM-Timestamp` + `X-MM-Signature: sha256=<hex>` over `` `${timestamp}.${rawBody}` ``). HTTP **200**. Response is signed with `X-Opiina-*`.
+
+### POST body
+
+```json
+{ "code": "MMABC12D" }
+```
+
+`mmCompanyId` is optional. When present, the code must belong to that **Company.id**.
+
+### Success
+
+```json
+{
+  "ok": true,
+  "code": "MMABC12D",
+  "status": "redeemed",
+  "redeemedAt": "2026-09-14T19:00:00.000Z",
+  "amount": "15.00",
+  "amountCents": 1500,
+  "mmCompanyId": "mm-company-gepos",
+  "customerKey": "phone:5511988887777",
+  "campaignId": "…"
+}
+```
+
+### Failure (`ok: false`)
+
+```json
+{ "ok": false, "reason": "not_found" | "expired" | "cancelled" | "redeemed" | "company_mismatch" }
+```
+
+Already-redeemed codes are not rewritten (`reason: "redeemed"`). MM follow-up PR should call this after a successful local redeem.
+
 ## Env
 
 ```
 MM_REWARD_HMAC_SECRET=
 MM_APP_BASE_URL=https://app.muitomais.example
+MM_API_BASE_URL=https://api.muitomais.example
+MM_COMPANIES_JSON=[{"id":"<Company.id>","tradeName":"Grupo Geppos"}]
 MM_REWARD_MAX_SKEW_SECONDS=300
 ```
