@@ -28,11 +28,13 @@ import { VerifyRewardDto } from './dto/verify-reward.dto';
 })
 @ApiHeader({
   name: 'X-OPIINA-Timestamp',
-  description: 'Legacy inbound timestamp header (same rules as X-MM-Timestamp).',
+  description:
+    'Legacy inbound timestamp header (same rules as X-MM-Timestamp).',
 })
 @ApiHeader({
   name: 'X-OPIINA-Signature',
-  description: 'Legacy inbound signature header (same rules as X-MM-Signature).',
+  description:
+    'Legacy inbound signature header (same rules as X-MM-Signature).',
 })
 @Controller('internal/mm/rewards')
 @UseGuards(MmRewardHmacGuard)

@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import type { Server } from 'http';
 import request from 'supertest';
 import {
   formatHmacSignatureHeader,
@@ -67,7 +68,7 @@ describe('MmRewardsController (MM HTTP contract)', () => {
       signTimestampedBody(secret, timestamp, rawBody),
     );
 
-    const res = await request(app.getHttpServer())
+    const res = await request(app.getHttpServer() as Server)
       .post('/internal/mm/rewards/verify')
       .set('X-MM-Timestamp', timestamp)
       .set('X-MM-Signature', signature)
@@ -82,19 +83,16 @@ describe('MmRewardsController (MM HTTP contract)', () => {
       customerKey: 'phone:5511988887777',
       expiresAt: '2026-10-01T00:00:00.000Z',
     });
-    expect(res.headers['x-opiina-timestamp']).toMatch(/^\d+$/);
+    const responseTimestamp = String(res.headers['x-opiina-timestamp'] ?? '');
+    expect(responseTimestamp).toMatch(/^\d+$/);
     expect(res.headers['x-opiina-signature']).toBe(
-      `sha256=${signTimestampedBody(
-        secret,
-        res.headers['x-opiina-timestamp'] as string,
-        res.text,
-      )}`,
+      `sha256=${signTimestampedBody(secret, responseTimestamp, res.text)}`,
     );
   });
 
   it('rejects an invalid MM signature with 401', async () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as Server)
       .post('/internal/mm/rewards/verify')
       .set('X-MM-Timestamp', timestamp)
       .set('X-MM-Signature', `sha256=${'ab'.repeat(32)}`)

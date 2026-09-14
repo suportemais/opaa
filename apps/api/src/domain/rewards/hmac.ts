@@ -41,7 +41,10 @@ export function signHmacSha256Hex(secret: string, value: string): string {
 
 /** MM client sends `sha256=<hex>`; OPIINA v1 accepted bare hex. */
 export function normalizeHmacSignature(signature: string): string {
-  return signature.trim().replace(/^sha256=/i, '').trim();
+  return signature
+    .trim()
+    .replace(/^sha256=/i, '')
+    .trim();
 }
 
 export function formatHmacSignatureHeader(hex: string): string {

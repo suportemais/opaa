@@ -15,11 +15,7 @@ export type VerifyRewardInput = {
 export type VerifyRewardResult = {
   valid: boolean;
   reason?:
-    | 'not_found'
-    | 'expired'
-    | 'cancelled'
-    | 'redeemed'
-    | 'company_mismatch';
+    'not_found' | 'expired' | 'cancelled' | 'redeemed' | 'company_mismatch';
   amount?: string;
   code?: string;
   amountCents?: number;
