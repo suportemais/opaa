@@ -46,7 +46,7 @@ function setup(opts?: {
   const update = jest.fn().mockResolvedValue({});
   const count = jest.fn().mockResolvedValue(0);
   const prisma = {
-    survey: { findFirst: jest.fn().mockResolvedValue({ id: SURVEY_ID, enableCoupon: true }) },
+    survey: { findFirst: jest.fn().mockResolvedValue({ id: SURVEY_ID }) },
     couponCampaign: { findFirst: jest.fn().mockResolvedValue(campaignRow()) },
     coupon: { findUnique, create, update, count },
   };

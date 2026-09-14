@@ -47,10 +47,10 @@ export class RewardEmitService {
   async emitForCompletedResponse(input: EmitForCompletedResponseInput): Promise<RewardEmitResult> {
     const survey = await this.prisma.survey.findFirst({
       where: { id: input.surveyId, tenantId: input.tenantId },
-      select: { id: true, enableCoupon: true },
+      select: { id: true },
     });
-    if (!survey?.enableCoupon) {
-      return { status: 'skipped', reason: 'survey_reward_disabled' };
+    if (!survey) {
+      return { status: 'skipped', reason: 'survey_not_found' };
     }
 
     const campaign = await this.findEligibleCampaign(input.tenantId, input.surveyId);

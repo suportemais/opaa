@@ -12,6 +12,24 @@ Post-survey reward **emit** is owned by OPIINA. Muito Mais does not generate or 
   - Alternative `/resgatar?code=CODE` is **not** used in v1.
 - Not a fiscal coupon. No NFC-e. One MM company per network in v1 (`mmCompanyId` on the campaign).
 
+## Campaign CRUD (OPIINA panel)
+
+Tenant operators manage campaigns at **`/app/premios`** (API `/coupon-campaigns`). Pause instead of delete.
+
+| Field | Notes |
+| --- | --- |
+| name | Required |
+| surveyId | Eligible survey |
+| startsAt / endsAt | Optional window |
+| rewardAmountCents | Fixed BRL |
+| mmCompanyId | Required |
+| perCustomerLimit | Always `1` in v1 |
+| status | `active` / `paused` (also `draft`) |
+| message | WhatsApp template (`{{code}}`, `{{link}}`, `{{amount}}`) |
+| issuedCount / redeemedCount | Read-only KPIs |
+
+`POST /coupon-campaigns` creates and activates by default (`activate: true`). `POST /coupon-campaigns/:id/pause` and `/activate` toggle status. Activating sets `surveys.enableCoupon = true`.
+
 ## Campaign config (operator)
 
 Extend existing `coupon_campaigns` (additive columns):

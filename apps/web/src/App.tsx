@@ -28,6 +28,7 @@ import { AdminAccountDetailPage } from './pages/admin/AdminAccountDetailPage';
 import { AdminPlansPage } from './pages/admin/AdminPlansPage';
 import { AdminSubscriptionsPage } from './pages/admin/AdminSubscriptionsPage';
 import { LandingPage } from './pages/LandingPage';
+import { RewardCampaignsPage } from './pages/RewardCampaignsPage';
 import { getAccessToken } from './lib/auth-store';
 import { apiFetch } from './lib/api';
 import { isPlatformOperator } from './lib/billing-access';
@@ -121,6 +122,7 @@ export default function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="surveys" element={<SurveysPage />} />
+        <Route path="premios" element={<RewardCampaignsPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="whistleblower" element={<DenunciasPage />} />
