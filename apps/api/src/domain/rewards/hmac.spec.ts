@@ -1,7 +1,11 @@
 import {
   canonicalizeRewardPayload,
+  formatHmacSignatureHeader,
   isTimestampFresh,
+  normalizeHmacSignature,
+  signOpiinaResponse,
   signRewardPayload,
+  signTimestampedBody,
   signVerifyRequest,
   verifyRewardSignature,
   verifyVerifyRequestSignature,
@@ -54,6 +58,40 @@ describe('reward HMAC', () => {
         secret,
       }),
     ).toBe(false);
+  });
+
+  it('accepts sha256= prefixed signatures over the raw MM body', () => {
+    const timestamp = '1726332840';
+    const rawBody = '{"code":"MMABC12D"}';
+    const hex = signTimestampedBody(secret, timestamp, rawBody);
+    expect(
+      verifyVerifyRequestSignature({
+        timestamp,
+        body: { code: 'MMABC12D' },
+        signature: formatHmacSignatureHeader(hex),
+        secret,
+        rawBody,
+      }),
+    ).toBe(true);
+    expect(normalizeHmacSignature(`sha256=${hex}`)).toBe(hex);
+    expect(
+      verifyVerifyRequestSignature({
+        timestamp,
+        body: { code: 'MMABC12D' },
+        signature: formatHmacSignatureHeader(hex),
+        secret,
+      }),
+    ).toBe(true);
+  });
+
+  it('signs MM response headers over timestamp + raw JSON', () => {
+    const timestamp = '1726332840';
+    const rawBody = '{"valid":false,"reason":"not_found"}';
+    const signed = signOpiinaResponse({ timestamp, rawBody, secret });
+    expect(signed.timestamp).toBe(timestamp);
+    expect(signed.signature).toBe(
+      `sha256=${signTimestampedBody(secret, timestamp, rawBody)}`,
+    );
   });
 
   it('rejects stale timestamps', () => {

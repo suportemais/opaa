@@ -2,7 +2,11 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { signVerifyRequest } from '../domain/rewards/hmac';
+import {
+  formatHmacSignatureHeader,
+  signTimestampedBody,
+  signVerifyRequest,
+} from '../domain/rewards/hmac';
 import { MmRewardHmacGuard } from './mm-reward-hmac.guard';
 
 const secret = 'test-mm-secret';
@@ -24,7 +28,28 @@ describe('MmRewardHmacGuard', () => {
     }),
   } as never);
 
-  it('accepts a fresh HMAC-signed verify POST', () => {
+  it('accepts MM-style X-MM headers and sha256= prefix over the raw body', () => {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const rawBody = '{"code":"MMABC12D"}';
+    const signature = formatHmacSignatureHeader(
+      signTimestampedBody(secret, timestamp, rawBody),
+    );
+    expect(
+      guard.canActivate(
+        context({
+          method: 'POST',
+          headers: {
+            'x-mm-timestamp': timestamp,
+            'x-mm-signature': signature,
+          },
+          body: { code: 'MMABC12D' },
+          rawBody,
+        }) as never,
+      ),
+    ).toBe(true);
+  });
+
+  it('still accepts legacy X-OPIINA headers with bare hex', () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
     const body = { code: 'MMABC12D' };
     const signature = signVerifyRequest({ timestamp, body, secret });
@@ -42,17 +67,18 @@ describe('MmRewardHmacGuard', () => {
     ).toBe(true);
   });
 
-  it('rejects a bad signature', () => {
+  it('rejects a bad signature with 401', () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
     expect(() =>
       guard.canActivate(
         context({
           method: 'POST',
           headers: {
-            'x-opiina-timestamp': timestamp,
-            'x-opiina-signature': '00'.repeat(32),
+            'x-mm-timestamp': timestamp,
+            'x-mm-signature': `sha256=${'00'.repeat(32)}`,
           },
           body: { code: 'MMABC12D' },
+          rawBody: '{"code":"MMABC12D"}',
         }) as never,
       ),
     ).toThrow(UnauthorizedException);

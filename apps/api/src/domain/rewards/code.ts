@@ -19,10 +19,13 @@ export function buildRewardDeepLink(params: {
   return base ? `${base}${path}` : path;
 }
 
-export function formatRewardAmountBrl(amountCents: number): string {
+export function formatRewardAmountDecimal(amountCents: number): string {
   const safe = Number.isFinite(amountCents)
     ? Math.max(0, Math.round(amountCents))
     : 0;
-  const formatted = (safe / 100).toFixed(2).replace('.', ',');
-  return `R$ ${formatted}`;
+  return (safe / 100).toFixed(2);
+}
+
+export function formatRewardAmountBrl(amountCents: number): string {
+  return `R$ ${formatRewardAmountDecimal(amountCents).replace('.', ',')}`;
 }

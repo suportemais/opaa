@@ -39,6 +39,44 @@ export function signHmacSha256Hex(secret: string, value: string): string {
   return createHmac('sha256', secret).update(value).digest('hex');
 }
 
+/** MM client sends `sha256=<hex>`; OPIINA v1 accepted bare hex. */
+export function normalizeHmacSignature(signature: string): string {
+  return signature.trim().replace(/^sha256=/i, '').trim();
+}
+
+export function formatHmacSignatureHeader(hex: string): string {
+  return `sha256=${hex}`;
+}
+
+export function rawRequestBody(rawBody: unknown): string | undefined {
+  if (typeof rawBody === 'string' && rawBody.length > 0) return rawBody;
+  if (Buffer.isBuffer(rawBody) && rawBody.length > 0) {
+    return rawBody.toString('utf8');
+  }
+  return undefined;
+}
+
+export function signTimestampedBody(
+  secret: string,
+  timestamp: string,
+  rawBody: string,
+): string {
+  return signHmacSha256Hex(secret, `${timestamp}.${rawBody}`);
+}
+
+export function signOpiinaResponse(params: {
+  timestamp: string;
+  rawBody: string;
+  secret: string;
+}): { timestamp: string; signature: string } {
+  return {
+    timestamp: params.timestamp,
+    signature: formatHmacSignatureHeader(
+      signTimestampedBody(params.secret, params.timestamp, params.rawBody),
+    ),
+  };
+}
+
 export function signRewardPayload(
   payload: RewardSignedPayload,
   secret: string,
@@ -68,14 +106,24 @@ export function verifyVerifyRequestSignature(params: {
   body: VerifyRequestBody;
   signature: string;
   secret: string;
+  rawBody?: string;
 }): boolean {
-  return timingSafeEqualHex(
-    signVerifyRequest({
-      timestamp: params.timestamp,
-      body: params.body,
-      secret: params.secret,
-    }),
-    params.signature,
+  const normalized = normalizeHmacSignature(params.signature);
+  const candidates: string[] = [];
+  if (typeof params.rawBody === 'string' && params.rawBody.length > 0) {
+    candidates.push(params.rawBody);
+  }
+  // MM client signs the exact compact JSON `{"code":"..."}`.
+  const mmCompact = JSON.stringify({ code: params.body.code });
+  const canonical = canonicalizeVerifyRequest(params.body);
+  for (const payload of [mmCompact, canonical]) {
+    if (!candidates.includes(payload)) candidates.push(payload);
+  }
+  return candidates.some((raw) =>
+    timingSafeEqualHex(
+      signTimestampedBody(params.secret, params.timestamp, raw),
+      normalized,
+    ),
   );
 }
 

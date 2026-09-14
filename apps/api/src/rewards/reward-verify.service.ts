@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { formatRewardAmountDecimal } from '../domain/rewards/code';
 import {
   signRewardPayload,
   type RewardSignedPayload,
@@ -14,7 +15,12 @@ export type VerifyRewardInput = {
 export type VerifyRewardResult = {
   valid: boolean;
   reason?:
-    'not_found' | 'expired' | 'cancelled' | 'redeemed' | 'company_mismatch';
+    | 'not_found'
+    | 'expired'
+    | 'cancelled'
+    | 'redeemed'
+    | 'company_mismatch';
+  amount?: string;
   code?: string;
   amountCents?: number;
   mmCompanyId?: string;
@@ -121,6 +127,7 @@ export class RewardVerifyService {
 
     return {
       valid: true,
+      amount: formatRewardAmountDecimal(coupon.amountCents),
       code: coupon.code,
       amountCents: coupon.amountCents,
       mmCompanyId: coupon.mmCompanyId,
