@@ -54,8 +54,8 @@ export function AppShell() {
     ].join(' ');
 
   return (
-    <div className="flex h-full flex-col bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="flex h-full flex-col bg-opiina-bg text-opiina-navy">
+      <header className="bg-white">
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-4">
             <Link to="/app" className="inline-flex items-center gap-2">
@@ -115,7 +115,7 @@ export function AppShell() {
                   <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" />
                   <path d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1l-.4-2.6H9.1L8.7 7a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 13a7.9 7.9 0 0 0-.1 1c0 .3 0 .7.1 1l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1l.4 2.6h5.8l.4-2.6a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z" />
                 </svg>
-                Configurações
+                <span className="hidden sm:inline">Configurações</span>
               </button>
 
               {settingsOpen && (
@@ -172,6 +172,7 @@ export function AppShell() {
             </Button>
           </div>
         </div>
+        <div className="h-0.5 bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
       </header>
 
       <main className="flex-1 overflow-auto">

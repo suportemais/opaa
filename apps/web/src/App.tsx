@@ -86,6 +86,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/public/:token" element={<PublicSurveyPage />} />
+      {import.meta.env.DEV && <Route path="/premios-preview" element={<RewardCampaignsPage />} />}
       <Route path="/canal-etico/:tenantSlug" element={<PublicWhistleblowerPage />} />
       <Route path="/whistleblower/:tenantSlug" element={<PublicWhistleblowerPage />} />
 
@@ -107,6 +108,15 @@ export default function App() {
       </Route>
 
       <Route
+        path="/app/premios"
+        element={
+          <RequireAuth>
+            <RewardCampaignsPage />
+          </RequireAuth>
+        }
+      />
+
+      <Route
         path="/app"
         element={
           <RequireAuth>
@@ -122,7 +132,6 @@ export default function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="surveys" element={<SurveysPage />} />
-        <Route path="premios" element={<RewardCampaignsPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="whistleblower" element={<DenunciasPage />} />

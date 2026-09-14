@@ -78,6 +78,14 @@ export function couponCampaignStatusLabel(value: string | null | undefined) {
   return value ?? '—';
 }
 
+/** OPIINA chips — Ativa is cyan, never MM green. */
+export function couponCampaignStatusClass(value: string | null | undefined) {
+  if (value === 'active') return 'bg-[#E8F4FF] text-opiina-cyan';
+  if (value === 'paused') return 'bg-[#FFF6EB] text-amber-800';
+  if (value === 'finished') return 'bg-slate-100 text-slate-600';
+  return 'bg-slate-100 text-slate-600';
+}
+
 export function interactionChannelLabel(value: string | null | undefined) {
   if (value === 'whatsapp') return 'WhatsApp';
   if (value === 'phone') return 'Telefone';
