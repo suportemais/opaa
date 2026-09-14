@@ -34,6 +34,79 @@ type MmCompanyOption = { id: string; label: string };
 const DEFAULT_WHATSAPP = 'Seu prêmio de R$ {{amount}}:\n{{code}}\nResgate: {{link}}';
 const WHATSAPP_TOKENS = ['{{code}}', '{{link}}', '{{amount}}'] as const;
 
+const DESIGN_PREVIEW_TENANT: TenantMe = {
+  id: 'preview-tenant',
+  tradeName: 'Rede Centro',
+  legalName: 'Rede Centro',
+};
+
+const DESIGN_PREVIEW_SURVEYS: Survey[] = [
+  { id: 's1', name: 'NPS pós-visita', status: 'active' },
+  { id: 's2', name: 'CSAT delivery', status: 'active' },
+  { id: 's3', name: 'NPS unidade Centro', status: 'active' },
+];
+
+const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
+  {
+    id: 'c1',
+    name: 'NPS Setembro — R$10',
+    surveyId: 's1',
+    surveyName: 'NPS pós-visita',
+    mmCompanyId: 'preview-mm',
+    rewardAmountCents: 1000,
+    validityDays: 30,
+    startsAt: '2026-09-15T12:00:00.000Z',
+    endsAt: '2026-10-15T23:59:00.000Z',
+    message: DEFAULT_WHATSAPP,
+    prefix: 'MM',
+    status: 'active',
+    perCustomerLimit: 1,
+    issuedCount: 128,
+    redeemedCount: 47,
+  },
+  {
+    id: 'c2',
+    name: 'CSAT delivery — R$20',
+    surveyId: 's2',
+    surveyName: 'CSAT delivery',
+    mmCompanyId: 'preview-mm',
+    rewardAmountCents: 2000,
+    validityDays: 30,
+    startsAt: null,
+    endsAt: null,
+    message: DEFAULT_WHATSAPP,
+    prefix: 'MM',
+    status: 'paused',
+    perCustomerLimit: 1,
+    issuedCount: 56,
+    redeemedCount: 12,
+  },
+  {
+    id: 'c3',
+    name: 'Campanha piloto — R$10',
+    surveyId: 's3',
+    surveyName: 'NPS unidade Centro',
+    mmCompanyId: 'preview-mm',
+    rewardAmountCents: 1000,
+    validityDays: 30,
+    startsAt: null,
+    endsAt: null,
+    message: DEFAULT_WHATSAPP,
+    prefix: 'MM',
+    status: 'finished',
+    perCustomerLimit: 1,
+    issuedCount: 210,
+    redeemedCount: 98,
+  },
+];
+
+function isDesignPreview() {
+  if (!import.meta.env.DEV) return false;
+  if (typeof window === 'undefined') return false;
+  if (window.location.pathname.startsWith('/premios-preview')) return true;
+  return new URLSearchParams(window.location.search).get('preview') === '1';
+}
+
 const FIELD_CLASS =
   'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100';
 
@@ -112,16 +185,26 @@ function StatusChip({ status }: { status: string }) {
 
 export function RewardCampaignsPage() {
   const qc = useQueryClient();
-  const surveys = useQuery({ queryKey: ['surveys'], queryFn: () => apiFetch<Survey[]>('/surveys') });
+  const preview = isDesignPreview();
+  const surveys = useQuery({
+    queryKey: ['surveys'],
+    queryFn: () => apiFetch<Survey[]>('/surveys'),
+    enabled: !preview,
+  });
   const campaigns = useQuery({
     queryKey: ['coupon-campaigns'],
     queryFn: () => apiFetch<RewardCampaign[]>('/coupon-campaigns'),
+    enabled: !preview,
   });
   const tenant = useQuery({
     queryKey: ['tenantMe'],
     queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ id: '' })),
     staleTime: 60 * 1000,
+    enabled: !preview,
   });
+  const surveyRows = preview ? DESIGN_PREVIEW_SURVEYS : (surveys.data ?? []);
+  const campaignRows = preview ? DESIGN_PREVIEW_CAMPAIGNS : (campaigns.data ?? []);
+  const tenantRow = preview ? DESIGN_PREVIEW_TENANT : tenant.data;
 
   const [mode, setMode] = useState<'list' | 'form'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -136,11 +219,11 @@ export function RewardCampaignsPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const companyOptions = useMemo(() => {
-    const editingRow = (campaigns.data ?? []).find((row) => row.id === editingId);
-    return buildMmCompanyOptions(tenant.data, campaigns.data ?? [], editingRow?.mmCompanyId);
-  }, [tenant.data, campaigns.data, editingId]);
+    const editingRow = campaignRows.find((row) => row.id === editingId);
+    return buildMmCompanyOptions(tenantRow, campaignRows, editingRow?.mmCompanyId);
+  }, [tenantRow, campaignRows, editingId]);
 
-  const defaultSurveyId = useMemo(() => surveys.data?.[0]?.id ?? '', [surveys.data]);
+  const defaultSurveyId = useMemo(() => surveyRows[0]?.id ?? '', [surveyRows]);
   const defaultCompanyId = companyOptions[0]?.id ?? '';
 
   useEffect(() => {
@@ -244,7 +327,8 @@ export function RewardCampaignsPage() {
     setMessage((prev) => (prev.includes(token) ? prev : `${prev.trim()}\n${token}`.trim()));
   }
 
-  const rows = campaigns.data ?? [];
+  const rows = campaignRows;
+  const listLoading = preview ? false : campaigns.isLoading;
 
   if (mode === 'form') {
     return (
@@ -254,7 +338,7 @@ export function RewardCampaignsPage() {
         setName={setName}
         surveyId={surveyId}
         setSurveyId={setSurveyId}
-        surveys={surveys.data ?? []}
+        surveys={surveyRows}
         mmCompanyId={mmCompanyId}
         setMmCompanyId={setMmCompanyId}
         companyOptions={companyOptions}
@@ -306,7 +390,7 @@ export function RewardCampaignsPage() {
         </button>
       </div>
 
-      {campaigns.isLoading ? (
+      {listLoading ? (
         <div className="text-sm text-opiina-muted">Carregando...</div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-opiina-border bg-white px-5 py-8 text-sm text-opiina-muted">

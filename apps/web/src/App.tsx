@@ -86,6 +86,11 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/public/:token" element={<PublicSurveyPage />} />
+      {import.meta.env.DEV && (
+        <Route path="/premios-preview" element={<AppShell />}>
+          <Route index element={<RewardCampaignsPage />} />
+        </Route>
+      )}
       <Route path="/canal-etico/:tenantSlug" element={<PublicWhistleblowerPage />} />
       <Route path="/whistleblower/:tenantSlug" element={<PublicWhistleblowerPage />} />
 
