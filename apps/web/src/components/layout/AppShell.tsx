@@ -54,8 +54,8 @@ export function AppShell() {
     ].join(' ');
 
   return (
-    <div className="flex h-full flex-col bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="flex h-full flex-col bg-opiina-bg text-opiina-navy">
+      <header className="bg-white">
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-4">
             <Link to="/app" className="inline-flex items-center gap-2">
@@ -172,6 +172,7 @@ export function AppShell() {
             </Button>
           </div>
         </div>
+        <div className="h-0.5 bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
       </header>
 
       <main className="flex-1 overflow-auto">
