@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
-import { BrandMark } from '../components/BrandMark';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
 
 type Survey = { id: string; name: string; status: string };
@@ -102,13 +100,6 @@ function isDesignPreview() {
   return new URLSearchParams(window.location.search).get('preview') === '1';
 }
 
-/** Isolated chrome only on the DEV `/premios-preview` route. `/app/premios` always uses AppShell. */
-function isIsolatedPreviewRoute() {
-  if (!import.meta.env.DEV) return false;
-  if (typeof window === 'undefined') return false;
-  return window.location.pathname.startsWith('/premios-preview');
-}
-
 const FIELD_CLASS =
   'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100';
 
@@ -161,31 +152,6 @@ function buildMmCompanyOptions(
   return options;
 }
 
-/** Isolated chrome for the DEV-only `/premios-preview` route. Production `/app/premios` uses AppShell. */
-function PremiosPreviewChrome(props: { action?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="min-h-full bg-opiina-bg text-opiina-navy">
-      <header className="bg-white">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-5 py-3">
-          <Link to="/app" className="min-w-0">
-            <BrandMark />
-          </Link>
-          {props.action}
-        </div>
-        <div className="h-0.5 bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
-      </header>
-      <main className="mx-auto w-full max-w-5xl px-5 py-8">{props.children}</main>
-    </div>
-  );
-}
-
-function PageFrame(props: { preview: boolean; action?: ReactNode; children: ReactNode }) {
-  if (props.preview) {
-    return <PremiosPreviewChrome action={props.action}>{props.children}</PremiosPreviewChrome>;
-  }
-  return <>{props.children}</>;
-}
-
 function StatusChip({ status }: { status: string }) {
   return (
     <span
@@ -202,7 +168,6 @@ function StatusChip({ status }: { status: string }) {
 export function RewardCampaignsPage() {
   const qc = useQueryClient();
   const preview = isDesignPreview();
-  const isolated = isIsolatedPreviewRoute();
   const surveys = useQuery({
     queryKey: ['surveys'],
     queryFn: () => apiFetch<Survey[]>('/surveys'),
@@ -377,7 +342,6 @@ export function RewardCampaignsPage() {
 
   if (mode === 'form') {
     return (
-      <PageFrame preview={isolated}>
         <CampaignForm
           editing={Boolean(editingId)}
           name={name}
@@ -414,27 +378,25 @@ export function RewardCampaignsPage() {
             }
           }}
         />
-      </PageFrame>
     );
   }
 
   return (
-    <PageFrame preview={isolated} action={isolated ? novaCampanha : undefined}>
-      <div className="grid gap-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
-              <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-                Prêmios Muito Mais
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-opiina-muted md:hidden">
-              Campanhas de recompensa vinculadas às pesquisas.
-            </p>
+    <div className="grid gap-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
+            <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
+              Prêmios Muito Mais
+            </span>
           </div>
-          {!isolated && novaCampanha}
+          <p className="mt-2 text-sm text-opiina-muted md:hidden">
+            Campanhas de recompensa vinculadas às pesquisas.
+          </p>
         </div>
+        {novaCampanha}
+      </div>
 
         {listLoading ? (
           <div className="text-sm text-opiina-muted">Carregando...</div>
@@ -500,14 +462,9 @@ export function RewardCampaignsPage() {
                 </tbody>
               </table>
             </div>
-
-            <p className="text-sm text-opiina-muted md:hidden">
-              Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
-            </p>
           </>
         )}
-      </div>
-    </PageFrame>
+    </div>
   );
 }
 
