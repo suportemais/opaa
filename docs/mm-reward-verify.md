@@ -42,8 +42,8 @@ Tenant operators manage campaigns at **`/app/premios`** (API `/coupon-campaigns`
 
 Catalog sources, in order:
 
-1. `GET {MM_API_BASE_URL}/internal/opiina/companies` (optional; HMAC `X-Opiina-Timestamp` + `X-Opiina-Signature` over `{}`)
-2. `MM_COMPANIES_JSON` — `[{"id":"<Company.id>","tradeName":"Grupo Geppos"}]`
+1. **Tenant link** — company persisted by `POST /integrations/mm/connect` (self-serve API key). Primary path. See [mm-tenant-integration.md](./mm-tenant-integration.md).
+2. `MM_COMPANIES_JSON` — emergency fallback only when the tenant is not linked: `[{"id":"<Company.id>","tradeName":"Grupo Geppos"}]`
 
 The page must not fall back to OPIINA `tenant.tradeName` / `tenant.id` or `/units`.
 
@@ -255,7 +255,8 @@ Already-redeemed codes are not rewritten (`reason: "redeemed"`). MM follow-up PR
 ```
 MM_REWARD_HMAC_SECRET=
 MM_APP_BASE_URL=https://app.muitomais.example
-MM_API_BASE_URL=https://api.muitomais.example
+MM_API_BASE_URL=https://muitomais.app/api
 MM_COMPANIES_JSON=[{"id":"<Company.id>","tradeName":"Grupo Geppos"}]
 MM_REWARD_MAX_SKEW_SECONDS=300
+INTEGRATIONS_SECRET=
 ```

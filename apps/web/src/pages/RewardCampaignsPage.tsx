@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
@@ -657,19 +658,22 @@ function CampaignForm(props: {
             ))}
           </select>
           <div className="mt-1.5 text-xs text-opiina-muted">
-            Nome fantasia da empresa no Muito Mais (Company.id). Estabelecimentos não entram nesta
-            lista.
+            Empresa vinculada em Integrações (Company.id). Estabelecimentos não entram nesta lista.
           </div>
           {props.companiesError && (
             <div className="mt-1.5 text-xs text-rose-700">
-              Não foi possível carregar as empresas do Muito Mais.
+              Não foi possível carregar a empresa Muito Mais.
             </div>
           )}
           {!props.companiesLoading &&
             !props.companiesError &&
             props.companyOptions.length === 0 && (
               <div className="mt-1.5 text-xs text-opiina-muted">
-                Nenhuma empresa do Muito Mais disponível.
+                Nenhuma empresa vinculada.{' '}
+                <Link to="/app/integracoes" className="font-medium text-opiina-cyan hover:underline">
+                  Conecte o Muito Mais em Integrações
+                </Link>
+                .
               </div>
             )}
         </label>

@@ -83,6 +83,11 @@ export function AppShell() {
             <NavLink to="/app/premios" className={({ isActive }) => navClass(isActive)}>
               Prêmios
             </NavLink>
+            {canManageTenant && (
+              <NavLink to="/app/integracoes" className={({ isActive }) => navClass(isActive)}>
+                Integrações
+              </NavLink>
+            )}
             <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
               Clientes
             </NavLink>

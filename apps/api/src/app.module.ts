@@ -24,6 +24,7 @@ import { SentimentModule } from './sentiment/sentiment.module';
 import { PlansModule } from './plans/plans.module';
 import { PlatformModule } from './platform/platform.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { IntegrationsModule } from './integrations/mm-integrations.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { RewardsModule } from './rewards/rewards.module';
     WhistleblowerModule,
     PlatformModule,
     RewardsModule,
+    IntegrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

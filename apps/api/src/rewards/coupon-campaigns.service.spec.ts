@@ -65,6 +65,9 @@ function setup() {
         .mockResolvedValueOnce([{ campaignId: 'camp-1', _count: { _all: 4 } }])
         .mockResolvedValueOnce([{ campaignId: 'camp-1', _count: { _all: 1 } }]),
     },
+    tenantMmIntegration: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
   };
   return {
     service: new CouponCampaignsService(prisma as never),
@@ -104,6 +107,22 @@ describe('CouponCampaignsService', () => {
     expect(row.perCustomerLimit).toBe(1);
     expect(row.issuedCount).toBe(4);
     expect(row.redeemedCount).toBe(1);
+  });
+
+  it('rejects create when mmCompanyId is not the linked company', async () => {
+    const { service, prisma } = setup();
+    prisma.tenantMmIntegration.findUnique.mockResolvedValue({
+      mmCompanyId: 'mm-company-gepos',
+    });
+    await expect(
+      service.create(user(), {
+        name: 'X',
+        surveyId: 'survey-1',
+        mmCompanyId: 'other-co',
+        rewardAmountCents: 100,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.couponCampaign.create).not.toHaveBeenCalled();
   });
 
   it('rejects create without a tenant survey', async () => {
