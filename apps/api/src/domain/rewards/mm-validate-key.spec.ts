@@ -1,5 +1,7 @@
 import {
   isMmValidateKeyRejected,
+  maskMmApiKey,
+  mmApiKeyLast4,
   mmValidateKeyUrl,
   parseMmValidateKeyResponse,
 } from './mm-validate-key';
@@ -30,6 +32,12 @@ describe('mm-validate-key contract', () => {
         company: { id: 'co-1', tradeName: 'Grupo Geppos' },
       }),
     ).toEqual({ mmCompanyId: 'co-1', tradeName: 'Grupo Geppos' });
+  });
+
+  it('masks only the last four characters', () => {
+    expect(mmApiKeyLast4('  mm-live-key-abcd  ')).toBe('abcd');
+    expect(maskMmApiKey('abcd')).toBe('••••abcd');
+    expect(maskMmApiKey(null)).toBe('••••');
   });
 
   it('rejects invalid-key payloads', () => {

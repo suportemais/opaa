@@ -28,6 +28,7 @@ function setup(env: Record<string, string> = {}) {
     mmCompanyId: string;
     tradeName: string | null;
     apiKeyEncrypted: string;
+    apiKeyLast4: string | null;
     connectedAt: Date;
   }> = [];
 
@@ -41,6 +42,7 @@ function setup(env: Record<string, string> = {}) {
                 mmCompanyId: row.mmCompanyId,
                 tradeName: row.tradeName,
                 connectedAt: row.connectedAt,
+                apiKeyLast4: row.apiKeyLast4,
               }
             : null;
         },
@@ -54,6 +56,7 @@ function setup(env: Record<string, string> = {}) {
             mmCompanyId: string;
             tradeName: string | null;
             apiKeyEncrypted: string;
+            apiKeyLast4: string | null;
             connectedAt: Date;
           };
         }) => {
@@ -63,6 +66,7 @@ function setup(env: Record<string, string> = {}) {
             mmCompanyId: create.mmCompanyId,
             tradeName: create.tradeName,
             connectedAt: create.connectedAt,
+            apiKeyLast4: create.apiKeyLast4,
           };
         },
       ),
@@ -109,10 +113,11 @@ describe('MmIntegrationsService', () => {
       mmCompanyId: null,
       tradeName: null,
       connectedAt: null,
+      apiKeyLast4: null,
     });
   });
 
-  it('validates the key, persists encrypted secret, and returns status without the secret', async () => {
+  it('validates the key, persists encrypted secret, and returns last4 without the secret', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -126,25 +131,27 @@ describe('MmIntegrationsService', () => {
     }) as never;
 
     const { service, prisma, stored } = setup();
-    const status = await service.connect(user(), '  mm-live-key-xyz  ');
+    const status = await service.connect(user(), '  mm-live-key-abcd  ');
 
     expect(global.fetch).toHaveBeenCalledWith(
       'https://muitomais.app/api/internal/opiina/validate-key',
       expect.objectContaining({ method: 'POST' }),
     );
     expect(prisma.tenantMmIntegration.upsert).toHaveBeenCalled();
-    expect(stored[0].apiKeyEncrypted).not.toBe('mm-live-key-xyz');
+    expect(stored[0].apiKeyEncrypted).not.toBe('mm-live-key-abcd');
+    expect(stored[0].apiKeyLast4).toBe('abcd');
     expect(isEncryptedSecret(stored[0].apiKeyEncrypted)).toBe(true);
     expect(
       decryptSecret(stored[0].apiKeyEncrypted, 'test-integrations-secret'),
-    ).toBe('mm-live-key-xyz');
+    ).toBe('mm-live-key-abcd');
     expect(status).toEqual({
       connected: true,
       mmCompanyId: 'mm-company-gepos',
       tradeName: 'Grupo Geppos',
       connectedAt: expect.any(String),
+      apiKeyLast4: 'abcd',
     });
-    expect(JSON.stringify(status)).not.toContain('mm-live-key-xyz');
+    expect(JSON.stringify(status)).not.toContain('mm-live-key-abcd');
   });
 
   it('does not persist when MM rejects the key', async () => {
@@ -186,6 +193,7 @@ describe('MmIntegrationsService', () => {
       mmCompanyId: 'mm-company-gepos',
       tradeName: 'Grupo Geppos',
       apiKeyEncrypted: 'v1:iv:tag:ct',
+      apiKeyLast4: 'abcd',
       connectedAt: new Date('2026-09-15T12:00:00.000Z'),
     });
 
@@ -194,6 +202,7 @@ describe('MmIntegrationsService', () => {
       mmCompanyId: null,
       tradeName: null,
       connectedAt: null,
+      apiKeyLast4: null,
     });
     expect(prisma.tenantMmIntegration.deleteMany).toHaveBeenCalledWith({
       where: { tenantId: 'tenant-a' },

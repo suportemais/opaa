@@ -9,6 +9,15 @@ export function mmValidateKeyPath(): string {
   return MM_VALIDATE_KEY_PATH;
 }
 
+export function mmApiKeyLast4(apiKey: string): string {
+  return apiKey.trim().slice(-4);
+}
+
+export function maskMmApiKey(last4: string | null | undefined): string {
+  const tail = last4?.trim();
+  return tail ? `••••${tail}` : '••••';
+}
+
 export function mmValidateKeyUrl(apiBaseUrl: string): string {
   const base = apiBaseUrl.trim().replace(/\/+$/, '');
   return `${base}${MM_VALIDATE_KEY_PATH}`;

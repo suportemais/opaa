@@ -15,6 +15,7 @@ import {
 } from '../domain/rewards/hmac';
 import {
   isMmValidateKeyRejected,
+  mmApiKeyLast4,
   mmValidateKeyUrl,
   parseMmValidateKeyResponse,
 } from '../domain/rewards/mm-validate-key';
@@ -24,6 +25,7 @@ export type MmIntegrationStatus = {
   mmCompanyId: string | null;
   tradeName: string | null;
   connectedAt: string | null;
+  apiKeyLast4: string | null;
 };
 
 const DISCONNECTED: MmIntegrationStatus = {
@@ -31,6 +33,7 @@ const DISCONNECTED: MmIntegrationStatus = {
   mmCompanyId: null,
   tradeName: null,
   connectedAt: null,
+  apiKeyLast4: null,
 };
 
 @Injectable()
@@ -49,6 +52,7 @@ export class MmIntegrationsService {
         mmCompanyId: true,
         tradeName: true,
         connectedAt: true,
+        apiKeyLast4: true,
       },
     });
     return this.toStatus(row);
@@ -73,6 +77,7 @@ export class MmIntegrationsService {
 
     const validated = await this.validateKeyWithMm(base, apiKey);
     const apiKeyEncrypted = encryptSecret(apiKey, integrationsSecret);
+    const apiKeyLast4 = mmApiKeyLast4(apiKey);
     const connectedAt = new Date();
 
     const row = await this.prisma.tenantMmIntegration.upsert({
@@ -82,18 +87,21 @@ export class MmIntegrationsService {
         mmCompanyId: validated.mmCompanyId,
         tradeName: validated.tradeName,
         apiKeyEncrypted,
+        apiKeyLast4,
         connectedAt,
       },
       update: {
         mmCompanyId: validated.mmCompanyId,
         tradeName: validated.tradeName,
         apiKeyEncrypted,
+        apiKeyLast4,
         connectedAt,
       },
       select: {
         mmCompanyId: true,
         tradeName: true,
         connectedAt: true,
+        apiKeyLast4: true,
       },
     });
 
@@ -115,6 +123,7 @@ export class MmIntegrationsService {
       mmCompanyId: string;
       tradeName: string | null;
       connectedAt: Date;
+      apiKeyLast4: string | null;
     } | null,
   ): MmIntegrationStatus {
     if (!row) return DISCONNECTED;
@@ -123,6 +132,7 @@ export class MmIntegrationsService {
       mmCompanyId: row.mmCompanyId,
       tradeName: row.tradeName,
       connectedAt: row.connectedAt.toISOString(),
+      apiKeyLast4: row.apiKeyLast4,
     };
   }
 

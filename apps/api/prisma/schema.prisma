@@ -1070,6 +1070,7 @@ model TenantMmIntegration {
   mmCompanyId     String
   tradeName       String?
   apiKeyEncrypted String
+  apiKeyLast4     String?
   connectedAt     DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

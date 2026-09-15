@@ -1,29 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  normalizeMmCompanies,
-  parseMmCompaniesJson,
-  type MmCompanyOption,
-} from '../domain/rewards/mm-companies';
+import type { MmCompanyOption } from '../domain/rewards/mm-companies';
 
 @Injectable()
 export class MmCompaniesService {
-  constructor(
-    private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Operator picker source: the tenant-linked MM company only.
-   * `MM_COMPANIES_JSON` is an emergency fallback when no link exists.
+   * Operator picker: the tenant-linked MM company only.
+   * Empty when the tenant has not connected a key.
    */
   async list(tenantId: string): Promise<MmCompanyOption[]> {
     const linked = await this.linkedCompany(tenantId);
-    if (linked) return [linked];
-    return normalizeMmCompanies(
-      parseMmCompaniesJson(this.config.get<string>('MM_COMPANIES_JSON')),
-    );
+    return linked ? [linked] : [];
   }
 
   private async linkedCompany(

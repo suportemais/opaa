@@ -13,17 +13,6 @@ function prismaWithLink(
 describe('MmCompaniesService', () => {
   it('returns the linked company only when the tenant is connected', async () => {
     const service = new MmCompaniesService(
-      {
-        get: (key: string) => {
-          if (key === 'MM_COMPANIES_JSON') {
-            return JSON.stringify([
-              { id: 'fallback', tradeName: 'Ignore me' },
-              { id: 'other', tradeName: 'Outra rede' },
-            ]);
-          }
-          return '';
-        },
-      } as never,
       prismaWithLink({
         mmCompanyId: 'mm-company-gepos',
         tradeName: 'Grupo Geppos',
@@ -35,37 +24,8 @@ describe('MmCompaniesService', () => {
     ]);
   });
 
-  it('falls back to MM_COMPANIES_JSON only when not linked', async () => {
-    const service = new MmCompaniesService(
-      {
-        get: (key: string) => {
-          if (key === 'MM_COMPANIES_JSON') {
-            return JSON.stringify([
-              { id: 'mm-company-gepos', tradeName: 'Grupo Geppos' },
-              {
-                id: 'est-primo',
-                name: 'PRIMO JARDINS',
-                type: 'establishment',
-                companyId: 'mm-company-gepos',
-              },
-            ]);
-          }
-          return '';
-        },
-      } as never,
-      prismaWithLink(null) as never,
-    );
-
-    await expect(service.list('tenant-a')).resolves.toEqual([
-      { id: 'mm-company-gepos', tradeName: 'Grupo Geppos' },
-    ]);
-  });
-
-  it('returns an empty picker when not linked and no emergency JSON', async () => {
-    const service = new MmCompaniesService(
-      { get: () => '' } as never,
-      prismaWithLink(null) as never,
-    );
+  it('returns an empty picker when the tenant is not linked', async () => {
+    const service = new MmCompaniesService(prismaWithLink(null) as never);
     await expect(service.list('tenant-a')).resolves.toEqual([]);
   });
 });

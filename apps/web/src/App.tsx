@@ -70,6 +70,23 @@ function RequirePlatformAdmin(props: { children: React.ReactNode }) {
   return <>{props.children}</>;
 }
 
+function RequireTenantAdmin(props: { children: React.ReactNode }) {
+  const me = useQuery({
+    queryKey: ['authMe'],
+    queryFn: () => apiFetch<{ permissionCodes: string[] }>('/auth/me'),
+  });
+
+  if (me.isLoading) {
+    return <div className="text-sm text-slate-500">Carregando…</div>;
+  }
+
+  if (!me.data?.permissionCodes.includes('tenant:settings:manage')) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return <>{props.children}</>;
+}
+
 function RedirectToOnboarding() {
   const [searchParams] = useSearchParams();
   const search = searchParams.toString();
@@ -129,7 +146,14 @@ export default function App() {
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="premios" element={<RewardCampaignsPage />} />
-        <Route path="integracoes" element={<IntegrationsPage />} />
+        <Route
+          path="integracoes"
+          element={
+            <RequireTenantAdmin>
+              <IntegrationsPage />
+            </RequireTenantAdmin>
+          }
+        />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="whistleblower" element={<DenunciasPage />} />

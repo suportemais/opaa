@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS "tenant_mm_integrations" (
     "mmCompanyId" TEXT NOT NULL,
     "tradeName" TEXT,
     "apiKeyEncrypted" TEXT NOT NULL,
+    "apiKeyLast4" TEXT,
     "connectedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

@@ -40,10 +40,9 @@ Tenant operators manage campaigns at **`/app/premios`** (API `/coupon-campaigns`
 - Value: `Company.id`
 - Establishments (e.g. PRIMO JARDINS) are filtered out even if MM returns a mixed payload
 
-Catalog sources, in order:
+Catalog source:
 
-1. **Tenant link** — company persisted by `POST /integrations/mm/connect` (self-serve API key). Primary path. See [mm-tenant-integration.md](./mm-tenant-integration.md).
-2. `MM_COMPANIES_JSON` — emergency fallback only when the tenant is not linked: `[{"id":"<Company.id>","tradeName":"Grupo Geppos"}]`
+1. **Tenant link only** — company persisted by `POST /integrations/mm/connect` (tenant-admin API key). See [mm-tenant-integration.md](./mm-tenant-integration.md). Empty when the tenant is not connected.
 
 The page must not fall back to OPIINA `tenant.tradeName` / `tenant.id` or `/units`.
 

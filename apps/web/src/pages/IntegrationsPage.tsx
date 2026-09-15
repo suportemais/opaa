@@ -1,16 +1,28 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 
+const COPY = {
+  SUB_DISCONNECTED: 'Cole a chave gerada no Muito Mais para vincular as duas contas.',
+  FIELD_LABEL: 'Chave de API do Muito Mais',
+  CTA_CONNECT: 'Conectar',
+  SUB_CONNECTED: 'Conta Muito Mais vinculada a este workspace.',
+  LABEL_COMPANY: 'Empresa vinculada',
+  LABEL_KEY_MASKED: 'Chave de API',
+  CONNECTED_NOTE: 'A chave fica só no servidor. Nunca exibida em texto puro.',
+  CTA_DISCONNECT: 'Desconectar',
+  CONFIRM_DISCONNECT: 'Desconectar remove o vínculo. Prêmios param de emitir.',
+} as const;
+
 type MmIntegrationStatus = {
   connected: boolean;
   mmCompanyId: string | null;
   tradeName: string | null;
   connectedAt: string | null;
+  apiKeyLast4: string | null;
 };
 
 function errorMessage(err: unknown): string {
@@ -41,14 +53,21 @@ function errorMessage(err: unknown): string {
   }
 }
 
-function formatConnectedAt(value: string | null) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(d);
+function maskKey(last4: string | null | undefined) {
+  const tail = last4?.trim();
+  return tail ? `••••${tail}` : '••••';
+}
+
+function StatusBadge(props: { connected: boolean }) {
+  return props.connected ? (
+    <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
+      Conectado
+    </span>
+  ) : (
+    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+      Desconectado
+    </span>
+  );
 }
 
 export function IntegrationsPage() {
@@ -89,27 +108,27 @@ export function IntegrationsPage() {
 
   const row = status.data;
   const connected = Boolean(row?.connected);
-  const connectedAt = formatConnectedAt(row?.connectedAt ?? null);
 
   return (
     <div className="grid gap-6">
       <div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Integrações</h1>
-          <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-            Muito Mais
-          </span>
-        </div>
+        <nav className="text-sm text-opiina-muted">
+          <span>Configurações</span>
+          <span className="mx-1.5">›</span>
+          <span className="font-medium text-opiina-navy">Integrações</span>
+        </nav>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-opiina-navy">Integrações</h1>
         <p className="mt-2 text-sm text-opiina-muted">
-          Vincule a empresa Muito Mais desta conta. A chave é validada e guardada criptografada — nunca em
-          texto puro.
+          {connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED}
         </p>
       </div>
 
-      <Card
-        title="Muito Mais"
-        description="Cole a chave de API gerada no painel do Muito Mais para liberar o seletor de prêmios."
-      >
+      <Card>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-base font-semibold text-slate-900">Muito Mais</div>
+          <StatusBadge connected={connected} />
+        </div>
+
         {status.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
         {status.isError && (
           <div className="text-sm text-rose-700">
@@ -121,43 +140,31 @@ export function IntegrationsPage() {
 
         {status.data && connected && (
           <div className="grid gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-                Conectado
-              </span>
-              {connectedAt && <span className="text-xs text-opiina-muted">desde {connectedAt}</span>}
-            </div>
             <div>
-              <div className="text-sm font-medium text-slate-700">Empresa</div>
-              <div className="mt-1 text-base font-semibold text-opiina-navy">
+              <div className="mb-1 text-sm font-medium text-slate-700">{COPY.LABEL_COMPANY}</div>
+              <div className="text-base font-semibold text-opiina-navy">
                 {row?.tradeName?.trim() || 'Empresa Muito Mais'}
               </div>
-              {row?.mmCompanyId && (
-                <div className="mt-1 font-mono text-xs text-opiina-muted">{row.mmCompanyId}</div>
-              )}
             </div>
-            <p className="text-sm text-slate-600">
-              Campanhas em{' '}
-              <Link to="/app/premios" className="font-medium text-opiina-cyan hover:underline">
-                Prêmios
-              </Link>{' '}
-              usam somente esta empresa.
-            </p>
+            <label>
+              <div className="mb-1 text-sm font-medium text-slate-700">{COPY.LABEL_KEY_MASKED}</div>
+              <Input value={maskKey(row?.apiKeyLast4)} disabled readOnly />
+              <div className="mt-1.5 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
+            </label>
             {formError && <div className="text-sm text-rose-700">{formError}</div>}
             <div>
               <Button
                 type="button"
-                variant="secondary"
+                variant="danger"
                 disabled={disconnect.isPending}
                 onClick={() => {
-                  if (!window.confirm('Desconectar o Muito Mais desta conta? As campanhas existentes permanecem.')) {
-                    return;
-                  }
+                  if (!window.confirm(COPY.CONFIRM_DISCONNECT)) return;
                   disconnect.mutate();
                 }}
               >
-                {disconnect.isPending ? 'Desconectando...' : 'Desconectar'}
+                {disconnect.isPending ? 'Desconectando...' : COPY.CTA_DISCONNECT}
               </Button>
+              <div className="mt-2 text-xs text-opiina-muted">{COPY.CONFIRM_DISCONNECT}</div>
             </div>
           </div>
         )}
@@ -176,19 +183,20 @@ export function IntegrationsPage() {
             }}
           >
             <label>
-              <div className="mb-1 text-sm font-medium text-slate-700">Chave de API</div>
+              <div className="mb-1 text-sm font-medium text-slate-700">{COPY.FIELD_LABEL}</div>
               <Input
                 type="password"
                 autoComplete="off"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Cole a chave gerada no Muito Mais"
+                placeholder={COPY.FIELD_LABEL}
               />
+              <div className="mt-1.5 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
             </label>
             {formError && <div className="text-sm text-rose-700">{formError}</div>}
             <div>
               <Button type="submit" disabled={connect.isPending}>
-                {connect.isPending ? 'Validando...' : 'Conectar'}
+                {connect.isPending ? 'Validando...' : COPY.CTA_CONNECT}
               </Button>
             </div>
           </form>

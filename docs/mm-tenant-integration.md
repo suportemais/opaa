@@ -1,14 +1,14 @@
 # OPIINA ↔ Muito Mais tenant self-serve link
 
-Tenant operators paste a Muito Mais API key on **`/app/integracoes`**. OPIINA validates it server-to-server, then stores **`tenantId ↔ mmCompanyId`** plus an **encrypted** copy of the key. Existing campaigns, coupons, and HMAC voucher verify (`MM_REWARD_*`) are unchanged. Disconnect removes only the link row.
+**Tenant admin** pastes a Muito Mais API key on **`/app/integracoes`** (Configurações › Integrações). OPIINA validates it server-to-server, then stores **`tenantId ↔ mmCompanyId`** plus an **encrypted** copy of the key. Existing campaigns, coupons, and HMAC voucher verify (`MM_REWARD_*`, global env) are unchanged. Disconnect removes only the link row.
 
 ## Product rules
 
-- One MM company per OPIINA tenant.
-- The `/app/premios` company dropdown uses **only the linked company**.
-- `MM_COMPANIES_JSON` is an emergency fallback when the tenant is **not** connected. Prefer the link.
-- The stored API key is never returned by the API or shown in the UI.
-- Voucher HMAC (`MM_REWARD_HMAC_SECRET`, `/internal/mm/rewards/verify`, `/internal/mm/rewards/redeemed`) is independent of this tenant key.
+- Integrações is **tenant admin only** (`tenant:settings:manage` / `tenant_admin`).
+- One MM company per OPIINA tenant, resolved from that company's API key.
+- The `/app/premios` company dropdown uses **only the linked company**. Empty when not connected.
+- The stored API key is never returned. Status may include `apiKeyLast4` for a `••••abcd` mask.
+- Voucher HMAC remains the **global** env `MM_REWARD_HMAC_SECRET`. It is not a screen and not per-tenant.
 
 ## Tenant API (JWT)
 
@@ -23,7 +23,8 @@ Connection status.
   "connected": true,
   "mmCompanyId": "mm-company-gepos",
   "tradeName": "Grupo Geppos",
-  "connectedAt": "2026-09-15T14:00:00.000Z"
+  "connectedAt": "2026-09-15T14:00:00.000Z",
+  "apiKeyLast4": "abcd"
 }
 ```
 
@@ -34,7 +35,8 @@ When disconnected:
   "connected": false,
   "mmCompanyId": null,
   "tradeName": null,
-  "connectedAt": null
+  "connectedAt": null,
+  "apiKeyLast4": null
 }
 ```
 
@@ -52,9 +54,9 @@ Removes the link for this tenant only. Coupon campaigns and issued codes stay. R
 
 ### `GET /mm-companies` (picker)
 
-Unchanged auth (`survey:read`). When the tenant is connected, the list is **exactly one** row: `{ id: mmCompanyId, tradeName }`. When not connected, `MM_COMPANIES_JSON` is parsed if present.
+Unchanged auth (`survey:read`). When the tenant is connected, the list is **exactly one** row: `{ id: mmCompanyId, tradeName }`. When not connected, `[]`.
 
-Creating a campaign with a different `mmCompanyId` than the linked company is rejected (`mm_company_not_linked`). Pause/activate of existing campaigns is unaffected.
+Creating a campaign without a link, or with a different `mmCompanyId`, is rejected (`mm_company_not_linked`). Pause/activate of existing campaigns is unaffected.
 
 ## MM validate-key (S2S)
 
@@ -109,6 +111,7 @@ Additive table `tenant_mm_integrations` (no DROP / DELETE / TRUNCATE of existing
 | `mmCompanyId`     | Muito Mais `Company.id`.                           |
 | `tradeName`       | Cached label for status + picker.                  |
 | `apiKeyEncrypted` | AES-256-GCM `v1:<iv>:<tag>:<ciphertext>` (base64url). |
+| `apiKeyLast4`     | Last 4 chars for the masked UI only.               |
 | `connectedAt`     | Last successful connect.                           |
 
 Encryption key: `INTEGRATIONS_SECRET`, falling back to `JWT_ACCESS_SECRET`.

@@ -162,7 +162,7 @@ export class CouponCampaignsService {
       where: { tenantId },
       select: { mmCompanyId: true },
     });
-    if (link && link.mmCompanyId !== mmCompanyId) {
+    if (!link || link.mmCompanyId !== mmCompanyId) {
       throw new BadRequestException('mm_company_not_linked');
     }
   }
