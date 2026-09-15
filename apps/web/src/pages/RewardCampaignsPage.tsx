@@ -3,9 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
 import { BrandMark } from '../components/BrandMark';
-import { TenantBillingPrompts } from '../components/billing/TenantBillingPrompts';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
-import type { TenantBilling } from '../lib/billing-access';
 
 type Survey = { id: string; name: string; status: string };
 type RewardCampaign = {
@@ -26,25 +24,12 @@ type RewardCampaign = {
   redeemedCount: number;
 };
 
-type TenantMe = {
-  id: string;
-  tradeName?: string;
-  legalName?: string;
-  billing?: TenantBilling;
-};
-
 /** Muito Mais Company.id + Company.tradeName — never an establishment. */
 type MmCompany = { id: string; tradeName: string };
 type MmCompanyOption = { id: string; label: string };
 
 const DEFAULT_WHATSAPP = 'Seu prêmio de R$ {{amount}}:\n{{code}}\nResgate: {{link}}';
 const WHATSAPP_TOKENS = ['{{code}}', '{{link}}', '{{amount}}'] as const;
-
-const DESIGN_PREVIEW_TENANT: TenantMe = {
-  id: 'preview-tenant',
-  tradeName: 'Rede Centro',
-  legalName: 'Rede Centro',
-};
 
 const DESIGN_PREVIEW_SURVEYS: Survey[] = [
   { id: 's1', name: 'NPS pós-visita', status: 'active' },
@@ -169,7 +154,8 @@ function buildMmCompanyOptions(
   return options;
 }
 
-function PremiosChrome(props: { action?: ReactNode; children: ReactNode }) {
+/** Isolated chrome for the DEV-only `/premios-preview` route. Production `/app/premios` uses AppShell. */
+function PremiosPreviewChrome(props: { action?: ReactNode; children: ReactNode }) {
   return (
     <div className="min-h-full bg-opiina-bg text-opiina-navy">
       <header className="bg-white">
@@ -184,6 +170,13 @@ function PremiosChrome(props: { action?: ReactNode; children: ReactNode }) {
       <main className="mx-auto w-full max-w-5xl px-5 py-8">{props.children}</main>
     </div>
   );
+}
+
+function PageFrame(props: { preview: boolean; action?: ReactNode; children: ReactNode }) {
+  if (props.preview) {
+    return <PremiosPreviewChrome action={props.action}>{props.children}</PremiosPreviewChrome>;
+  }
+  return <>{props.children}</>;
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -212,12 +205,6 @@ export function RewardCampaignsPage() {
     queryFn: () => apiFetch<RewardCampaign[]>('/coupon-campaigns'),
     enabled: !preview,
   });
-  const tenant = useQuery({
-    queryKey: ['tenantMe'],
-    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ id: '' }) as TenantMe),
-    staleTime: 60 * 1000,
-    enabled: !preview,
-  });
   const mmCompanies = useQuery({
     queryKey: ['mm-companies'],
     queryFn: () => apiFetch<MmCompany[]>('/mm-companies'),
@@ -236,7 +223,6 @@ export function RewardCampaignsPage() {
     () => (preview ? DESIGN_PREVIEW_COMPANIES : (mmCompanies.data ?? [])),
     [preview, mmCompanies.data],
   );
-  const tenantRow = preview ? DESIGN_PREVIEW_TENANT : tenant.data;
 
   const [mode, setMode] = useState<'list' | 'form'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -383,8 +369,7 @@ export function RewardCampaignsPage() {
 
   if (mode === 'form') {
     return (
-      <PremiosChrome>
-        {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
+      <PageFrame preview={preview}>
         <CampaignForm
           editing={Boolean(editingId)}
           name={name}
@@ -421,24 +406,26 @@ export function RewardCampaignsPage() {
             }
           }}
         />
-      </PremiosChrome>
+      </PageFrame>
     );
   }
 
   return (
-    <PremiosChrome action={novaCampanha}>
-      {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
+    <PageFrame preview={preview} action={preview ? novaCampanha : undefined}>
       <div className="grid gap-6">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
-            <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-              Prêmios Muito Mais
-            </span>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
+              <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
+                Prêmios Muito Mais
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-opiina-muted md:hidden">
+              Campanhas de recompensa vinculadas às pesquisas.
+            </p>
           </div>
-          <p className="mt-2 text-sm text-opiina-muted md:hidden">
-            Campanhas de recompensa vinculadas às pesquisas.
-          </p>
+          {!preview && novaCampanha}
         </div>
 
         {listLoading ? (
@@ -512,7 +499,7 @@ export function RewardCampaignsPage() {
           </>
         )}
       </div>
-    </PremiosChrome>
+    </PageFrame>
   );
 }
 

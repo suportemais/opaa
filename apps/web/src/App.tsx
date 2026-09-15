@@ -108,15 +108,6 @@ export default function App() {
       </Route>
 
       <Route
-        path="/app/premios"
-        element={
-          <RequireAuth>
-            <RewardCampaignsPage />
-          </RequireAuth>
-        }
-      />
-
-      <Route
         path="/app"
         element={
           <RequireAuth>
@@ -132,6 +123,7 @@ export default function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="surveys" element={<SurveysPage />} />
+        <Route path="premios" element={<RewardCampaignsPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="whistleblower" element={<DenunciasPage />} />
