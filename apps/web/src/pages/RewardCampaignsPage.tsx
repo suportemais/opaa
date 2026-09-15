@@ -102,6 +102,13 @@ function isDesignPreview() {
   return new URLSearchParams(window.location.search).get('preview') === '1';
 }
 
+/** Isolated chrome only on the DEV `/premios-preview` route. `/app/premios` always uses AppShell. */
+function isIsolatedPreviewRoute() {
+  if (!import.meta.env.DEV) return false;
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname.startsWith('/premios-preview');
+}
+
 const FIELD_CLASS =
   'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100';
 
@@ -195,6 +202,7 @@ function StatusChip({ status }: { status: string }) {
 export function RewardCampaignsPage() {
   const qc = useQueryClient();
   const preview = isDesignPreview();
+  const isolated = isIsolatedPreviewRoute();
   const surveys = useQuery({
     queryKey: ['surveys'],
     queryFn: () => apiFetch<Survey[]>('/surveys'),
@@ -369,7 +377,7 @@ export function RewardCampaignsPage() {
 
   if (mode === 'form') {
     return (
-      <PageFrame preview={preview}>
+      <PageFrame preview={isolated}>
         <CampaignForm
           editing={Boolean(editingId)}
           name={name}
@@ -411,7 +419,7 @@ export function RewardCampaignsPage() {
   }
 
   return (
-    <PageFrame preview={preview} action={preview ? novaCampanha : undefined}>
+    <PageFrame preview={isolated} action={isolated ? novaCampanha : undefined}>
       <div className="grid gap-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -425,7 +433,7 @@ export function RewardCampaignsPage() {
               Campanhas de recompensa vinculadas às pesquisas.
             </p>
           </div>
-          {!preview && novaCampanha}
+          {!isolated && novaCampanha}
         </div>
 
         {listLoading ? (
