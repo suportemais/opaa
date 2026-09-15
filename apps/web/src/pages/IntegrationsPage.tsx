@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
 
 const COPY = {
   SUB_DISCONNECTED: 'Cole a chave gerada no Muito Mais para vincular as duas contas.',
@@ -16,6 +13,9 @@ const COPY = {
   CTA_DISCONNECT: 'Desconectar',
   CONFIRM_DISCONNECT: 'Desconectar remove o vínculo. Prêmios param de emitir.',
 } as const;
+
+const FIELD_CLASS =
+  'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-500';
 
 type MmIntegrationStatus = {
   connected: boolean;
@@ -56,6 +56,11 @@ function errorMessage(err: unknown): string {
 function maskKey(last4: string | null | undefined) {
   const tail = last4?.trim();
   return tail ? `••••${tail}` : '••••';
+}
+
+function companyLabel(tradeName: string | null | undefined) {
+  const name = tradeName?.trim();
+  return name ? `${name} — MM` : 'Empresa Muito Mais';
 }
 
 function StatusBadge(props: { connected: boolean }) {
@@ -123,13 +128,13 @@ export function IntegrationsPage() {
         </p>
       </div>
 
-      <Card>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="text-base font-semibold text-slate-900">Muito Mais</div>
+      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
+        <div className="mb-6 flex flex-wrap items-center gap-2.5">
+          <div className="text-lg font-semibold text-opiina-navy">Muito Mais</div>
           <StatusBadge connected={connected} />
         </div>
 
-        {status.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
+        {status.isLoading && <div className="text-sm text-opiina-muted">Carregando...</div>}
         {status.isError && (
           <div className="text-sm text-rose-700">
             {status.error instanceof ApiError && status.error.status === 403
@@ -139,31 +144,36 @@ export function IntegrationsPage() {
         )}
 
         {status.data && connected && (
-          <div className="grid gap-4">
+          <div className="grid gap-5">
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">{COPY.LABEL_COMPANY}</div>
-              <div className="text-base font-semibold text-opiina-navy">
-                {row?.tradeName?.trim() || 'Empresa Muito Mais'}
+              <div className="text-xl font-semibold tracking-tight text-opiina-navy">
+                {companyLabel(row?.tradeName)}
               </div>
             </div>
             <label>
-              <div className="mb-1 text-sm font-medium text-slate-700">{COPY.LABEL_KEY_MASKED}</div>
-              <Input value={maskKey(row?.apiKeyLast4)} disabled readOnly />
-              <div className="mt-1.5 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
+              <div className="mb-1.5 text-sm font-medium text-slate-700">{COPY.LABEL_KEY_MASKED}</div>
+              <input
+                className={FIELD_CLASS}
+                value={maskKey(row?.apiKeyLast4)}
+                disabled
+                readOnly
+              />
+              <div className="mt-2 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
             </label>
             {formError && <div className="text-sm text-rose-700">{formError}</div>}
             <div>
-              <Button
+              <button
                 type="button"
-                variant="danger"
                 disabled={disconnect.isPending}
+                className="inline-flex h-12 w-full items-center justify-center rounded-full border border-rose-500 bg-white text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                 onClick={() => {
                   if (!window.confirm(COPY.CONFIRM_DISCONNECT)) return;
                   disconnect.mutate();
                 }}
               >
                 {disconnect.isPending ? 'Desconectando...' : COPY.CTA_DISCONNECT}
-              </Button>
+              </button>
               <div className="mt-2 text-xs text-opiina-muted">{COPY.CONFIRM_DISCONNECT}</div>
             </div>
           </div>
@@ -171,7 +181,7 @@ export function IntegrationsPage() {
 
         {status.data && !connected && (
           <form
-            className="grid gap-4"
+            className="grid gap-5"
             onSubmit={(e) => {
               e.preventDefault();
               setFormError(null);
@@ -183,25 +193,28 @@ export function IntegrationsPage() {
             }}
           >
             <label>
-              <div className="mb-1 text-sm font-medium text-slate-700">{COPY.FIELD_LABEL}</div>
-              <Input
+              <div className="mb-1.5 text-sm font-medium text-slate-700">{COPY.FIELD_LABEL}</div>
+              <input
                 type="password"
                 autoComplete="off"
+                className={FIELD_CLASS}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={COPY.FIELD_LABEL}
               />
-              <div className="mt-1.5 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
+              <div className="mt-2 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
             </label>
             {formError && <div className="text-sm text-rose-700">{formError}</div>}
-            <div>
-              <Button type="submit" disabled={connect.isPending}>
-                {connect.isPending ? 'Validando...' : COPY.CTA_CONNECT}
-              </Button>
-            </div>
+            <button
+              type="submit"
+              disabled={connect.isPending}
+              className="inline-flex h-12 w-full items-center justify-center rounded-full bg-opiina-cta text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {connect.isPending ? 'Validando...' : COPY.CTA_CONNECT}
+            </button>
           </form>
         )}
-      </Card>
+      </div>
     </div>
   );
 }
