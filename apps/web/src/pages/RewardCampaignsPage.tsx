@@ -1,11 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
-import { BrandMark } from '../components/BrandMark';
-import { TenantBillingPrompts } from '../components/billing/TenantBillingPrompts';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
-import type { TenantBilling } from '../lib/billing-access';
 
 type Survey = { id: string; name: string; status: string };
 type RewardCampaign = {
@@ -26,25 +22,12 @@ type RewardCampaign = {
   redeemedCount: number;
 };
 
-type TenantMe = {
-  id: string;
-  tradeName?: string;
-  legalName?: string;
-  billing?: TenantBilling;
-};
-
 /** Muito Mais Company.id + Company.tradeName — never an establishment. */
 type MmCompany = { id: string; tradeName: string };
 type MmCompanyOption = { id: string; label: string };
 
 const DEFAULT_WHATSAPP = 'Seu prêmio de R$ {{amount}}:\n{{code}}\nResgate: {{link}}';
 const WHATSAPP_TOKENS = ['{{code}}', '{{link}}', '{{amount}}'] as const;
-
-const DESIGN_PREVIEW_TENANT: TenantMe = {
-  id: 'preview-tenant',
-  tradeName: 'Rede Centro',
-  legalName: 'Rede Centro',
-};
 
 const DESIGN_PREVIEW_SURVEYS: Survey[] = [
   { id: 's1', name: 'NPS pós-visita', status: 'active' },
@@ -169,23 +152,6 @@ function buildMmCompanyOptions(
   return options;
 }
 
-function PremiosChrome(props: { action?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="min-h-full bg-opiina-bg text-opiina-navy">
-      <header className="bg-white">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-5 py-3">
-          <Link to="/app" className="min-w-0">
-            <BrandMark />
-          </Link>
-          {props.action}
-        </div>
-        <div className="h-0.5 bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
-      </header>
-      <main className="mx-auto w-full max-w-5xl px-5 py-8">{props.children}</main>
-    </div>
-  );
-}
-
 function StatusChip({ status }: { status: string }) {
   return (
     <span
@@ -212,12 +178,6 @@ export function RewardCampaignsPage() {
     queryFn: () => apiFetch<RewardCampaign[]>('/coupon-campaigns'),
     enabled: !preview,
   });
-  const tenant = useQuery({
-    queryKey: ['tenantMe'],
-    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ id: '' }) as TenantMe),
-    staleTime: 60 * 1000,
-    enabled: !preview,
-  });
   const mmCompanies = useQuery({
     queryKey: ['mm-companies'],
     queryFn: () => apiFetch<MmCompany[]>('/mm-companies'),
@@ -236,7 +196,6 @@ export function RewardCampaignsPage() {
     () => (preview ? DESIGN_PREVIEW_COMPANIES : (mmCompanies.data ?? [])),
     [preview, mmCompanies.data],
   );
-  const tenantRow = preview ? DESIGN_PREVIEW_TENANT : tenant.data;
 
   const [mode, setMode] = useState<'list' | 'form'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -383,8 +342,6 @@ export function RewardCampaignsPage() {
 
   if (mode === 'form') {
     return (
-      <PremiosChrome>
-        {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
         <CampaignForm
           editing={Boolean(editingId)}
           name={name}
@@ -421,14 +378,12 @@ export function RewardCampaignsPage() {
             }
           }}
         />
-      </PremiosChrome>
     );
   }
 
   return (
-    <PremiosChrome action={novaCampanha}>
-      {!preview && <TenantBillingPrompts billing={tenantRow?.billing} />}
-      <div className="grid gap-6">
+    <div className="grid gap-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
@@ -440,6 +395,8 @@ export function RewardCampaignsPage() {
             Campanhas de recompensa vinculadas às pesquisas.
           </p>
         </div>
+        {novaCampanha}
+      </div>
 
         {listLoading ? (
           <div className="text-sm text-opiina-muted">Carregando...</div>
@@ -505,14 +462,9 @@ export function RewardCampaignsPage() {
                 </tbody>
               </table>
             </div>
-
-            <p className="text-sm text-opiina-muted md:hidden">
-              Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
-            </p>
           </>
         )}
-      </div>
-    </PremiosChrome>
+    </div>
   );
 }
 

@@ -56,52 +56,50 @@ export function AppShell() {
   return (
     <div className="flex h-full flex-col bg-opiina-bg text-opiina-navy">
       <header className="bg-white">
-        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 md:px-8">
-          <div className="flex items-center gap-4">
-            <Link to="/app" className="inline-flex items-center gap-2">
-              <img
-                src="/icon-opiina.png"
-                alt="Opiina"
-                className="h-9 w-9 drop-shadow-sm"
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (el.src.endsWith('/favicon.svg')) return;
-                  el.src = '/favicon.svg';
-                }}
-              />
-            </Link>
+        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 md:flex-nowrap md:px-8">
+          <Link to="/app" className="inline-flex shrink-0 items-center gap-2">
+            <img
+              src="/icon-opiina.png"
+              alt="Opiina"
+              className="h-9 w-9 drop-shadow-sm"
+              onError={(e) => {
+                const el = e.currentTarget;
+                if (el.src.endsWith('/favicon.svg')) return;
+                el.src = '/favicon.svg';
+              }}
+            />
+          </Link>
 
-            <nav className="hidden items-center gap-1 md:flex">
-              <NavLink to="/app" end className={({ isActive }) => navClass(isActive)}>
-                Dashboard
+          <nav className="order-last flex w-full flex-wrap items-center gap-1 md:order-none md:w-auto md:flex-1">
+            <NavLink to="/app" end className={({ isActive }) => navClass(isActive)}>
+              Dashboard
+            </NavLink>
+            <NavLink to="/app/ranking" className={({ isActive }) => navClass(isActive)}>
+              Ranking
+            </NavLink>
+            <NavLink to="/app/surveys" className={({ isActive }) => navClass(isActive)}>
+              Pesquisas
+            </NavLink>
+            <NavLink to="/app/premios" className={({ isActive }) => navClass(isActive)}>
+              Prêmios
+            </NavLink>
+            <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
+              Clientes
+            </NavLink>
+            {canReadWhistleblower && (
+              <NavLink to="/app/whistleblower" className={({ isActive }) => navClass(isActive)}>
+                Denúncias
               </NavLink>
-              <NavLink to="/app/ranking" className={({ isActive }) => navClass(isActive)}>
-                Ranking
-              </NavLink>
-              <NavLink to="/app/surveys" className={({ isActive }) => navClass(isActive)}>
-                Pesquisas
-              </NavLink>
-              <NavLink to="/app/premios" className={({ isActive }) => navClass(isActive)}>
-                Prêmios
-              </NavLink>
-              <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
-                Clientes
-              </NavLink>
-              {canReadWhistleblower && (
-                <NavLink to="/app/whistleblower" className={({ isActive }) => navClass(isActive)}>
-                  Denúncias
-                </NavLink>
-              )}
-              <NavLink to="/app/feedbacks" className={({ isActive }) => navClass(isActive)}>
-                Feedbacks
-              </NavLink>
-              <NavLink to="/app/feedbacks/kanban" className={({ isActive }) => navClass(isActive)}>
-                Kanban
-              </NavLink>
-            </nav>
-          </div>
+            )}
+            <NavLink to="/app/feedbacks" className={({ isActive }) => navClass(isActive)}>
+              Feedbacks
+            </NavLink>
+            <NavLink to="/app/feedbacks/kanban" className={({ isActive }) => navClass(isActive)}>
+              Kanban
+            </NavLink>
+          </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <div className="relative" data-settings-menu>
               <button
                 type="button"
@@ -115,7 +113,7 @@ export function AppShell() {
                   <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" />
                   <path d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1l-.4-2.6H9.1L8.7 7a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 13a7.9 7.9 0 0 0-.1 1c0 .3 0 .7.1 1l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1l.4 2.6h5.8l.4-2.6a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z" />
                 </svg>
-                <span className="hidden sm:inline">Configurações</span>
+                <span>Configurações</span>
               </button>
 
               {settingsOpen && (
