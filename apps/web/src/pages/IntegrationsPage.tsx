@@ -6,7 +6,7 @@ const COPY = {
   SUB_DISCONNECTED: 'Cole a chave gerada no Muito Mais para vincular as duas contas.',
   FIELD_LABEL: 'Chave de API do Muito Mais',
   CTA_CONNECT: 'Conectar',
-  SUB_CONNECTED: 'Conta Muito Mais vinculada a este workspace',
+  SUB_CONNECTED: 'Conta Muito Mais vinculada a este workspace.',
   LABEL_COMPANY: 'Empresa vinculada',
   LABEL_KEY_MASKED: 'Chave de API',
   CONNECTED_NOTE: 'A chave fica só no servidor. Nunca exibida em texto puro.',
