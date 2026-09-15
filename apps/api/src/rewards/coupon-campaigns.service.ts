@@ -39,6 +39,7 @@ export class CouponCampaignsService {
     const mmCompanyId = dto.mmCompanyId.trim();
     if (!mmCompanyId) throw new BadRequestException('mm_company_id_required');
     await this.assertSurvey(user.tenantId, dto.surveyId);
+    await this.assertMmCompany(user.tenantId, mmCompanyId);
 
     const status: CouponCampaignStatus =
       dto.activate === false ? 'draft' : 'active';
@@ -86,6 +87,9 @@ export class CouponCampaignsService {
     if (dto.surveyId) await this.assertSurvey(user.tenantId, dto.surveyId);
     if (dto.mmCompanyId !== undefined && !dto.mmCompanyId.trim()) {
       throw new BadRequestException('mm_company_id_required');
+    }
+    if (dto.mmCompanyId !== undefined) {
+      await this.assertMmCompany(user.tenantId, dto.mmCompanyId.trim());
     }
 
     const rewardAmountCents =
@@ -151,6 +155,16 @@ export class CouponCampaignsService {
 
   async activate(user: AuthUser, id: string) {
     return this.update(user, id, { status: 'active' });
+  }
+
+  private async assertMmCompany(tenantId: string, mmCompanyId: string) {
+    const link = await this.prisma.tenantMmIntegration.findUnique({
+      where: { tenantId },
+      select: { mmCompanyId: true },
+    });
+    if (!link || link.mmCompanyId !== mmCompanyId) {
+      throw new BadRequestException('mm_company_not_linked');
+    }
   }
 
   private async assertSurvey(tenantId: string, surveyId: string) {

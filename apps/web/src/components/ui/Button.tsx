@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
 };
 
 export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
@@ -14,6 +14,7 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
     primary: 'bg-sky-600 text-white hover:bg-sky-700',
     secondary: 'bg-slate-100 text-slate-900 hover:bg-slate-200',
     ghost: 'bg-transparent text-slate-700 hover:bg-slate-100',
+    danger: 'bg-rose-600 text-white hover:bg-rose-700',
   };
 
   return (

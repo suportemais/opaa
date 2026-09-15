@@ -1,73 +1,31 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import {
-  normalizeMmCompanies,
-  parseMmCompaniesJson,
-  type MmCompanyOption,
-} from '../domain/rewards/mm-companies';
-import {
-  formatHmacSignatureHeader,
-  signTimestampedBody,
-} from '../domain/rewards/hmac';
-
-const MM_COMPANIES_PATH = '/internal/opiina/companies';
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import type { MmCompanyOption } from '../domain/rewards/mm-companies';
 
 @Injectable()
 export class MmCompaniesService {
-  private readonly logger = new Logger(MmCompaniesService.name);
-
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Operator picker source: MM companies only (`Company.id` + tradeName).
-   * Never OPIINA tenants/units or MM establishments.
+   * Operator picker: the tenant-linked MM company only.
+   * Empty when the tenant has not connected a key.
    */
-  async list(): Promise<MmCompanyOption[]> {
-    const fromApi = await this.fetchFromMm();
-    if (fromApi.length > 0) return fromApi;
-    return normalizeMmCompanies(
-      parseMmCompaniesJson(this.config.get<string>('MM_COMPANIES_JSON')),
-    );
+  async list(tenantId: string): Promise<MmCompanyOption[]> {
+    const linked = await this.linkedCompany(tenantId);
+    return linked ? [linked] : [];
   }
 
-  private async fetchFromMm(): Promise<MmCompanyOption[]> {
-    const base = (this.config.get<string>('MM_API_BASE_URL') ?? '')
-      .trim()
-      .replace(/\/+$/, '');
-    const secret = (
-      this.config.get<string>('MM_REWARD_HMAC_SECRET') ?? ''
-    ).trim();
-    if (!base) return [];
-
-    const url = `${base}${MM_COMPANIES_PATH}`;
-    const timestamp = String(Math.floor(Date.now() / 1000));
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'X-Opiina-Timestamp': timestamp,
+  private async linkedCompany(
+    tenantId: string,
+  ): Promise<MmCompanyOption | null> {
+    const row = await this.prisma.tenantMmIntegration.findUnique({
+      where: { tenantId },
+      select: { mmCompanyId: true, tradeName: true },
+    });
+    if (!row?.mmCompanyId.trim()) return null;
+    return {
+      id: row.mmCompanyId.trim(),
+      tradeName: row.tradeName?.trim() || 'Empresa Muito Mais',
     };
-    if (secret) {
-      headers['X-Opiina-Signature'] = formatHmacSignatureHeader(
-        signTimestampedBody(secret, timestamp, '{}'),
-      );
-    }
-
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) {
-        this.logger.warn(`MM companies list failed: HTTP ${res.status}`);
-        return [];
-      }
-      const body: unknown = await res.json();
-      return normalizeMmCompanies(body);
-    } catch (err) {
-      this.logger.warn(
-        `MM companies list unavailable: ${err instanceof Error ? err.message : 'error'}`,
-      );
-      return [];
-    }
   }
 }

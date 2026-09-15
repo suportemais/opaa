@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { setAccessToken } from '../../lib/auth-store';
@@ -33,6 +33,15 @@ export function AppShell() {
   const canReadEmployees = permissionCodes.includes('employee:read') || permissionCodes.includes('employee:manage');
   const canManageEmployees = permissionCodes.includes('employee:manage') || canManageUnits;
   const canReadWhistleblower = permissionCodes.includes('whistleblower:read') || permissionCodes.includes('whistleblower:manage');
+
+  const location = useLocation();
+  const settingsActive = [
+    '/app/company',
+    '/app/units',
+    '/app/employees',
+    '/app/users',
+    '/app/integracoes',
+  ].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -105,7 +114,9 @@ export function AppShell() {
                 type="button"
                 className={[
                   'inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium',
-                  'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                  settingsActive
+                    ? 'border-slate-200 bg-slate-100 font-medium text-slate-900'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                 ].join(' ')}
                 onClick={() => setSettingsOpen((v) => !v)}
               >
@@ -153,6 +164,15 @@ export function AppShell() {
                       onClick={() => setSettingsOpen(false)}
                     >
                       Usuários
+                    </NavLink>
+                  )}
+                  {canManageTenant && (
+                    <NavLink
+                      to="/app/integracoes"
+                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
+                      onClick={() => setSettingsOpen(false)}
+                    >
+                      Integrações
                     </NavLink>
                   )}
                 </div>
