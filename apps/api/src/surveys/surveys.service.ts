@@ -9,6 +9,10 @@ import type { CreateDistributionDto } from './dto/create-distribution.dto';
 import { AuditService } from '../audit/audit.service';
 import type { Request } from 'express';
 import { validateSurveyQuestionTypes } from '../domain/surveys/question-types';
+import {
+  assertSurveyUpdateAllowed,
+  isIdentitySettingsOnlyUpdate,
+} from '../domain/surveys/survey-update';
 
 @Injectable()
 export class SurveysService {
@@ -182,7 +186,8 @@ export class SurveysService {
 
   async update(user: AuthUser, surveyId: string, dto: UpdateSurveyDto, req?: Request) {
     const survey = await this.getAccessibleSurvey(user, surveyId);
-    if (survey.status !== 'draft') throw new BadRequestException('only_draft_editable');
+    const allowed = assertSurveyUpdateAllowed(survey.status, dto);
+    if (!allowed.ok) throw new BadRequestException(allowed.code);
 
     if (dto.questions) this.validateQuestions(dto.questions);
     if (dto.unitIds) this.validateUnitIds(user, dto.unitIds);
@@ -268,6 +273,7 @@ export class SurveysService {
         name: result.updated.name,
         ...(dto.questions ? { questionsUpdated: true } : {}),
         ...(dto.unitIds ? { unitsUpdated: true } : {}),
+        ...(isIdentitySettingsOnlyUpdate(dto) ? { identityUpdated: true } : {}),
       },
       req,
     });
