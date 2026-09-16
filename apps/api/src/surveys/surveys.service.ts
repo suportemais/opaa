@@ -8,6 +8,7 @@ import type { UpdateSurveyDto } from './dto/update-survey.dto';
 import type { CreateDistributionDto } from './dto/create-distribution.dto';
 import { AuditService } from '../audit/audit.service';
 import type { Request } from 'express';
+import { validateSurveyQuestionTypes } from '../domain/surveys/question-types';
 
 @Injectable()
 export class SurveysService {
@@ -34,9 +35,8 @@ export class SurveysService {
   }
 
   private validateQuestions(questions: Array<{ type: string }>) {
-    const npsIndex = questions.findIndex((q) => q.type === 'nps');
-    if (npsIndex !== 0) throw new BadRequestException('nps_required_first');
-    if (questions.filter((q) => q.type === 'nps').length !== 1) throw new BadRequestException('nps_required_single');
+    const result = validateSurveyQuestionTypes(questions);
+    if (!result.ok) throw new BadRequestException(result.code);
   }
 
   private validateUnitIds(user: AuthUser, unitIds: string[]) {

@@ -460,6 +460,7 @@ model Question {
   sectionId      String? @db.Uuid
   title          String
   description    String?
+  /// Widget type. Primary rating is `nps`. Extra/custom questions: `text_long`/`text_short` (Aberta, default) or `scale_1_10` (Classificação 1–10).
   type           String
   required       Boolean @default(false)
   order          Int

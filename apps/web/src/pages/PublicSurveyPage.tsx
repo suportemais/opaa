@@ -4,7 +4,14 @@ import { useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Scale1to10 } from '../components/survey/Scale1to10';
 import { randomId } from '../lib/id';
+import {
+  isAnswerMissing,
+  isPrimaryRatingType,
+  isScaleExtraQuestionType,
+  isScaleScore,
+} from '../lib/question-types';
 
 type PublicOption = { id: string; label: string; value: string; order: number };
 type PublicQuestion = {
@@ -50,7 +57,7 @@ export function PublicSurveyPage() {
   });
 
   const questions = useMemo(() => (survey.data?.survey.questions ?? []).slice().sort((a, b) => a.order - b.order), [survey.data]);
-  const npsQuestion = useMemo(() => questions.find((q) => q.type === 'nps') ?? null, [questions]);
+  const npsQuestion = useMemo(() => questions.find((q) => isPrimaryRatingType(q.type)) ?? null, [questions]);
   const badScoreThreshold = useMemo(() => {
     const v = survey.data?.settings?.badScoreThreshold;
     return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
@@ -148,7 +155,7 @@ export function PublicSurveyPage() {
       const outAnswers: Array<{ questionId: string; value: unknown }> = [];
       const nextAnswers: Record<string, unknown> = { ...answers };
       const npsValue = nextAnswers[npsQuestion.id];
-      if (typeof npsValue !== 'number' || !Number.isFinite(npsValue)) {
+      if (!isScaleScore(npsValue)) {
         throw new Error('missing_required');
       }
       nextAnswers[npsQuestion.id] = npsValue;
@@ -157,21 +164,22 @@ export function PublicSurveyPage() {
         const cfg = q.config as QuestionConfig | null | undefined;
         const required = Boolean(q.required || cfg?.requiredWhenVisible);
         const v = nextAnswers[q.id];
+        const missing = isScaleExtraQuestionType(q.type)
+          ? !isScaleScore(v)
+          : isAnswerMissing(v);
 
-        const isMissing =
-          v === undefined || v === null
-            ? true
-            : typeof v === 'string'
-              ? v.trim().length === 0
-              : typeof v === 'number'
-                ? !Number.isFinite(v)
-                : false;
-
-        if (required && isMissing) {
+        if (required && missing) {
           throw new Error('missing_required');
         }
 
-        if (!isMissing) {
+        if (isScaleExtraQuestionType(q.type)) {
+          if (isScaleScore(v)) {
+            outAnswers.push({ questionId: q.id, value: v });
+          }
+          continue;
+        }
+
+        if (!missing) {
           outAnswers.push({ questionId: q.id, value: typeof v === 'string' ? v.trim() : v });
         }
       }
@@ -218,22 +226,17 @@ export function PublicSurveyPage() {
     const step = steps[stepIndex];
     if (!step) return false;
     if (step.type === 'employee') return true;
-    if (step.type === 'nps') return typeof selectedNps === 'number' && selectedNps >= 1 && selectedNps <= 10;
+    if (step.type === 'nps') return isScaleScore(selectedNps);
     if (step.type === 'complaint') return true;
     if (step.type === 'question' && step.question) {
       const q = step.question;
       const cfg = q.config as QuestionConfig | null | undefined;
       const required = Boolean(q.required || cfg?.requiredWhenVisible);
       const v = answers[q.id];
-      const missing =
-        v === undefined || v === null
-          ? true
-          : typeof v === 'string'
-            ? v.trim().length === 0
-            : typeof v === 'number'
-              ? !Number.isFinite(v)
-              : false;
-      return required ? !missing : true;
+      if (isScaleExtraQuestionType(q.type)) {
+        return required ? isScaleScore(v) : true;
+      }
+      return required ? !isAnswerMissing(v) : true;
     }
     return true;
   }
@@ -377,30 +380,7 @@ export function PublicSurveyPage() {
                   return (
                     <div>
                       <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <div className="grid grid-cols-5 gap-2 md:grid-cols-10">
-                        {Array.from({ length: 10 }).map((_, i) => {
-                          const value = i + 1;
-                          return (
-                            <button
-                              key={value}
-                              type="button"
-                              className={[
-                                'h-10 rounded-md border text-sm font-medium',
-                                selectedNps === value
-                                  ? 'border-sky-600 bg-sky-600 text-white'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                              ].join(' ')}
-                              onClick={() => setAnswer(q.id, value)}
-                            >
-                              {value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                        <span>1 = muito ruim</span>
-                        <span>10 = excelente</span>
-                      </div>
+                      <Scale1to10 value={selectedNps} onChange={(value) => setAnswer(q.id, value)} />
                       {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
                     </div>
                   );
@@ -426,6 +406,18 @@ export function PublicSurveyPage() {
                   const cfg = q.config as QuestionConfig | null | undefined;
                   const required = Boolean(q.required || cfg?.requiredWhenVisible);
                   const label = required ? `${q.title} *` : q.title;
+
+                  if (isScaleExtraQuestionType(q.type)) {
+                    const raw = answers[q.id];
+                    const v = isScaleScore(raw) ? raw : null;
+                    return (
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                        <Scale1to10 value={v} onChange={(value) => setAnswer(q.id, value)} />
+                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                      </div>
+                    );
+                  }
 
                   if (q.type === 'text_short') {
                     const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
