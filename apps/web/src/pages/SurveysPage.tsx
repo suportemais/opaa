@@ -68,6 +68,92 @@ function emptyExtraQuestion(title = 'Nova pergunta'): QuestionDraft {
   };
 }
 
+function identityStateFromSurvey(s: Pick<SurveyDetail, 'collectCustomer' | 'anonymousAllowed' | 'collectEmployee'>) {
+  return {
+    collectEmployee: s.collectEmployee,
+    collectCustomer: s.collectCustomer,
+    requireCustomerIdentity: Boolean(s.collectCustomer) && s.anonymousAllowed === false,
+  };
+}
+
+function identityPayload(state: {
+  collectCustomer: boolean;
+  requireCustomerIdentity: boolean;
+  collectEmployee: boolean;
+}) {
+  return {
+    collectCustomer: state.collectCustomer,
+    anonymousAllowed: state.collectCustomer ? !state.requireCustomerIdentity : true,
+    collectEmployee: state.collectEmployee,
+  };
+}
+
+function isIdentityDirty(
+  local: {
+    collectEmployee: boolean;
+    collectCustomer: boolean;
+    requireCustomerIdentity: boolean;
+  },
+  survey: Pick<SurveyDetail, 'collectCustomer' | 'anonymousAllowed' | 'collectEmployee'>,
+) {
+  const saved = identityStateFromSurvey(survey);
+  return (
+    local.collectEmployee !== saved.collectEmployee ||
+    local.collectCustomer !== saved.collectCustomer ||
+    local.requireCustomerIdentity !== saved.requireCustomerIdentity
+  );
+}
+
+function SurveyIdentityCheckboxes(props: {
+  collectEmployee: boolean;
+  collectCustomer: boolean;
+  requireCustomerIdentity: boolean;
+  disabled?: boolean;
+  onCollectEmployee: (checked: boolean) => void;
+  onCollectCustomer: (checked: boolean) => void;
+  onRequireCustomerIdentity: (checked: boolean) => void;
+}) {
+  return (
+    <div className="md:col-span-2 grid gap-2">
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-slate-300"
+          checked={props.collectEmployee}
+          disabled={props.disabled}
+          onChange={(e) => props.onCollectEmployee(e.target.checked)}
+        />
+        Perguntar “Atendente” na pesquisa
+      </label>
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-slate-300"
+          checked={props.collectCustomer}
+          disabled={props.disabled}
+          onChange={(e) => props.onCollectCustomer(e.target.checked)}
+        />
+        Coletar identificação do cliente
+      </label>
+      <label
+        className={[
+          'flex items-center gap-2 text-sm text-slate-700',
+          props.collectCustomer ? '' : 'opacity-50',
+        ].join(' ')}
+      >
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-slate-300"
+          checked={props.requireCustomerIdentity}
+          disabled={props.disabled || !props.collectCustomer}
+          onChange={(e) => props.onRequireCustomerIdentity(e.target.checked)}
+        />
+        Obrigar o cliente a se identificar
+      </label>
+    </div>
+  );
+}
+
 export function SurveysPage() {
   const qc = useQueryClient();
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
@@ -111,15 +197,26 @@ export function SurveysPage() {
     enabled: Boolean(activeSurveyId),
   });
 
+  const activeSurveyDetail = useQuery({
+    queryKey: ['surveyDetail', activeSurveyId],
+    queryFn: () => apiFetch<SurveyDetail>(`/surveys/${activeSurveyId}`),
+    enabled: Boolean(activeSurveyId),
+  });
+
+  const [linksCollectEmployee, setLinksCollectEmployee] = useState(true);
+  const [linksCollectCustomer, setLinksCollectCustomer] = useState(true);
+  const [linksRequireCustomerIdentity, setLinksRequireCustomerIdentity] = useState(false);
+
   useEffect(() => {
     if (!editingId) return;
     if (!draftDetail.isFetched || !draftDetail.data) return;
     const s = draftDetail.data;
     setName(s.name);
     setDescription(s.description ?? '');
-    setCollectEmployee(s.collectEmployee);
-    setCollectCustomer(s.collectCustomer);
-    setRequireCustomerIdentity(Boolean(s.collectCustomer) && s.anonymousAllowed === false);
+    const identity = identityStateFromSurvey(s);
+    setCollectEmployee(identity.collectEmployee);
+    setCollectCustomer(identity.collectCustomer);
+    setRequireCustomerIdentity(identity.requireCustomerIdentity);
     const firstUnit = s.units[0]?.unitId ?? null;
     if (firstUnit) setUnitId(firstUnit);
     const extras: QuestionDraft[] =
@@ -135,6 +232,15 @@ export function SurveysPage() {
         })) ?? [];
     setQuestions(extras);
   }, [editingId, draftDetail.data, draftDetail.isFetched]);
+
+  useEffect(() => {
+    if (!activeSurveyId) return;
+    if (!activeSurveyDetail.isFetched || !activeSurveyDetail.data) return;
+    const identity = identityStateFromSurvey(activeSurveyDetail.data);
+    setLinksCollectEmployee(identity.collectEmployee);
+    setLinksCollectCustomer(identity.collectCustomer);
+    setLinksRequireCustomerIdentity(identity.requireCustomerIdentity);
+  }, [activeSurveyId, activeSurveyDetail.data, activeSurveyDetail.isFetched]);
 
   const startEditing = (surveyId: string) => {
     setEditingId(surveyId);
@@ -172,9 +278,7 @@ export function SurveysPage() {
         json: {
           name,
           description,
-          collectCustomer,
-          anonymousAllowed: collectCustomer ? !requireCustomerIdentity : true,
-          collectEmployee,
+          ...identityPayload({ collectCustomer, requireCustomerIdentity, collectEmployee }),
           unitIds: [u],
           questions: buildQuestionsPayload(),
         },
@@ -201,9 +305,7 @@ export function SurveysPage() {
         json: {
           name,
           description,
-          collectCustomer,
-          anonymousAllowed: collectCustomer ? !requireCustomerIdentity : true,
-          collectEmployee,
+          ...identityPayload({ collectCustomer, requireCustomerIdentity, collectEmployee }),
           unitIds: [u],
           questions: buildQuestionsPayload(),
         },
@@ -225,9 +327,7 @@ export function SurveysPage() {
         json: {
           name,
           description,
-          collectCustomer,
-          anonymousAllowed: collectCustomer ? !requireCustomerIdentity : true,
-          collectEmployee,
+          ...identityPayload({ collectCustomer, requireCustomerIdentity, collectEmployee }),
           unitIds: [u],
           questions: buildQuestionsPayload(),
         },
@@ -256,6 +356,24 @@ export function SurveysPage() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['surveyDistributions', activeSurveyId] });
+    },
+  });
+
+  const updateIdentitySettings = useMutation({
+    mutationFn: async () => {
+      if (!activeSurveyId) throw new Error('no_survey');
+      return apiFetch<{ ok: boolean; id: string }>(`/surveys/${encodeURIComponent(activeSurveyId)}`, {
+        method: 'PATCH',
+        json: identityPayload({
+          collectCustomer: linksCollectCustomer,
+          requireCustomerIdentity: linksRequireCustomerIdentity,
+          collectEmployee: linksCollectEmployee,
+        }),
+      });
+    },
+    onSuccess: async (data) => {
+      await qc.invalidateQueries({ queryKey: ['surveyDetail', data?.id] });
+      await qc.invalidateQueries({ queryKey: ['surveys'] });
     },
   });
 
@@ -298,45 +416,17 @@ export function SurveysPage() {
             <div className="mb-1 text-sm font-medium text-slate-700">Descrição</div>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
-          <div className="md:col-span-2 grid gap-2">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={collectEmployee}
-                onChange={(e) => setCollectEmployee(e.target.checked)}
-              />
-              Perguntar “Atendente” na pesquisa
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={collectCustomer}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setCollectCustomer(checked);
-                  if (!checked) setRequireCustomerIdentity(false);
-                }}
-              />
-              Coletar identificação do cliente
-            </label>
-            <label
-              className={[
-                'flex items-center gap-2 text-sm text-slate-700',
-                collectCustomer ? '' : 'opacity-50',
-              ].join(' ')}
-            >
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={requireCustomerIdentity}
-                disabled={!collectCustomer}
-                onChange={(e) => setRequireCustomerIdentity(e.target.checked)}
-              />
-              Obrigar o cliente a se identificar
-            </label>
-          </div>
+          <SurveyIdentityCheckboxes
+            collectEmployee={collectEmployee}
+            collectCustomer={collectCustomer}
+            requireCustomerIdentity={requireCustomerIdentity}
+            onCollectEmployee={setCollectEmployee}
+            onCollectCustomer={(checked) => {
+              setCollectCustomer(checked);
+              if (!checked) setRequireCustomerIdentity(false);
+            }}
+            onRequireCustomerIdentity={setRequireCustomerIdentity}
+          />
           <div className="md:col-span-2">
             <div className="mb-2 text-sm font-medium text-slate-700">Perguntas</div>
             <div className="grid gap-3">
@@ -503,6 +593,7 @@ export function SurveysPage() {
                     onClick={() => {
                       setActiveSurveyId((cur) => (cur === s.id ? null : s.id));
                       setDistributionUnitId(defaultUnitId);
+                      updateIdentitySettings.reset();
                     }}
                   >
                     Links
@@ -531,6 +622,70 @@ export function SurveysPage() {
       {activeSurveyId && (
         <Card title="Links e QR Codes" description="Distribuições públicas da pesquisa selecionada">
           <div className="grid gap-4">
+            <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <div className="text-sm font-medium text-slate-900">Identificação</div>
+                <div className="text-xs text-slate-600">
+                  Mesmas opções da criação. Alterações valem para as próximas respostas nos links abaixo.
+                </div>
+              </div>
+              {activeSurveyDetail.isLoading && <div className="text-sm text-slate-600">Carregando configurações...</div>}
+              {activeSurveyDetail.isError && (
+                <div className="text-sm text-rose-700">Falha ao carregar configurações da pesquisa</div>
+              )}
+              {activeSurveyDetail.data && (
+                <>
+                  <SurveyIdentityCheckboxes
+                    collectEmployee={linksCollectEmployee}
+                    collectCustomer={linksCollectCustomer}
+                    requireCustomerIdentity={linksRequireCustomerIdentity}
+                    disabled={activeSurveyDetail.data.status === 'archived'}
+                    onCollectEmployee={setLinksCollectEmployee}
+                    onCollectCustomer={(checked) => {
+                      setLinksCollectCustomer(checked);
+                      if (!checked) setLinksRequireCustomerIdentity(false);
+                    }}
+                    onRequireCustomerIdentity={setLinksRequireCustomerIdentity}
+                  />
+                  {activeSurveyDetail.data.status === 'archived' ? (
+                    <div className="text-sm text-slate-600">Pesquisa arquivada. Identificação não pode ser alterada.</div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        disabled={
+                          updateIdentitySettings.isPending ||
+                          activeSurveyDetail.isFetching ||
+                          !isIdentityDirty(
+                            {
+                              collectEmployee: linksCollectEmployee,
+                              collectCustomer: linksCollectCustomer,
+                              requireCustomerIdentity: linksRequireCustomerIdentity,
+                            },
+                            activeSurveyDetail.data,
+                          )
+                        }
+                        onClick={() => updateIdentitySettings.mutate()}
+                      >
+                        {updateIdentitySettings.isPending ? 'Salvando...' : 'Salvar identificação'}
+                      </Button>
+                      {updateIdentitySettings.isError && (
+                        <div className="text-sm text-rose-700">Falha ao salvar identificação</div>
+                      )}
+                      {updateIdentitySettings.isSuccess &&
+                        !isIdentityDirty(
+                          {
+                            collectEmployee: linksCollectEmployee,
+                            collectCustomer: linksCollectCustomer,
+                            requireCustomerIdentity: linksRequireCustomerIdentity,
+                          },
+                          activeSurveyDetail.data,
+                        ) && <div className="text-sm text-emerald-700">Configurações salvas.</div>}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             <div className="grid gap-3 md:grid-cols-3">
               <div className="md:col-span-2">
                 <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
