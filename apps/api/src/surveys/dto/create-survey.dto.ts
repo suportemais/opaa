@@ -1,11 +1,22 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsBoolean, IsDefined, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsDefined,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
+import { SURVEY_QUESTION_TYPES } from '../../domain/surveys/question-types';
 
 export class CreateSurveyQuestionDto {
   @IsString()
   title!: string;
 
-  @IsString()
+  @IsIn(SURVEY_QUESTION_TYPES)
   type!: string;
 
   @IsOptional()

@@ -5,6 +5,14 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { QrCode } from '../components/QrCode';
+import {
+  DEFAULT_EXTRA_QUESTION_KIND,
+  EXTRA_QUESTION_KIND_LABELS,
+  EXTRA_QUESTION_TYPE_MICROCOPY,
+  extraQuestionKindFromType,
+  persistedTypeFromExtraKind,
+  type ExtraQuestionKind,
+} from '../lib/question-types';
 
 type Unit = { id: string; name: string };
 type Survey = { id: string; name: string; status: string; units: Array<{ unitId: string; unit: Unit }> };
@@ -43,10 +51,22 @@ type Distribution = {
 type QuestionDraft = {
   id: string;
   title: string;
-  type: 'text_short' | 'text_long';
+  kind: ExtraQuestionKind;
+  storedOpenType?: 'text_short' | 'text_long';
   required: boolean;
   onlyLowScore: boolean;
 };
+
+function emptyExtraQuestion(title = 'Nova pergunta'): QuestionDraft {
+  return {
+    id: crypto.randomUUID(),
+    title,
+    kind: DEFAULT_EXTRA_QUESTION_KIND,
+    storedOpenType: 'text_long',
+    required: false,
+    onlyLowScore: false,
+  };
+}
 
 export function SurveysPage() {
   const qc = useQueryClient();
@@ -76,7 +96,7 @@ export function SurveysPage() {
   const [collectCustomer, setCollectCustomer] = useState(true);
   const [requireCustomerIdentity, setRequireCustomerIdentity] = useState(false);
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [
-    { id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false },
+    emptyExtraQuestion('O que poderíamos melhorar?'),
   ]);
 
   const defaultUnitId = useMemo(() => units.data?.[0]?.id ?? null, [units.data]);
@@ -108,7 +128,8 @@ export function SurveysPage() {
         .map((q) => ({
           id: q.id,
           title: q.title,
-          type: (q.type === 'text_short' || q.type === 'text_long' ? q.type : 'text_long') as QuestionDraft['type'],
+          kind: extraQuestionKindFromType(q.type),
+          storedOpenType: q.type === 'text_short' ? 'text_short' : 'text_long',
           required: q.required,
           onlyLowScore: Boolean(q.config?.when?.npsMax),
         })) ?? [];
@@ -126,7 +147,7 @@ export function SurveysPage() {
     setCollectEmployee(true);
     setCollectCustomer(true);
     setRequireCustomerIdentity(false);
-    setQuestions([{ id: crypto.randomUUID(), title: 'O que poderíamos melhorar?', type: 'text_long', required: false, onlyLowScore: false }]);
+    setQuestions([emptyExtraQuestion('O que poderíamos melhorar?')]);
     setUnitId(null);
     qc.invalidateQueries({ queryKey: ['surveyDetail'] });
   };
@@ -135,7 +156,7 @@ export function SurveysPage() {
     { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps' as const, required: true },
     ...questions.map((q) => ({
       title: q.title,
-      type: q.type,
+      type: persistedTypeFromExtraKind(q.kind, q.storedOpenType),
       required: q.required,
       config: q.onlyLowScore ? { when: { npsMax: badScoreThreshold } } : undefined,
     })),
@@ -340,16 +361,19 @@ export function SurveysPage() {
                       <div className="mb-1 text-sm font-medium text-slate-700">Tipo</div>
                       <select
                         className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                        value={q.type}
+                        value={q.kind}
                         onChange={(e) =>
                           setQuestions((prev) =>
-                            prev.map((x) => (x.id === q.id ? { ...x, type: e.target.value as QuestionDraft['type'] } : x)),
+                            prev.map((x) =>
+                              x.id === q.id ? { ...x, kind: e.target.value as ExtraQuestionKind } : x,
+                            ),
                           )
                         }
                       >
-                        <option value="text_long">Texto longo</option>
-                        <option value="text_short">Texto curto</option>
+                        <option value="open">{EXTRA_QUESTION_KIND_LABELS.open}</option>
+                        <option value="scale_1_10">{EXTRA_QUESTION_KIND_LABELS.scale_1_10}</option>
                       </select>
+                      <div className="mt-1 text-xs text-slate-500">{EXTRA_QUESTION_TYPE_MICROCOPY}</div>
                     </div>
                     <div className="md:col-span-3 flex flex-wrap items-center gap-4">
                       <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -390,18 +414,7 @@ export function SurveysPage() {
 
               <Button
                 variant="secondary"
-                onClick={() =>
-                  setQuestions((prev) => [
-                    ...prev,
-                    {
-                      id: crypto.randomUUID(),
-                      title: 'Nova pergunta',
-                      type: 'text_long',
-                      required: false,
-                      onlyLowScore: false,
-                    },
-                  ])
-                }
+                onClick={() => setQuestions((prev) => [...prev, emptyExtraQuestion()])}
               >
                 Adicionar pergunta
               </Button>

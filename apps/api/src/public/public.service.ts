@@ -14,6 +14,13 @@ import { RewardEmitService } from '../rewards/reward-emit.service';
 import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 import { listPublicPlans } from './public-plans';
 import { hasCustomerIdentity, isCustomerIdentityRequired } from '../domain/surveys/customer-identity';
+import {
+  isOpenExtraQuestionType,
+  isPresentAnswerValidForType,
+  isPrimaryRatingType,
+  isScaleExtraQuestionType,
+  isScaleScore,
+} from '../domain/surveys/question-types';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -211,12 +218,16 @@ export class PublicService {
     const questionById = new Map(version.questions.map((q) => [q.id, q]));
 
     for (const answer of dto.answers) {
-      if (!questionById.has(answer.questionId)) {
+      const question = questionById.get(answer.questionId);
+      if (!question) {
         throw new BadRequestException('invalid_question');
+      }
+      if (isScaleExtraQuestionType(question.type) && !isScaleScore(answer.value)) {
+        throw new BadRequestException('invalid_scale');
       }
     }
 
-    const npsQuestion = version.questions.find((q) => q.type === 'nps');
+    const npsQuestion = version.questions.find((q) => isPrimaryRatingType(q.type));
     const npsAnswer = npsQuestion
       ? dto.answers.find((a) => a.questionId === npsQuestion.id)
       : undefined;
@@ -225,8 +236,8 @@ export class PublicService {
     let npsClass: NpsClass | undefined;
     let isBadScore = false;
     if (npsQuestion) {
-      const score = typeof npsAnswer?.value === 'number' ? npsAnswer.value : NaN;
-      if (!Number.isFinite(score) || score < 1 || score > 10) {
+      const score = npsAnswer?.value;
+      if (!isScaleScore(score)) {
         throw new BadRequestException('invalid_nps');
       }
       npsScore = score;
@@ -243,16 +254,14 @@ export class PublicService {
 
     for (const q of requiredQuestions) {
       const v = dto.answers.find((a) => a.questionId === q.id)?.value;
-      const ok =
-        typeof v === 'number'
-          ? Number.isFinite(v)
-          : typeof v === 'string'
-            ? v.trim().length > 0
-            : v !== undefined && v !== null;
-      if (!ok) throw new BadRequestException('missing_required');
+      if (!isPresentAnswerValidForType(q.type, v)) {
+        throw new BadRequestException(
+          isPrimaryRatingType(q.type) ? 'invalid_nps' : 'missing_required',
+        );
+      }
     }
 
-    const textQuestions = version.questions.filter((q) => q.type === 'text_long' || q.type === 'text_short');
+    const textQuestions = version.questions.filter((q) => isOpenExtraQuestionType(q.type));
     const rankedTextQuestions = textQuestions
       .filter((q) => isQuestionVisible(q as any, visibleCtx))
       .sort((a, b) => {
