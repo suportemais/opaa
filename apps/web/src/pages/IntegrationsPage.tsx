@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../lib/api';
+import { unitCnpjLine } from '../lib/cnpj';
 
 const COPY = {
   SUB_DISCONNECTED: 'Cole a chave gerada no Muito Mais para vincular as duas contas.',
@@ -16,7 +17,9 @@ const COPY = {
 
 const VOUCHER_COPY = {
   TITLE: 'Voucher Muito Mais',
-  MICRO: 'Gere um código de 7 dígitos pra o cliente vincular no Muito Mais.',
+  LABEL_UNIT: 'Unidade',
+  MULTI: 'Escolha a unidade antes de gerar',
+  MICRO: 'O voucher vincula no Muito Mais pelo CNPJ desta unidade.',
   CTA_GENERATE: 'Gerar voucher',
   CTA_COPY: 'Copiar',
   CTA_CANCEL: 'Cancelar',
@@ -39,6 +42,16 @@ type AdhesionVoucher = {
   id: string;
   voucher: string;
   status: 'unused' | 'used' | 'cancelled' | 'expired';
+  unitId?: string | null;
+  unitName?: string | null;
+  issuer?: { cnpj: string; legalName: string; tradeName: string };
+};
+
+type Unit = {
+  id: string;
+  name: string;
+  document: string | null;
+  legalName?: string | null;
 };
 
 function errorMessage(err: unknown): string {
@@ -65,7 +78,13 @@ function errorMessage(err: unknown): string {
     case 'invalid_mm_validate_response':
       return 'Não foi possível validar a chave no Muito Mais. Tente novamente.';
     case 'issuer_cnpj_required':
-      return 'Cadastre um CNPJ válido em Empresa para emitir o voucher.';
+      return 'Cadastre um CNPJ válido nesta unidade para emitir o voucher.';
+    case 'unit_required':
+      return VOUCHER_COPY.MULTI;
+    case 'unit_not_found':
+      return 'Unidade não encontrada.';
+    case 'invalid_document':
+      return 'Informe um CNPJ válido da unidade.';
     case 'voucher_already_used':
       return 'Este voucher já foi usado e não pode ser cancelado.';
     case 'voucher_expired':
@@ -103,6 +122,12 @@ export function IntegrationsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [justGenerated, setJustGenerated] = useState(false);
+  const [unitId, setUnitId] = useState('');
+
+  const units = useQuery({
+    queryKey: ['units'],
+    queryFn: () => apiFetch<Unit[]>('/units'),
+  });
 
   const vouchers = useQuery({
     queryKey: ['mm-vouchers'],
@@ -115,7 +140,11 @@ export function IntegrationsPage() {
   });
 
   const mint = useMutation({
-    mutationFn: () => apiFetch<AdhesionVoucher>('/mm-vouchers', { method: 'POST', json: {} }),
+    mutationFn: (selectedUnitId: string) =>
+      apiFetch<AdhesionVoucher>('/mm-vouchers', {
+        method: 'POST',
+        json: { unitId: selectedUnitId },
+      }),
     onSuccess: async () => {
       setVoucherError(null);
       setJustGenerated(true);
@@ -160,9 +189,38 @@ export function IntegrationsPage() {
     onError: (err) => setFormError(errorMessage(err)),
   });
 
+  const unitRows = units.data;
+  const isMultiUnit = (unitRows?.length ?? 0) > 1;
+  const selectedUnit = useMemo(() => {
+    const rows = unitRows ?? [];
+    return rows.find((item) => item.id === unitId) ?? (rows.length === 1 ? rows[0] : undefined);
+  }, [unitRows, unitId]);
+  const selectedUnitId = selectedUnit?.id ?? '';
+  const selectedHasCnpj = Boolean(selectedUnit?.document?.trim());
+
+  useEffect(() => {
+    if (unitRows?.length === 1) setUnitId(unitRows[0].id);
+  }, [unitRows]);
+
   const row = status.data;
   const connected = Boolean(row?.connected);
   const activeVouchers = (vouchers.data ?? []).filter((item) => item.status === 'unused');
+
+  function requestMint() {
+    if (isMultiUnit && !selectedUnitId) {
+      setVoucherError(VOUCHER_COPY.MULTI);
+      return;
+    }
+    if (!selectedUnitId) {
+      setVoucherError(VOUCHER_COPY.MULTI);
+      return;
+    }
+    if (!selectedHasCnpj) {
+      setVoucherError('Cadastre um CNPJ válido nesta unidade para emitir o voucher.');
+      return;
+    }
+    mint.mutate(selectedUnitId);
+  }
 
   return (
     <div className="grid gap-6">
@@ -268,13 +326,45 @@ export function IntegrationsPage() {
 
       <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
         <div className="mb-2 text-lg font-semibold text-opiina-navy">{VOUCHER_COPY.TITLE}</div>
-        <p className="mb-5 text-sm text-opiina-muted">{VOUCHER_COPY.MICRO}</p>
+
+        <label className="mb-4 block">
+          <div className="mb-1.5 text-sm font-medium text-slate-700">{VOUCHER_COPY.LABEL_UNIT}</div>
+          {isMultiUnit ? (
+            <select
+              className={FIELD_CLASS}
+              value={unitId}
+              onChange={(e) => {
+                setUnitId(e.target.value);
+                setVoucherError(null);
+              }}
+            >
+              <option value="">{VOUCHER_COPY.MULTI}</option>
+              {(unitRows ?? []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {unitCnpjLine(item.name, item.document)}
+                </option>
+              ))}
+            </select>
+          ) : selectedUnit ? (
+            <div className="text-sm font-medium text-opiina-navy">
+              {unitCnpjLine(selectedUnit.name, selectedUnit.document)}
+            </div>
+          ) : (
+            <div className="text-sm text-opiina-muted">{units.isLoading ? 'Carregando...' : VOUCHER_COPY.MULTI}</div>
+          )}
+          {isMultiUnit && selectedUnit && (
+            <div className="mt-2 text-sm font-medium text-opiina-navy">
+              {unitCnpjLine(selectedUnit.name, selectedUnit.document)}
+            </div>
+          )}
+          <div className="mt-2 text-xs text-opiina-muted">{VOUCHER_COPY.MICRO}</div>
+        </label>
 
         <button
           type="button"
-          disabled={mint.isPending}
+          disabled={mint.isPending || units.isLoading || !selectedUnitId || !selectedHasCnpj}
           className="inline-flex h-12 items-center justify-center rounded-full bg-opiina-cta px-6 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          onClick={() => mint.mutate()}
+          onClick={() => requestMint()}
         >
           {VOUCHER_COPY.CTA_GENERATE}
         </button>
@@ -294,9 +384,16 @@ export function IntegrationsPage() {
                   key={item.id}
                   className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 first:border-t-0 first:pt-0"
                 >
-                  <span className="font-mono text-base font-semibold tracking-wider text-opiina-navy">
-                    {item.voucher}
-                  </span>
+                  <div>
+                    <span className="font-mono text-base font-semibold tracking-wider text-opiina-navy">
+                      {item.voucher}
+                    </span>
+                    {item.issuer && (
+                      <div className="mt-0.5 text-xs text-opiina-muted">
+                        {unitCnpjLine(item.unitName || item.issuer.tradeName, item.issuer.cnpj)}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"

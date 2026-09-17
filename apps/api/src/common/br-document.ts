@@ -41,7 +41,9 @@ function isValidCnpjDigits(value: string) {
   return nums[12] === d1 && nums[13] === d2;
 }
 
-export function normalizeBrDocument(input: string | null | undefined): BrDocument | null {
+export function normalizeBrDocument(
+  input: string | null | undefined,
+): BrDocument | null {
   if (input === null || input === undefined) return null;
   const raw = input.trim();
   if (!raw) return null;
@@ -57,3 +59,15 @@ export function normalizeBrDocument(input: string | null | undefined): BrDocumen
   return null;
 }
 
+/** Unit / adhesion issuer: CNPJ digits only. CPF and invalid docs are rejected. */
+export function normalizeCnpj(input: string | null | undefined): string | null {
+  const parsed = normalizeBrDocument(input);
+  if (!parsed || parsed.type !== 'cnpj') return null;
+  return parsed.value;
+}
+
+export function formatCnpj(input: string | null | undefined): string {
+  const digits = input ? digitsOnly(input) : '';
+  if (digits.length !== 14) return (input ?? '').trim();
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}

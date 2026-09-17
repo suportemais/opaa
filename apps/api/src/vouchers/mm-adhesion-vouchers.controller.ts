@@ -25,7 +25,7 @@ export class MmAdhesionVouchersController {
   @Post()
   @RequirePermissions(PermissionCodes.TenantSettingsManage)
   @ApiOperation({
-    summary: 'Mint a one-time 7-digit MM adhesion voucher (issuer CNPJ)',
+    summary: 'Mint a one-time 7-digit MM adhesion voucher (unit CNPJ)',
   })
   mint(@CurrentUser() user: AuthUser, @Body() dto: CreateAdhesionVoucherDto) {
     return this.vouchers.mint(user, dto);

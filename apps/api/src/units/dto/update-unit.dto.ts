@@ -11,6 +11,14 @@ export class UpdateUnitDto {
 
   @IsOptional()
   @IsString()
+  document?: string;
+
+  @IsOptional()
+  @IsString()
+  legalName?: string;
+
+  @IsOptional()
+  @IsString()
   timeZone?: string;
 
   @IsOptional()
