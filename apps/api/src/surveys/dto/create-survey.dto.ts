@@ -12,6 +12,19 @@ import {
 } from 'class-validator';
 import { SURVEY_QUESTION_TYPES } from '../../domain/surveys/question-types';
 
+export class SurveyQuestionOptionDto {
+  @IsString()
+  label!: string;
+
+  @IsOptional()
+  @IsString()
+  value?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  negative?: boolean;
+}
+
 export class CreateSurveyQuestionDto {
   @IsString()
   title!: string;
@@ -26,6 +39,12 @@ export class CreateSurveyQuestionDto {
   @IsOptional()
   @IsDefined()
   config?: unknown;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SurveyQuestionOptionDto)
+  options?: SurveyQuestionOptionDto[];
 }
 
 export class CreateSurveyDto {

@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
@@ -8,7 +13,11 @@ import type { UpdateSurveyDto } from './dto/update-survey.dto';
 import type { CreateDistributionDto } from './dto/create-distribution.dto';
 import { AuditService } from '../audit/audit.service';
 import type { Request } from 'express';
-import { validateSurveyQuestionTypes } from '../domain/surveys/question-types';
+import {
+  isSingleChoiceQuestionType,
+  normalizeQuestionOptions,
+  validateSurveyQuestionTypes,
+} from '../domain/surveys/question-types';
 import {
   assertSurveyUpdateAllowed,
   isIdentitySettingsOnlyUpdate,
@@ -22,7 +31,9 @@ export class SurveysService {
   ) {}
 
   private async getAccessibleSurvey(user: AuthUser, surveyId: string) {
-    const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
     const unitFilter = canSeeAllUnits
       ? {}
       : {
@@ -38,13 +49,57 @@ export class SurveysService {
     });
   }
 
-  private validateQuestions(questions: Array<{ type: string }>) {
+  private validateQuestions(
+    questions: Parameters<typeof validateSurveyQuestionTypes>[0],
+  ) {
     const result = validateSurveyQuestionTypes(questions);
     if (!result.ok) throw new BadRequestException(result.code);
   }
 
+  private questionCreateData(
+    tenantId: string,
+    q: {
+      title: string;
+      type: string;
+      required?: boolean;
+      config?: unknown;
+      options?: Array<{
+        label: string;
+        value?: string;
+        negative?: boolean;
+      }>;
+    },
+    idx: number,
+  ) {
+    const options = isSingleChoiceQuestionType(q.type)
+      ? normalizeQuestionOptions(q.options)
+      : [];
+    return {
+      tenantId,
+      title: q.title,
+      type: q.type,
+      required: q.required ?? false,
+      order: idx + 1,
+      config: q.config as any,
+      ...(options.length
+        ? {
+            options: {
+              create: options.map((o) => ({
+                label: o.label,
+                value: o.value,
+                negative: o.negative,
+                order: o.order,
+              })),
+            },
+          }
+        : {}),
+    };
+  }
+
   private validateUnitIds(user: AuthUser, unitIds: string[]) {
-    const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
     if (!canSeeAllUnits) {
       for (const unitId of unitIds) {
         if (!user.unitIds.includes(unitId)) throw new ForbiddenException();
@@ -78,7 +133,12 @@ export class SurveysService {
     const draft = await this.prisma.surveyVersion.findFirst({
       where: { surveyId: survey.id, tenantId: user.tenantId, status: 'draft' },
       orderBy: { version: 'desc' },
-      include: { questions: { orderBy: { order: 'asc' } } },
+      include: {
+        questions: {
+          orderBy: { order: 'asc' },
+          include: { options: { orderBy: { order: 'asc' } } },
+        },
+      },
     });
 
     const units = await this.prisma.surveyUnit.findMany({
@@ -109,8 +169,15 @@ export class SurveysService {
               required: q.required,
               order: q.order,
               category: q.category,
-              config: q.config as unknown,
+              config: q.config,
               helpText: q.helpText,
+              options: q.options.map((o) => ({
+                id: o.id,
+                label: o.label,
+                value: o.value,
+                order: o.order,
+                negative: o.negative,
+              })),
             })),
           }
         : null,
@@ -145,6 +212,9 @@ export class SurveysService {
         type: q.type,
         required: q.required ?? false,
         config: q.config,
+        options: isSingleChoiceQuestionType(q.type)
+          ? normalizeQuestionOptions(q.options)
+          : [],
       })),
     } as any;
 
@@ -156,16 +226,9 @@ export class SurveysService {
         status: 'draft',
         snapshot,
         questions: {
-          createMany: {
-            data: dto.questions.map((q, idx) => ({
-              tenantId: user.tenantId,
-              title: q.title,
-              type: q.type,
-              required: q.required ?? false,
-              order: idx + 1,
-              config: q.config as any,
-            })),
-          },
+          create: dto.questions.map((q, idx) =>
+            this.questionCreateData(user.tenantId, q, idx),
+          ),
         },
       },
     });
@@ -184,7 +247,12 @@ export class SurveysService {
     return { ...survey, draftVersionId: version.id };
   }
 
-  async update(user: AuthUser, surveyId: string, dto: UpdateSurveyDto, req?: Request) {
+  async update(
+    user: AuthUser,
+    surveyId: string,
+    dto: UpdateSurveyDto,
+    req?: Request,
+  ) {
     const survey = await this.getAccessibleSurvey(user, surveyId);
     const allowed = assertSurveyUpdateAllowed(survey.status, dto);
     if (!allowed.ok) throw new BadRequestException(allowed.code);
@@ -197,10 +265,18 @@ export class SurveysService {
         where: { id: survey.id },
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
-          ...(dto.description !== undefined ? { description: dto.description } : {}),
-          ...(dto.collectCustomer !== undefined ? { collectCustomer: dto.collectCustomer } : {}),
-          ...(dto.anonymousAllowed !== undefined ? { anonymousAllowed: dto.anonymousAllowed } : {}),
-          ...(dto.collectEmployee !== undefined ? { collectEmployee: dto.collectEmployee } : {}),
+          ...(dto.description !== undefined
+            ? { description: dto.description }
+            : {}),
+          ...(dto.collectCustomer !== undefined
+            ? { collectCustomer: dto.collectCustomer }
+            : {}),
+          ...(dto.anonymousAllowed !== undefined
+            ? { anonymousAllowed: dto.anonymousAllowed }
+            : {}),
+          ...(dto.collectEmployee !== undefined
+            ? { collectEmployee: dto.collectEmployee }
+            : {}),
         },
       });
 
@@ -208,7 +284,10 @@ export class SurveysService {
         await tx.surveyUnit.deleteMany({ where: { surveyId: survey.id } });
         if (dto.unitIds.length > 0) {
           await tx.surveyUnit.createMany({
-            data: dto.unitIds.map((unitId) => ({ surveyId: survey.id, unitId })),
+            data: dto.unitIds.map((unitId) => ({
+              surveyId: survey.id,
+              unitId,
+            })),
           });
         }
       }
@@ -216,7 +295,11 @@ export class SurveysService {
       let versionId: string | null = null;
       if (dto.questions) {
         const draft = await tx.surveyVersion.findFirst({
-          where: { tenantId: user.tenantId, surveyId: survey.id, status: 'draft' },
+          where: {
+            tenantId: user.tenantId,
+            surveyId: survey.id,
+            status: 'draft',
+          },
           orderBy: { version: 'desc' },
           select: { id: true },
         });
@@ -236,6 +319,9 @@ export class SurveysService {
             type: q.type,
             required: q.required ?? false,
             config: q.config,
+            options: isSingleChoiceQuestionType(q.type)
+              ? normalizeQuestionOptions(q.options)
+              : [],
           })),
         } as any;
 
@@ -244,16 +330,9 @@ export class SurveysService {
           data: {
             snapshot,
             questions: {
-              createMany: {
-                data: dto.questions.map((q, idx) => ({
-                  tenantId: user.tenantId,
-                  title: q.title,
-                  type: q.type,
-                  required: q.required ?? false,
-                  order: idx + 1,
-                  config: q.config as any,
-                })),
-              },
+              create: dto.questions.map((q, idx) =>
+                this.questionCreateData(user.tenantId, q, idx),
+              ),
             },
           },
         });
@@ -341,7 +420,11 @@ export class SurveysService {
       req,
     });
 
-    return { surveyId: survey.id, versionId: published.id, publicToken: distribution.publicToken };
+    return {
+      surveyId: survey.id,
+      versionId: published.id,
+      publicToken: distribution.publicToken,
+    };
   }
 
   async createDistribution(user: AuthUser, dto: CreateDistributionDto) {
@@ -384,7 +467,7 @@ export class SurveysService {
       action: 'survey.archived',
       entity: 'Survey',
       entityId: survey.id,
-      summary: { name: survey.name } as any,
+      summary: { name: survey.name },
       req,
     });
 

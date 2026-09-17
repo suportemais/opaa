@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { NpsClass } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { classifyNps } from '../domain/metrics/nps';
@@ -13,13 +18,19 @@ import { SentimentService } from '../sentiment/sentiment.service';
 import { RewardEmitService } from '../rewards/reward-emit.service';
 import type { SubmitWhistleblowerDto } from './dto/submit-whistleblower.dto';
 import { listPublicPlans } from './public-plans';
-import { hasCustomerIdentity, isCustomerIdentityRequired } from '../domain/surveys/customer-identity';
 import {
+  hasCustomerIdentity,
+  isCustomerIdentityRequired,
+} from '../domain/surveys/customer-identity';
+import {
+  extractScaleScore,
   isOpenExtraQuestionType,
   isPresentAnswerValidForType,
   isPrimaryRatingType,
   isScaleExtraQuestionType,
-  isScaleScore,
+  isSingleChoiceQuestionType,
+  unwrapAnswerValue,
+  unwrapAnswerWhy,
 } from '../domain/surveys/question-types';
 
 type QuestionConfig = {
@@ -32,8 +43,10 @@ function isQuestionVisible(q: { config: unknown }, ctx: { npsScore?: number }) {
   const when = config?.when;
   if (!when) return true;
   if (typeof ctx.npsScore !== 'number') return false;
-  if (typeof when.npsMin === 'number' && ctx.npsScore < when.npsMin) return false;
-  if (typeof when.npsMax === 'number' && ctx.npsScore > when.npsMax) return false;
+  if (typeof when.npsMin === 'number' && ctx.npsScore < when.npsMin)
+    return false;
+  if (typeof when.npsMax === 'number' && ctx.npsScore > when.npsMax)
+    return false;
   return true;
 }
 
@@ -61,7 +74,10 @@ export class PublicService {
     const slug = tenantSlugFromHost(normalized, base);
     if (!slug) return false;
 
-    const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
     return Boolean(tenant);
   }
 
@@ -75,7 +91,10 @@ export class PublicService {
           include: {
             publishedVersion: {
               include: {
-                questions: { include: { options: true }, orderBy: { order: 'asc' } },
+                questions: {
+                  include: { options: true },
+                  orderBy: { order: 'asc' },
+                },
               },
             },
           },
@@ -103,13 +122,17 @@ export class PublicService {
       distributionId: distribution.id,
       tradeName: distribution.tenant.tradeName,
       settings: {
-        badScoreThreshold: badScoreThresholdFromSettings(distribution.tenant.settings),
+        badScoreThreshold: badScoreThresholdFromSettings(
+          distribution.tenant.settings,
+        ),
       },
       unit: distribution.unit
         ? {
             id: distribution.unit.id,
             name: distribution.unit.name,
-            googleBusinessUrl: googleBusinessUrlFromSettings(distribution.unit.settings),
+            googleBusinessUrl: googleBusinessUrlFromSettings(
+              distribution.unit.settings,
+            ),
           }
         : null,
       survey: {
@@ -128,7 +151,13 @@ export class PublicService {
           required: q.required,
           order: q.order,
           config: q.config,
-          options: q.options.map((o) => ({ id: o.id, label: o.label, value: o.value, order: o.order })),
+          options: q.options.map((o) => ({
+            id: o.id,
+            label: o.label,
+            value: o.value,
+            order: o.order,
+            negative: o.negative,
+          })),
         })),
       },
     };
@@ -143,10 +172,15 @@ export class PublicService {
     if (!distribution || !distribution.active) throw new NotFoundException();
     if (!distribution.unitId) return [];
 
-    const collectEmployee = Boolean((distribution.survey as any).collectEmployee);
+    const collectEmployee = Boolean(
+      (distribution.survey as any).collectEmployee,
+    );
     if (!collectEmployee) return [];
 
-    const q = typeof params.q === 'string' && params.q.trim() ? params.q.trim() : undefined;
+    const q =
+      typeof params.q === 'string' && params.q.trim()
+        ? params.q.trim()
+        : undefined;
 
     const employees = await this.prisma.employee.findMany({
       where: {
@@ -178,7 +212,7 @@ export class PublicService {
         survey: {
           include: {
             publishedVersion: {
-              include: { questions: true },
+              include: { questions: { include: { options: true } } },
             },
           },
         },
@@ -188,19 +222,27 @@ export class PublicService {
     if (!distribution || !distribution.active) throw new NotFoundException();
     const survey = distribution.survey;
     const version = survey.publishedVersion;
-    if (!version || survey.status !== 'published') throw new NotFoundException();
+    if (!version || survey.status !== 'published')
+      throw new NotFoundException();
 
-    const badScoreThreshold = badScoreThresholdFromSettings(distribution.tenant.settings);
+    const badScoreThreshold = badScoreThresholdFromSettings(
+      distribution.tenant.settings,
+    );
     const collectEmployee = Boolean((survey as any).collectEmployee);
 
-    if (isCustomerIdentityRequired(survey) && !hasCustomerIdentity(dto.customer)) {
+    if (
+      isCustomerIdentityRequired(survey) &&
+      !hasCustomerIdentity(dto.customer)
+    ) {
       throw new BadRequestException('customer_identity_required');
     }
 
     let finalEmployeeId: string | null = distribution.employeeId ?? null;
     if (dto.employeeId) {
-      if (!collectEmployee) throw new BadRequestException('employee_not_allowed');
-      if (!distribution.unitId) throw new BadRequestException('employee_not_allowed');
+      if (!collectEmployee)
+        throw new BadRequestException('employee_not_allowed');
+      if (!distribution.unitId)
+        throw new BadRequestException('employee_not_allowed');
 
       const employee = await this.prisma.employee.findFirst({
         where: {
@@ -222,12 +264,31 @@ export class PublicService {
       if (!question) {
         throw new BadRequestException('invalid_question');
       }
-      if (isScaleExtraQuestionType(question.type) && !isScaleScore(answer.value)) {
+      if (
+        isScaleExtraQuestionType(question.type) &&
+        extractScaleScore(answer.value) === null
+      ) {
         throw new BadRequestException('invalid_scale');
+      }
+      if (
+        !isScaleExtraQuestionType(question.type) &&
+        !isPrimaryRatingType(question.type) &&
+        !isPresentAnswerValidForType(question.type, answer.value)
+      ) {
+        throw new BadRequestException('invalid_answer');
+      }
+      if (isSingleChoiceQuestionType(question.type)) {
+        const chosen = unwrapAnswerValue(answer.value);
+        const allowed = new Set(question.options.map((o) => o.value));
+        if (typeof chosen !== 'string' || !allowed.has(chosen)) {
+          throw new BadRequestException('invalid_choice');
+        }
       }
     }
 
-    const npsQuestion = version.questions.find((q) => isPrimaryRatingType(q.type));
+    const npsQuestion = version.questions.find((q) =>
+      isPrimaryRatingType(q.type),
+    );
     const npsAnswer = npsQuestion
       ? dto.answers.find((a) => a.questionId === npsQuestion.id)
       : undefined;
@@ -236,8 +297,8 @@ export class PublicService {
     let npsClass: NpsClass | undefined;
     let isBadScore = false;
     if (npsQuestion) {
-      const score = npsAnswer?.value;
-      if (!isScaleScore(score)) {
+      const score = extractScaleScore(npsAnswer?.value);
+      if (score === null) {
         throw new BadRequestException('invalid_nps');
       }
       npsScore = score;
@@ -247,7 +308,7 @@ export class PublicService {
 
     const visibleCtx = { npsScore };
     const requiredQuestions = version.questions.filter((q) => {
-      if (!isQuestionVisible(q as any, visibleCtx)) return false;
+      if (!isQuestionVisible(q, visibleCtx)) return false;
       const config = q.config as QuestionConfig | null | undefined;
       return Boolean(q.required || config?.requiredWhenVisible);
     });
@@ -261,7 +322,9 @@ export class PublicService {
       }
     }
 
-    const textQuestions = version.questions.filter((q) => isOpenExtraQuestionType(q.type));
+    const textQuestions = version.questions.filter((q) =>
+      isOpenExtraQuestionType(q.type),
+    );
     const rankedTextQuestions = textQuestions
       .filter((q) => isQuestionVisible(q as any, visibleCtx))
       .sort((a, b) => {
@@ -274,13 +337,24 @@ export class PublicService {
       });
 
     const derivedComment = rankedTextQuestions
-      .map((q) => dto.answers.find((a) => a.questionId === q.id)?.value)
-      .find((v) => typeof v === 'string' && v.trim().length > 0) as string | undefined;
+      .map((q) => {
+        const raw = dto.answers.find((a) => a.questionId === q.id)?.value;
+        const inner = unwrapAnswerValue(raw);
+        return typeof inner === 'string' && inner.trim().length > 0
+          ? inner.trim()
+          : undefined;
+      })
+      .find((v) => typeof v === 'string' && v.trim().length > 0);
 
     const complaint =
-      typeof dto.complaint === 'string' && dto.complaint.trim().length > 0 ? dto.complaint.trim() : undefined;
-
-    const mainComment = complaint && isBadScore ? complaint : derivedComment;
+      typeof dto.complaint === 'string' && dto.complaint.trim().length > 0
+        ? dto.complaint.trim()
+        : undefined;
+    const npsWhy = unwrapAnswerWhy(npsAnswer?.value);
+    const mainComment =
+      (complaint && isBadScore ? complaint : undefined) ??
+      npsWhy ??
+      derivedComment;
 
     const response = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.surveyResponse.findUnique({
@@ -310,7 +384,8 @@ export class PublicService {
               ? normalizePhone(dto.customer.phone)
               : null;
           const parsedDocument =
-            typeof dto.customer.document === 'string' && dto.customer.document.trim()
+            typeof dto.customer.document === 'string' &&
+            dto.customer.document.trim()
               ? normalizeBrDocument(dto.customer.document)
               : null;
           const documentNormalized =
@@ -335,32 +410,49 @@ export class PublicService {
                 where: { id: existingCustomer.id },
                 data: {
                   name:
-                    typeof dto.customer.name === 'string' && dto.customer.name.trim()
+                    typeof dto.customer.name === 'string' &&
+                    dto.customer.name.trim()
                       ? dto.customer.name.trim()
                       : existingCustomer.name,
                   email:
-                    typeof dto.customer.email === 'string' && dto.customer.email.trim()
+                    typeof dto.customer.email === 'string' &&
+                    dto.customer.email.trim()
                       ? dto.customer.email.trim()
                       : existingCustomer.email,
-                  emailNormalized: emailNormalized ?? existingCustomer.emailNormalized,
+                  emailNormalized:
+                    emailNormalized ?? existingCustomer.emailNormalized,
                   phone:
-                    typeof dto.customer.phone === 'string' && dto.customer.phone.trim()
+                    typeof dto.customer.phone === 'string' &&
+                    dto.customer.phone.trim()
                       ? dto.customer.phone.trim()
                       : existingCustomer.phone,
-                  phoneNormalized: phoneNormalized ?? existingCustomer.phoneNormalized,
-                  documentNormalized: documentNormalized ?? existingCustomer.documentNormalized,
-                  firstInteractionAt: existingCustomer.firstInteractionAt ?? new Date(),
+                  phoneNormalized:
+                    phoneNormalized ?? existingCustomer.phoneNormalized,
+                  documentNormalized:
+                    documentNormalized ?? existingCustomer.documentNormalized,
+                  firstInteractionAt:
+                    existingCustomer.firstInteractionAt ?? new Date(),
                   lastInteractionAt: new Date(),
-                  originUnitId: existingCustomer.originUnitId ?? distribution.unitId,
+                  originUnitId:
+                    existingCustomer.originUnitId ?? distribution.unitId,
                 },
               })
             : await tx.customer.create({
                 data: {
                   tenantId: distribution.tenantId,
-                  name: typeof dto.customer.name === 'string' ? dto.customer.name.trim() : undefined,
-                  email: typeof dto.customer.email === 'string' ? dto.customer.email.trim() : undefined,
+                  name:
+                    typeof dto.customer.name === 'string'
+                      ? dto.customer.name.trim()
+                      : undefined,
+                  email:
+                    typeof dto.customer.email === 'string'
+                      ? dto.customer.email.trim()
+                      : undefined,
                   emailNormalized: emailNormalized ?? undefined,
-                  phone: typeof dto.customer.phone === 'string' ? dto.customer.phone.trim() : undefined,
+                  phone:
+                    typeof dto.customer.phone === 'string'
+                      ? dto.customer.phone.trim()
+                      : undefined,
                   phoneNormalized: phoneNormalized ?? undefined,
                   documentNormalized: documentNormalized ?? undefined,
                   originUnitId: distribution.unitId,
@@ -404,7 +496,9 @@ export class PublicService {
         })),
       });
 
-      const shouldCreateCase = typeof created.npsScore === 'number' && created.npsScore <= badScoreThreshold;
+      const shouldCreateCase =
+        typeof created.npsScore === 'number' &&
+        created.npsScore <= badScoreThreshold;
       let createdCaseId: string | null = null;
       if (shouldCreateCase) {
         const fbCase = await tx.feedbackCase.create({
@@ -421,7 +515,11 @@ export class PublicService {
                 {
                   tenantId: distribution.tenantId,
                   type: 'case.created_by_rule',
-                  data: { trigger: 'nps_bad_score', npsScore: created.npsScore, badScoreThreshold },
+                  data: {
+                    trigger: 'nps_bad_score',
+                    npsScore: created.npsScore,
+                    badScoreThreshold,
+                  },
                 },
               ],
             },
@@ -438,19 +536,41 @@ export class PublicService {
 
       if (createdCaseId) {
         const unit = distribution.unitId
-          ? await tx.unit.findUnique({ where: { id: distribution.unitId }, select: { id: true, name: true } })
+          ? await tx.unit.findUnique({
+              where: { id: distribution.unitId },
+              select: { id: true, name: true },
+            })
           : null;
         const employee = finalEmployeeId
-          ? await tx.employee.findUnique({ where: { id: finalEmployeeId }, select: { id: true, name: true, code: true, roleTitle: true } })
+          ? await tx.employee.findUnique({
+              where: { id: finalEmployeeId },
+              select: { id: true, name: true, code: true, roleTitle: true },
+            })
           : null;
         const customer = customerId
-          ? await tx.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, email: true, phone: true, emailNormalized: true, phoneNormalized: true } })
+          ? await tx.customer.findUnique({
+              where: { id: customerId },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                emailNormalized: true,
+                phoneNormalized: true,
+              },
+            })
           : null;
-        const surveyRow = await tx.survey.findUnique({ where: { id: survey.id }, select: { id: true, name: true } });
+        const surveyRow = await tx.survey.findUnique({
+          where: { id: survey.id },
+          select: { id: true, name: true },
+        });
         const outboxPayload = {
           feedbackCaseId: createdCaseId,
           trigger: 'nps_bad_score',
-          tenant: { id: distribution.tenantId, slug: (distribution.tenant as any)?.slug ?? null },
+          tenant: {
+            id: distribution.tenantId,
+            slug: (distribution.tenant as any)?.slug ?? null,
+          },
           survey: { id: survey.id, name: surveyRow?.name ?? survey.name },
           surveyResponseId: created.id,
           distribution: {
@@ -465,7 +585,14 @@ export class PublicService {
             badScoreThreshold,
           },
           unit: unit ? { id: unit.id, name: unit.name } : null,
-          employee: employee ? { id: employee.id, name: employee.name, code: employee.code, roleTitle: employee.roleTitle } : null,
+          employee: employee
+            ? {
+                id: employee.id,
+                name: employee.name,
+                code: employee.code,
+                roleTitle: employee.roleTitle,
+              }
+            : null,
           customer: customer
             ? {
                 id: customer.id,
@@ -477,9 +604,14 @@ export class PublicService {
               }
             : null,
           mainComment: created.mainComment ?? null,
-          completedAt: created.completedAt ? (created.completedAt as Date).toISOString() : null,
+          completedAt: created.completedAt
+            ? created.completedAt.toISOString()
+            : null,
           idempotencyKey: created.idempotencyKey ?? null,
-          answers: dto.answers.map((a) => ({ questionId: a.questionId, value: a.value })),
+          answers: dto.answers.map((a) => ({
+            questionId: a.questionId,
+            value: a.value,
+          })),
         };
 
         await tx.webhookOutbox.create({
@@ -531,7 +663,11 @@ export class PublicService {
       if (input.customerId && (!phone || !document)) {
         const customer = await this.prisma.customer.findUnique({
           where: { id: input.customerId },
-          select: { phone: true, phoneNormalized: true, documentNormalized: true },
+          select: {
+            phone: true,
+            phoneNormalized: true,
+            documentNormalized: true,
+          },
         });
         phone = phone || customer?.phoneNormalized || customer?.phone || null;
         document = document || customer?.documentNormalized || null;
@@ -575,7 +711,11 @@ export class PublicService {
         tradeName: tenant.tradeName,
         legalName: tenant.legalName,
       },
-      units: units.map((u) => ({ id: u.id, name: u.name, internalCode: u.internalCode ?? null })),
+      units: units.map((u) => ({
+        id: u.id,
+        name: u.name,
+        internalCode: u.internalCode ?? null,
+      })),
     };
   }
 
@@ -595,7 +735,8 @@ export class PublicService {
       Boolean(reporter.email?.trim()) ||
       Boolean(reporter.phone?.trim()) ||
       Boolean(reporter.doc?.trim());
-    const anonymous = dto.anonymous === false && hasAnyReporterField ? false : true;
+    const anonymous =
+      dto.anonymous === false && hasAnyReporterField ? false : true;
 
     const category = dto.category;
     const customCategory = dto.customCategory?.trim() || null;
@@ -620,12 +761,20 @@ export class PublicService {
       throw new BadRequestException('invalid_occurred_at');
     }
 
-    const reporterEmailNormalized = reporter.email?.trim() ? normalizeEmail(reporter.email.trim()) : null;
-    const reporterPhoneNormalized = reporter.phone?.trim() ? normalizePhone(reporter.phone.trim()).slice(0, 30) || null : null;
+    const reporterEmailNormalized = reporter.email?.trim()
+      ? normalizeEmail(reporter.email.trim())
+      : null;
+    const reporterPhoneNormalized = reporter.phone?.trim()
+      ? normalizePhone(reporter.phone.trim()).slice(0, 30) || null
+      : null;
 
     const random = () => {
       const b = crypto.getRandomValues(new Uint8Array(2));
-      return (b[0] * 256 + b[1]).toString(36).toUpperCase().padStart(3, '0').slice(0, 3);
+      return (b[0] * 256 + b[1])
+        .toString(36)
+        .toUpperCase()
+        .padStart(3, '0')
+        .slice(0, 3);
     };
     const datePrefix = new Date();
     const prefix =
@@ -647,8 +796,13 @@ export class PublicService {
     let publicToken = '';
     for (let i = 0; i < 10; i++) {
       const bytes = crypto.getRandomValues(new Uint8Array(12));
-      const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-      const exists = await this.prisma.whistleblowerReport.findUnique({ where: { publicToken: token }, select: { id: true } });
+      const token = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const exists = await this.prisma.whistleblowerReport.findUnique({
+        where: { publicToken: token },
+        select: { id: true },
+      });
       if (!exists) {
         publicToken = token;
         break;
@@ -690,12 +844,21 @@ export class PublicService {
             {
               tenantId: tenant.id,
               type: 'report.submitted',
-              notes: anonymous ? 'Denúncia enviada de forma anônima.' : 'Denúncia enviada com identificação voluntária.',
+              notes: anonymous
+                ? 'Denúncia enviada de forma anônima.'
+                : 'Denúncia enviada com identificação voluntária.',
             },
           ],
         },
       },
-      select: { id: true, protocol: true, publicToken: true, createdAt: true, status: true, priority: true },
+      select: {
+        id: true,
+        protocol: true,
+        publicToken: true,
+        createdAt: true,
+        status: true,
+        priority: true,
+      },
     });
 
     const enqueuePayload = {
@@ -719,7 +882,7 @@ export class PublicService {
             phoneNormalized: reporterPhoneNormalized,
             doc: reporter.doc?.trim() || null,
           },
-      createdAt: created.createdAt ? (created.createdAt as Date).toISOString() : null,
+      createdAt: created.createdAt ? created.createdAt.toISOString() : null,
       idempotencyKey: dto.idempotencyKey?.trim() || null,
     };
 
@@ -747,7 +910,8 @@ export class PublicService {
       status: created.status,
       priority: created.priority,
       createdAt: created.createdAt,
-      message: 'Denúncia recebida com sucesso. Guarde o número de protocolo para acompanhamento.',
+      message:
+        'Denúncia recebida com sucesso. Guarde o número de protocolo para acompanhamento.',
     };
   }
 }

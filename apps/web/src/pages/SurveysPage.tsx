@@ -8,6 +8,7 @@ import { QrCode } from '../components/QrCode';
 import {
   DEFAULT_EXTRA_QUESTION_KIND,
   EXTRA_QUESTION_KIND_LABELS,
+  EXTRA_QUESTION_KINDS,
   EXTRA_QUESTION_TYPE_MICROCOPY,
   extraQuestionKindFromType,
   persistedTypeFromExtraKind,
@@ -32,6 +33,7 @@ type SurveyDetail = {
       type: string;
       required: boolean;
       config?: { when?: { npsMax?: number; npsMin?: number } } | null;
+      options?: Array<{ id?: string; label: string; value: string; negative?: boolean; order?: number }>;
     }>;
   } | null;
 };
@@ -48,23 +50,40 @@ type Distribution = {
   unit?: Unit | null;
 };
 
+type ChoiceOptionDraft = {
+  id: string;
+  label: string;
+  value: string;
+  negative: boolean;
+};
+
 type QuestionDraft = {
   id: string;
   title: string;
   kind: ExtraQuestionKind;
-  storedOpenType?: 'text_short' | 'text_long';
+  storedType?: string;
   required: boolean;
   onlyLowScore: boolean;
+  options: ChoiceOptionDraft[];
 };
+
+function emptyChoiceOption(label = ''): ChoiceOptionDraft {
+  return { id: crypto.randomUUID(), label, value: crypto.randomUUID(), negative: false };
+}
+
+function defaultChoiceOptions(): ChoiceOptionDraft[] {
+  return [emptyChoiceOption(), emptyChoiceOption()];
+}
 
 function emptyExtraQuestion(title = 'Nova pergunta'): QuestionDraft {
   return {
     id: crypto.randomUUID(),
     title,
     kind: DEFAULT_EXTRA_QUESTION_KIND,
-    storedOpenType: 'text_long',
+    storedType: 'text_long',
     required: false,
     onlyLowScore: false,
+    options: [],
   };
 }
 
@@ -222,14 +241,25 @@ export function SurveysPage() {
     const extras: QuestionDraft[] =
       s.draftVersion?.questions
         .filter((q) => q.type !== 'nps')
-        .map((q) => ({
-          id: q.id,
-          title: q.title,
-          kind: extraQuestionKindFromType(q.type),
-          storedOpenType: q.type === 'text_short' ? 'text_short' : 'text_long',
-          required: q.required,
-          onlyLowScore: Boolean(q.config?.when?.npsMax),
-        })) ?? [];
+        .map((q) => {
+          const kind = extraQuestionKindFromType(q.type);
+          const options =
+            q.options?.map((o) => ({
+              id: o.id ?? crypto.randomUUID(),
+              label: o.label,
+              value: o.value,
+              negative: Boolean(o.negative),
+            })) ?? [];
+          return {
+            id: q.id,
+            title: q.title,
+            kind,
+            storedType: q.type,
+            required: q.required,
+            onlyLowScore: Boolean(q.config?.when?.npsMax),
+            options: kind === 'single_choice' && options.length < 2 ? defaultChoiceOptions() : options,
+          };
+        }) ?? [];
     setQuestions(extras);
   }, [editingId, draftDetail.data, draftDetail.isFetched]);
 
@@ -262,9 +292,19 @@ export function SurveysPage() {
     { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps' as const, required: true },
     ...questions.map((q) => ({
       title: q.title,
-      type: persistedTypeFromExtraKind(q.kind, q.storedOpenType),
+      type: persistedTypeFromExtraKind(q.kind, q.storedType),
       required: q.required,
       config: q.onlyLowScore ? { when: { npsMax: badScoreThreshold } } : undefined,
+      options:
+        q.kind === 'single_choice'
+          ? q.options
+              .filter((o) => o.label.trim())
+              .map((o) => ({
+                label: o.label.trim(),
+                value: o.value,
+                negative: o.negative,
+              }))
+          : undefined,
     })),
   ];
 
@@ -454,14 +494,26 @@ export function SurveysPage() {
                         value={q.kind}
                         onChange={(e) =>
                           setQuestions((prev) =>
-                            prev.map((x) =>
-                              x.id === q.id ? { ...x, kind: e.target.value as ExtraQuestionKind } : x,
-                            ),
+                            prev.map((x) => {
+                              if (x.id !== q.id) return x;
+                              const kind = e.target.value as ExtraQuestionKind;
+                              return {
+                                ...x,
+                                kind,
+                                options:
+                                  kind === 'single_choice' && x.options.length < 2
+                                    ? defaultChoiceOptions()
+                                    : x.options,
+                              };
+                            }),
                           )
                         }
                       >
-                        <option value="open">{EXTRA_QUESTION_KIND_LABELS.open}</option>
-                        <option value="scale_1_10">{EXTRA_QUESTION_KIND_LABELS.scale_1_10}</option>
+                        {EXTRA_QUESTION_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {EXTRA_QUESTION_KIND_LABELS[kind]}
+                          </option>
+                        ))}
                       </select>
                       <div className="mt-1 text-xs text-slate-500">{EXTRA_QUESTION_TYPE_MICROCOPY}</div>
                     </div>
@@ -498,6 +550,88 @@ export function SurveysPage() {
                         Remover
                       </button>
                     </div>
+                    {q.kind === 'single_choice' && (
+                      <div className="md:col-span-3 grid gap-2">
+                        <div className="text-sm font-medium text-slate-700">Opções</div>
+                        {q.options.map((opt) => (
+                          <div key={opt.id} className="flex flex-wrap items-center gap-2">
+                            <div className="min-w-[12rem] flex-1">
+                              <Input
+                                value={opt.label}
+                                placeholder="Texto da opção"
+                                onChange={(e) =>
+                                  setQuestions((prev) =>
+                                    prev.map((x) =>
+                                      x.id === q.id
+                                        ? {
+                                            ...x,
+                                            options: x.options.map((o) =>
+                                              o.id === opt.id ? { ...o, label: e.target.value } : o,
+                                            ),
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
+                            <label className="flex items-center gap-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={opt.negative}
+                                onChange={(e) =>
+                                  setQuestions((prev) =>
+                                    prev.map((x) =>
+                                      x.id === q.id
+                                        ? {
+                                            ...x,
+                                            options: x.options.map((o) =>
+                                              o.id === opt.id ? { ...o, negative: e.target.checked } : o,
+                                            ),
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                              />
+                              Negativa
+                            </label>
+                            <button
+                              type="button"
+                              className="text-sm font-medium text-rose-700 hover:text-rose-800"
+                              onClick={() =>
+                                setQuestions((prev) =>
+                                  prev.map((x) =>
+                                    x.id === q.id
+                                      ? { ...x, options: x.options.filter((o) => o.id !== opt.id) }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        ))}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            variant="secondary"
+                            onClick={() =>
+                              setQuestions((prev) =>
+                                prev.map((x) =>
+                                  x.id === q.id ? { ...x, options: [...x.options, emptyChoiceOption()] } : x,
+                                ),
+                              )
+                            }
+                          >
+                            Adicionar opção
+                          </Button>
+                          {q.options.filter((o) => o.label.trim()).length < 2 && (
+                            <div className="text-xs text-slate-500">Defina pelo menos 2 opções.</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

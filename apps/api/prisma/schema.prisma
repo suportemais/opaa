@@ -460,7 +460,7 @@ model Question {
   sectionId      String? @db.Uuid
   title          String
   description    String?
-  /// Widget type. Primary rating is `nps`. Extra/custom questions: `text_long`/`text_short` (Aberta, default) or `scale_1_10` (Classificação 1–10).
+  /// Widget type. Primary rating is `nps`. Extra/custom questions: `text_long`/`text_short` (Aberta), `scale_1_10` (Classificação 1–10), `thumbs` (Polegar), `stars_1_5` (Estrelas 1–5), `single_choice` (Escolha única).
   type           String
   required       Boolean @default(false)
   order          Int
@@ -485,6 +485,8 @@ model QuestionOption {
   label      String
   value      String
   order      Int
+  /// When true, Escolha única shows the locked “Por quê?” follow-up for this option.
+  negative   Boolean @default(false)
 
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 

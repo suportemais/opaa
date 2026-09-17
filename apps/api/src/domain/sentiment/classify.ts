@@ -97,7 +97,18 @@ export function collectCommentText(params: {
 
   if (typeof params.mainComment === 'string') push(params.mainComment);
   for (const answer of params.answers ?? []) {
-    if (typeof answer.value === 'string') push(answer.value);
+    if (typeof answer.value === 'string') {
+      push(answer.value);
+      continue;
+    }
+    if (
+      answer.value &&
+      typeof answer.value === 'object' &&
+      !Array.isArray(answer.value)
+    ) {
+      const packed = answer.value as { why?: unknown };
+      if (typeof packed.why === 'string') push(packed.why);
+    }
   }
 
   return parts.join('\n').slice(0, MAX_COMMENT_LENGTH);

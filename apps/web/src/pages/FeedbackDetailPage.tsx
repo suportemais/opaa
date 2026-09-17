@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { feedbackCaseEventLabel, feedbackCasePriorityLabel, feedbackCaseStatusLabel, interactionChannelLabel, npsClassLabel } from '../lib/labels';
+import { formatAnswerDisplay } from '../lib/question-types';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -346,8 +347,8 @@ export function FeedbackDetailPage() {
                 {detail.data.answers.map((a) => (
                   <div key={a.id} className="py-3">
                     <div className="text-sm font-medium text-slate-900">{a.question.title}</div>
-                    <div className="text-sm text-slate-700">
-                      {typeof a.value === 'string' || typeof a.value === 'number' ? String(a.value) : JSON.stringify(a.value)}
+                    <div className="whitespace-pre-line text-sm text-slate-700">
+                      {formatAnswerDisplay(a.question.type, a.value)}
                     </div>
                   </div>
                 ))}

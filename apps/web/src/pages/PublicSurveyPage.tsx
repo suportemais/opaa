@@ -5,15 +5,25 @@ import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Scale1to10 } from '../components/survey/Scale1to10';
+import { Stars1to5 } from '../components/survey/Stars1to5';
+import { ThumbsChoice } from '../components/survey/ThumbsChoice';
+import { WhyFollowUp } from '../components/survey/WhyFollowUp';
 import { randomId } from '../lib/id';
 import {
   isAnswerMissing,
   isPrimaryRatingType,
   isScaleExtraQuestionType,
   isScaleScore,
+  isSingleChoiceQuestionType,
+  isStarsQuestionType,
+  isStarsScore,
+  isThumbsQuestionType,
+  isThumbsValue,
+  packAnswerValue,
+  shouldShowWhyFollowUp,
 } from '../lib/question-types';
 
-type PublicOption = { id: string; label: string; value: string; order: number };
+type PublicOption = { id: string; label: string; value: string; order: number; negative?: boolean };
 type PublicQuestion = {
   id: string;
   title: string;
@@ -64,7 +74,7 @@ export function PublicSurveyPage() {
   }, [survey.data]);
 
   const [answers, setAnswers] = useState<Record<string, unknown>>(() => ({}));
-  const [complaint, setComplaint] = useState('');
+  const [whys, setWhys] = useState<Record<string, string>>(() => ({}));
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [identify, setIdentify] = useState(false);
@@ -132,13 +142,12 @@ export function PublicSurveyPage() {
   }, [visibleQuestions, npsQuestion]);
 
   const steps = useMemo(() => {
-    const out: Array<{ key: string; type: 'employee' | 'nps' | 'complaint' | 'question'; question?: PublicQuestion }> = [];
+    const out: Array<{ key: string; type: 'employee' | 'nps' | 'question'; question?: PublicQuestion }> = [];
     if (collectEmployee) out.push({ key: 'employee', type: 'employee' });
     if (npsQuestion) out.push({ key: `nps:${npsQuestion.id}`, type: 'nps', question: npsQuestion });
-    if (typeof selectedNps === 'number' && selectedNps <= badScoreThreshold) out.push({ key: 'complaint', type: 'complaint' });
     for (const q of otherVisibleQuestions) out.push({ key: `q:${q.id}`, type: 'question', question: q });
     return out;
-  }, [collectEmployee, npsQuestion, selectedNps, otherVisibleQuestions, badScoreThreshold]);
+  }, [collectEmployee, npsQuestion, otherVisibleQuestions]);
 
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -164,25 +173,41 @@ export function PublicSurveyPage() {
         const cfg = q.config as QuestionConfig | null | undefined;
         const required = Boolean(q.required || cfg?.requiredWhenVisible);
         const v = nextAnswers[q.id];
+        const why = whys[q.id];
         const missing = isScaleExtraQuestionType(q.type)
           ? !isScaleScore(v)
-          : isAnswerMissing(v);
+          : isStarsQuestionType(q.type)
+            ? !isStarsScore(v)
+            : isThumbsQuestionType(q.type)
+              ? !isThumbsValue(v)
+              : isAnswerMissing(v);
 
         if (required && missing) {
           throw new Error('missing_required');
         }
 
-        if (isScaleExtraQuestionType(q.type)) {
-          if (isScaleScore(v)) {
-            outAnswers.push({ questionId: q.id, value: v });
-          }
-          continue;
-        }
+        if (missing) continue;
 
-        if (!missing) {
-          outAnswers.push({ questionId: q.id, value: typeof v === 'string' ? v.trim() : v });
-        }
+        const label = isSingleChoiceQuestionType(q.type)
+          ? q.options.find((o) => o.value === v)?.label
+          : undefined;
+        const includeWhy = shouldShowWhyFollowUp({
+          type: q.type,
+          value: v,
+          options: q.options,
+        });
+        const packed = packAnswerValue(typeof v === 'string' ? v.trim() : v, {
+          why: includeWhy ? why : undefined,
+          label,
+        });
+        outAnswers.push({ questionId: q.id, value: packed });
       }
+
+      const npsWhy =
+        npsQuestion &&
+        shouldShowWhyFollowUp({ type: npsQuestion.type, value: nextAnswers[npsQuestion.id] })
+          ? whys[npsQuestion.id]
+          : undefined;
 
       const customer = identify || identityRequired
         ? {
@@ -204,7 +229,7 @@ export function PublicSurveyPage() {
           publicToken: token,
           idempotencyKey,
           employeeId: selectedEmployee?.id ?? undefined,
-          complaint: complaint.trim() || undefined,
+          complaint: npsWhy?.trim() || undefined,
           answers: outAnswers,
           customer: hasCustomerField ? customer : undefined,
           clientMetadata: { ua: navigator.userAgent },
@@ -222,21 +247,28 @@ export function PublicSurveyPage() {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   }
 
+  function setWhy(questionId: string, value: string) {
+    setWhys((prev) => ({ ...prev, [questionId]: value }));
+  }
+
+  function isQuestionAnswered(q: PublicQuestion, value: unknown) {
+    if (isScaleExtraQuestionType(q.type) || isPrimaryRatingType(q.type)) return isScaleScore(value);
+    if (isStarsQuestionType(q.type)) return isStarsScore(value);
+    if (isThumbsQuestionType(q.type)) return isThumbsValue(value);
+    return !isAnswerMissing(value);
+  }
+
   function canGoNext() {
     const step = steps[stepIndex];
     if (!step) return false;
     if (step.type === 'employee') return true;
     if (step.type === 'nps') return isScaleScore(selectedNps);
-    if (step.type === 'complaint') return true;
     if (step.type === 'question' && step.question) {
       const q = step.question;
       const cfg = q.config as QuestionConfig | null | undefined;
       const required = Boolean(q.required || cfg?.requiredWhenVisible);
       const v = answers[q.id];
-      if (isScaleExtraQuestionType(q.type)) {
-        return required ? isScaleScore(v) : true;
-      }
-      return required ? !isAnswerMissing(v) : true;
+      return required ? isQuestionAnswered(q, v) : true;
     }
     return true;
   }
@@ -382,21 +414,9 @@ export function PublicSurveyPage() {
                       <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
                       <Scale1to10 value={selectedNps} onChange={(value) => setAnswer(q.id, value)} />
                       {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                    </div>
-                  );
-                }
-
-                if (step.type === 'complaint') {
-                  return (
-                    <div>
-                      <div className="mb-2 text-sm font-medium text-slate-800">Reclamação ou justificativa (opcional)</div>
-                      <textarea
-                        className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                        value={complaint}
-                        onChange={(e) => setComplaint(e.target.value)}
-                        placeholder="Conte rapidamente o que aconteceu"
-                      />
-                      <div className="mt-2 text-xs text-slate-500">Se preferir, você pode deixar em branco.</div>
+                      {shouldShowWhyFollowUp({ type: q.type, value: selectedNps }) && (
+                        <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
+                      )}
                     </div>
                   );
                 }
@@ -415,6 +435,39 @@ export function PublicSurveyPage() {
                         <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
                         <Scale1to10 value={v} onChange={(value) => setAnswer(q.id, value)} />
                         {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                        {shouldShowWhyFollowUp({ type: q.type, value: raw }) && (
+                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (isThumbsQuestionType(q.type)) {
+                    const raw = answers[q.id];
+                    const v = isThumbsValue(raw) ? raw : null;
+                    return (
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                        <ThumbsChoice value={v} onChange={(value) => setAnswer(q.id, value)} />
+                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                        {shouldShowWhyFollowUp({ type: q.type, value: raw }) && (
+                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (isStarsQuestionType(q.type)) {
+                    const raw = answers[q.id];
+                    const v = isStarsScore(raw) ? raw : null;
+                    return (
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
+                        <Stars1to5 value={v} onChange={(value) => setAnswer(q.id, value)} />
+                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                        {shouldShowWhyFollowUp({ type: q.type, value: raw }) && (
+                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
+                        )}
                       </div>
                     );
                   }
@@ -451,27 +504,38 @@ export function PublicSurveyPage() {
                     );
                   }
 
-                  if (q.type === 'multiple_choice' && q.options.length > 0) {
+                  if (isSingleChoiceQuestionType(q.type) && q.options.length > 0) {
                     const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
+                    const options = q.options.slice().sort((a, b) => a.order - b.order);
                     return (
                       <div>
                         <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <select
-                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                          value={v}
-                          onChange={(e) => setAnswer(q.id, e.target.value)}
-                        >
-                          <option value="">Selecione</option>
-                          {q.options
-                            .slice()
-                            .sort((a, b) => a.order - b.order)
-                            .map((o) => (
-                              <option key={o.id} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                        </select>
+                        <div className="grid gap-2">
+                          {options.map((o) => (
+                            <label
+                              key={o.id}
+                              className={[
+                                'flex items-center gap-3 rounded-md border px-3 py-2 text-sm',
+                                v === o.value
+                                  ? 'border-sky-600 bg-sky-50 text-slate-900'
+                                  : 'border-slate-200 bg-white text-slate-700',
+                              ].join(' ')}
+                            >
+                              <input
+                                type="radio"
+                                name={`q-${q.id}`}
+                                className="h-4 w-4 border-slate-300 text-sky-600"
+                                checked={v === o.value}
+                                onChange={() => setAnswer(q.id, o.value)}
+                              />
+                              {o.label}
+                            </label>
+                          ))}
+                        </div>
                         {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
+                        {shouldShowWhyFollowUp({ type: q.type, value: v, options }) && (
+                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
+                        )}
                       </div>
                     );
                   }
