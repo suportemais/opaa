@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
@@ -6,7 +15,10 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/require-permissions.decorator';
 import { WhistleblowerService } from './whistleblower.service';
-import { UpdateWhistleblowerDto, CreateWhistleblowerEventDto } from './dto/update-whistleblower.dto';
+import {
+  UpdateWhistleblowerDto,
+  CreateWhistleblowerEventDto,
+} from './dto/update-whistleblower.dto';
 
 @Controller('whistleblower')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -14,7 +26,10 @@ export class WhistleblowerController {
   constructor(private readonly whistleblower: WhistleblowerService) {}
 
   @Get()
-  @RequirePermissions(PermissionCodes.WhistleblowerRead, PermissionCodes.TenantSettingsManage)
+  @RequirePermissions(
+    PermissionCodes.WhistleblowerRead,
+    PermissionCodes.TenantSettingsManage,
+  )
   list(
     @CurrentUser() user: AuthUser,
     @Query('cursor') cursor?: string,
@@ -28,24 +43,52 @@ export class WhistleblowerController {
     @Query('q') q?: string,
     @Query('identified') identified?: string,
   ) {
-    return this.whistleblower.list(user, { cursor, take, status, priority, category, from, to, unitId, q, identified });
+    return this.whistleblower.list(user, {
+      cursor,
+      take,
+      status,
+      priority,
+      category,
+      from,
+      to,
+      unitId,
+      q,
+      identified,
+    });
   }
 
   @Get(':id')
-  @RequirePermissions(PermissionCodes.WhistleblowerRead, PermissionCodes.TenantSettingsManage)
+  @RequirePermissions(
+    PermissionCodes.WhistleblowerRead,
+    PermissionCodes.TenantSettingsManage,
+  )
   detail(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.whistleblower.detail(user, id);
   }
 
   @Patch(':id')
-  @RequirePermissions(PermissionCodes.WhistleblowerManage, PermissionCodes.TenantSettingsManage)
-  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateWhistleblowerDto) {
+  @RequirePermissions(
+    PermissionCodes.WhistleblowerManage,
+    PermissionCodes.TenantSettingsManage,
+  )
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateWhistleblowerDto,
+  ) {
     return this.whistleblower.update(user, id, dto);
   }
 
   @Post(':id/events')
-  @RequirePermissions(PermissionCodes.WhistleblowerManage, PermissionCodes.TenantSettingsManage)
-  addEvent(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateWhistleblowerEventDto) {
+  @RequirePermissions(
+    PermissionCodes.WhistleblowerManage,
+    PermissionCodes.TenantSettingsManage,
+  )
+  addEvent(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreateWhistleblowerEventDto,
+  ) {
     return this.whistleblower.addEvent(user, id, dto);
   }
 }
