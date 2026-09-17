@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
+import { isActiveSurvey } from '../lib/survey-list';
 
 type Survey = { id: string; name: string; status: string };
 type RewardCampaign = {
@@ -186,7 +187,10 @@ export function RewardCampaignsPage() {
     enabled: !preview,
   });
   const surveyRows = useMemo(
-    () => (preview ? DESIGN_PREVIEW_SURVEYS : (surveys.data ?? [])),
+    () =>
+      preview
+        ? DESIGN_PREVIEW_SURVEYS
+        : (surveys.data ?? []).filter(isActiveSurvey),
     [preview, surveys.data],
   );
   const campaignRows = useMemo(

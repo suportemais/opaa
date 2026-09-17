@@ -1,3 +1,4 @@
+import * as Dialog from '@radix-ui/react-dialog';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/api';
@@ -14,6 +15,15 @@ import {
   persistedTypeFromExtraKind,
   type ExtraQuestionKind,
 } from '../lib/question-types';
+import { isActiveSurvey } from '../lib/survey-list';
+
+const DELETE_COPY = {
+  action: 'Apagar',
+  title: 'Apagar pesquisa?',
+  body: (name: string) => `“${name}” some da listagem. Não dá pra desfazer por aqui.`,
+  confirm: 'Apagar pesquisa',
+  cancel: 'Cancelar',
+} as const;
 
 type Unit = { id: string; name: string };
 type Survey = { id: string; name: string; status: string; units: Array<{ unitId: string; unit: Unit }> };
@@ -209,6 +219,7 @@ export function SurveysPage() {
 
   const [activeSurveyId, setActiveSurveyId] = useState<string | null>(null);
   const [distributionUnitId, setDistributionUnitId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   const distributions = useQuery({
     queryKey: ['surveyDistributions', activeSurveyId],
@@ -436,6 +447,7 @@ export function SurveysPage() {
         method: 'POST',
       }),
     onSuccess: async (_, surveyId) => {
+      setPendingDelete(null);
       setActiveSurveyId((cur) => (cur === surveyId ? null : cur));
       if (editingId === surveyId) cancelEditing();
       await qc.invalidateQueries({ queryKey: ['surveys'] });
@@ -444,7 +456,7 @@ export function SurveysPage() {
   });
 
   const listedSurveys = useMemo(
-    () => (surveys.data ?? []).filter((s) => s.status !== 'archived'),
+    () => (surveys.data ?? []).filter(isActiveSurvey),
     [surveys.data],
   );
 
@@ -763,18 +775,11 @@ export function SurveysPage() {
                     Arquivar
                   </Button>
                   <Button
-                    variant="ghost"
-                    className="text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                    variant="danger"
                     disabled={archiveSurvey.isPending || deleteSurvey.isPending}
-                    onClick={() => {
-                      const ok = window.confirm(
-                        `Excluir a pesquisa "${s.name}"? Ela sairá da lista permanentemente. Respostas e histórico são preservados.`,
-                      );
-                      if (!ok) return;
-                      deleteSurvey.mutate(s.id);
-                    }}
+                    onClick={() => setPendingDelete({ id: s.id, name: s.name })}
                   >
-                    Excluir
+                    {DELETE_COPY.action}
                   </Button>
                   <div className="text-xs font-mono text-slate-500">{s.id}</div>
                 </div>
@@ -783,6 +788,42 @@ export function SurveysPage() {
           </div>
         )}
       </Card>
+
+      <Dialog.Root
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deleteSurvey.isPending) setPendingDelete(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-900/40" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-5 shadow-xl focus:outline-none">
+            <Dialog.Title className="text-lg font-semibold text-slate-900">{DELETE_COPY.title}</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-slate-600">
+              {pendingDelete ? DELETE_COPY.body(pendingDelete.name) : null}
+            </Dialog.Description>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="secondary"
+                disabled={deleteSurvey.isPending}
+                onClick={() => setPendingDelete(null)}
+              >
+                {DELETE_COPY.cancel}
+              </Button>
+              <Button
+                variant="danger"
+                disabled={!pendingDelete || deleteSurvey.isPending}
+                onClick={() => {
+                  if (!pendingDelete) return;
+                  deleteSurvey.mutate(pendingDelete.id);
+                }}
+              >
+                {DELETE_COPY.confirm}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {activeSurveyId && (
         <Card title="Links e QR Codes" description="Distribuições públicas da pesquisa selecionada">
