@@ -82,9 +82,10 @@ describe('sentiment classifier mapping', () => {
           { value: 9 },
           { value: '  ' },
           { value: 'Atendente rude' },
+          { value: { value: 'down', why: 'Comida fria' } },
         ],
       }),
-    ).toBe('Fila enorme\nAtendente rude');
+    ).toBe('Fila enorme\nAtendente rude\nComida fria');
   });
 
   it('clamps summary to a single short line', () => {
