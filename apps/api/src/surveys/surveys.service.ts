@@ -22,6 +22,7 @@ import {
   assertSurveyUpdateAllowed,
   isIdentitySettingsOnlyUpdate,
 } from '../domain/surveys/survey-update';
+import { defaultSurveyListWhere } from '../domain/surveys/survey-visibility';
 
 @Injectable()
 export class SurveysService {
@@ -45,7 +46,12 @@ export class SurveysService {
         };
 
     return this.prisma.survey.findFirstOrThrow({
-      where: { id: surveyId, tenantId: user.tenantId, ...unitFilter },
+      where: {
+        id: surveyId,
+        tenantId: user.tenantId,
+        deletedAt: null,
+        ...unitFilter,
+      },
     });
   }
 
@@ -121,7 +127,11 @@ export class SurveysService {
         };
 
     return this.prisma.survey.findMany({
-      where: { tenantId: user.tenantId, ...unitFilter },
+      where: {
+        tenantId: user.tenantId,
+        ...defaultSurveyListWhere(),
+        ...unitFilter,
+      },
       include: { units: { include: { unit: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -468,6 +478,34 @@ export class SurveysService {
       entity: 'Survey',
       entityId: survey.id,
       summary: { name: survey.name },
+      req,
+    });
+
+    return { ok: true };
+  }
+
+  async remove(user: AuthUser, surveyId: string, req?: Request) {
+    const survey = await this.getAccessibleSurvey(user, surveyId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.surveyDistribution.updateMany({
+        where: { tenantId: user.tenantId, surveyId: survey.id },
+        data: { active: false },
+      });
+      await tx.survey.update({
+        where: { id: survey.id },
+        data: { deletedAt: new Date() },
+      });
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      actorType: 'user',
+      actorUserId: user.userId,
+      action: 'survey.deleted',
+      entity: 'Survey',
+      entityId: survey.id,
+      summary: { name: survey.name, status: survey.status },
       req,
     });
 

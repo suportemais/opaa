@@ -32,6 +32,7 @@ import {
   unwrapAnswerValue,
   unwrapAnswerWhy,
 } from '../domain/surveys/question-types';
+import { isPublicSurveyOpen } from '../domain/surveys/survey-visibility';
 
 type QuestionConfig = {
   when?: { npsMin?: number; npsMax?: number };
@@ -107,7 +108,7 @@ export class PublicService {
     }
 
     const survey = distribution.survey;
-    if (!survey.publishedVersion || survey.status !== 'published') {
+    if (!survey.publishedVersion || !isPublicSurveyOpen(survey)) {
       throw new NotFoundException();
     }
 
@@ -170,6 +171,7 @@ export class PublicService {
     });
 
     if (!distribution || !distribution.active) throw new NotFoundException();
+    if (!isPublicSurveyOpen(distribution.survey)) throw new NotFoundException();
     if (!distribution.unitId) return [];
 
     const collectEmployee = Boolean(
@@ -222,8 +224,7 @@ export class PublicService {
     if (!distribution || !distribution.active) throw new NotFoundException();
     const survey = distribution.survey;
     const version = survey.publishedVersion;
-    if (!version || survey.status !== 'published')
-      throw new NotFoundException();
+    if (!version || !isPublicSurveyOpen(survey)) throw new NotFoundException();
 
     const badScoreThreshold = badScoreThresholdFromSettings(
       distribution.tenant.settings,

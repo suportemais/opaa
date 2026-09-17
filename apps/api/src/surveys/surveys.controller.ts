@@ -58,6 +58,12 @@ export class SurveysController {
     return this.surveys.publish(user, id, req);
   }
 
+  @Post(':id/delete')
+  @RequirePermissions(PermissionCodes.SurveyManage)
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string, @Req() req: Request) {
+    return this.surveys.remove(user, id, req);
+  }
+
   @Delete(':id')
   @RequirePermissions(PermissionCodes.SurveyManage)
   archive(@CurrentUser() user: AuthUser, @Param('id') id: string, @Req() req: Request) {

@@ -422,12 +422,31 @@ export function SurveysPage() {
       apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(surveyId)}`, {
         method: 'DELETE',
       }),
-    onSuccess: async () => {
-      setActiveSurveyId(null);
+    onSuccess: async (_, surveyId) => {
+      setActiveSurveyId((cur) => (cur === surveyId ? null : cur));
+      if (editingId === surveyId) cancelEditing();
       await qc.invalidateQueries({ queryKey: ['surveys'] });
       await qc.invalidateQueries({ queryKey: ['surveyDistributions'] });
     },
   });
+
+  const deleteSurvey = useMutation({
+    mutationFn: (surveyId: string) =>
+      apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(surveyId)}/delete`, {
+        method: 'POST',
+      }),
+    onSuccess: async (_, surveyId) => {
+      setActiveSurveyId((cur) => (cur === surveyId ? null : cur));
+      if (editingId === surveyId) cancelEditing();
+      await qc.invalidateQueries({ queryKey: ['surveys'] });
+      await qc.invalidateQueries({ queryKey: ['surveyDistributions'] });
+    },
+  });
+
+  const listedSurveys = useMemo(
+    () => (surveys.data ?? []).filter((s) => s.status !== 'archived'),
+    [surveys.data],
+  );
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const publishedToken = create.data?.publicToken ?? saveAndPublish.data?.publicToken ?? null;
@@ -701,10 +720,10 @@ export function SurveysPage() {
       <Card title="Lista">
         {surveys.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
         {surveys.isError && <div className="text-sm text-rose-700">Falha ao carregar pesquisas</div>}
-        {surveys.data && surveys.data.length === 0 && <div className="text-sm text-slate-600">Nenhuma pesquisa</div>}
-        {surveys.data && surveys.data.length > 0 && (
+        {surveys.data && listedSurveys.length === 0 && <div className="text-sm text-slate-600">Nenhuma pesquisa</div>}
+        {listedSurveys.length > 0 && (
           <div className="divide-y divide-slate-200">
-            {surveys.data.map((s) => (
+            {listedSurveys.map((s) => (
               <div key={s.id} className="flex items-center justify-between py-3">
                 <div>
                   <div className="text-sm font-medium">{s.name}</div>
@@ -732,19 +751,31 @@ export function SurveysPage() {
                   >
                     Links
                   </Button>
-                  {s.status !== 'archived' && (
-                    <Button
-                      variant="ghost"
-                      disabled={archiveSurvey.isPending}
-                      onClick={() => {
-                        const ok = window.confirm(`Arquivar a pesquisa "${s.name}"? Os links públicos serão desativados.`);
-                        if (!ok) return;
-                        archiveSurvey.mutate(s.id);
-                      }}
-                    >
-                      Arquivar
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    disabled={archiveSurvey.isPending || deleteSurvey.isPending}
+                    onClick={() => {
+                      const ok = window.confirm(`Arquivar a pesquisa "${s.name}"? Os links públicos serão desativados.`);
+                      if (!ok) return;
+                      archiveSurvey.mutate(s.id);
+                    }}
+                  >
+                    Arquivar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                    disabled={archiveSurvey.isPending || deleteSurvey.isPending}
+                    onClick={() => {
+                      const ok = window.confirm(
+                        `Excluir a pesquisa "${s.name}"? Ela sairá da lista permanentemente. Respostas e histórico são preservados.`,
+                      );
+                      if (!ok) return;
+                      deleteSurvey.mutate(s.id);
+                    }}
+                  >
+                    Excluir
+                  </Button>
                   <div className="text-xs font-mono text-slate-500">{s.id}</div>
                 </div>
               </div>
