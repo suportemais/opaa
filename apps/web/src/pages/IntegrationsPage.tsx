@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../lib/api';
 
@@ -15,6 +14,16 @@ const COPY = {
   CONFIRM_DISCONNECT: 'Desconectar remove o vínculo. Prêmios param de emitir.',
 } as const;
 
+const VOUCHER_COPY = {
+  TITLE: 'Voucher Muito Mais',
+  MICRO: 'Gere um código de 7 dígitos pra o cliente vincular no Muito Mais.',
+  CTA_GENERATE: 'Gerar voucher',
+  CTA_COPY: 'Copiar',
+  CTA_CANCEL: 'Cancelar',
+  AFTER_GENERATE: 'Copie agora. Cada voucher vale uma vez.',
+  EMPTY: 'Nenhum voucher ativo.',
+} as const;
+
 const FIELD_CLASS =
   'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-500';
 
@@ -26,19 +35,10 @@ type MmIntegrationStatus = {
   apiKeyLast4: string | null;
 };
 
-type TenantMe = {
-  document: string | null;
-};
-
 type AdhesionVoucher = {
   id: string;
   voucher: string;
   status: 'unused' | 'used' | 'cancelled' | 'expired';
-  issuer: { cnpj: string; legalName: string; tradeName: string };
-  amountCents: number | null;
-  expiresAt: string;
-  usedAt: string | null;
-  createdAt: string;
 };
 
 function errorMessage(err: unknown): string {
@@ -75,51 +75,6 @@ function errorMessage(err: unknown): string {
   }
 }
 
-function digitsOnly(value: string | null | undefined) {
-  return (value ?? '').replace(/\D+/g, '');
-}
-
-function hasIssuerCnpj(document: string | null | undefined) {
-  return digitsOnly(document).length === 14;
-}
-
-function formatCnpj(digits: string) {
-  const raw = digitsOnly(digits);
-  if (raw.length !== 14) return digits;
-  return raw.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-}
-
-function formatBRL(cents: number | null | undefined) {
-  if (typeof cents !== 'number' || !Number.isFinite(cents)) return 'Somente vínculo';
-  return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
-}
-
-function centsFromReais(raw: string) {
-  const trimmed = raw.trim().replace(/[R$\s]/g, '');
-  if (!trimmed) return null;
-  const normalized = trimmed.includes(',')
-    ? trimmed.replace(/\./g, '').replace(',', '.')
-    : trimmed;
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value < 0) return null;
-  return Math.round(value * 100);
-}
-
-function statusLabel(status: AdhesionVoucher['status']) {
-  switch (status) {
-    case 'unused':
-      return 'Disponível';
-    case 'used':
-      return 'Usado';
-    case 'expired':
-      return 'Expirado';
-    case 'cancelled':
-      return 'Cancelado';
-    default:
-      return status;
-  }
-}
-
 function maskKey(last4: string | null | undefined) {
   const tail = last4?.trim();
   return tail ? `••••${tail}` : '••••';
@@ -147,14 +102,7 @@ export function IntegrationsPage() {
   const [apiKey, setApiKey] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
-  const [amountReais, setAmountReais] = useState('');
-  const [validityDays, setValidityDays] = useState('30');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const tenant = useQuery({
-    queryKey: ['tenantMe'],
-    queryFn: () => apiFetch<TenantMe>('/tenant/me'),
-  });
+  const [justGenerated, setJustGenerated] = useState(false);
 
   const vouchers = useQuery({
     queryKey: ['mm-vouchers'],
@@ -167,22 +115,10 @@ export function IntegrationsPage() {
   });
 
   const mint = useMutation({
-    mutationFn: () => {
-      const amountCents = centsFromReais(amountReais);
-      const days = Number(validityDays);
-      return apiFetch<AdhesionVoucher>('/mm-vouchers', {
-        method: 'POST',
-        json: {
-          ...(amountCents !== null ? { amountCents } : {}),
-          ...(Number.isFinite(days) && days >= 1
-            ? { validityDays: Math.min(365, Math.floor(days)) }
-            : {}),
-        },
-      });
-    },
+    mutationFn: () => apiFetch<AdhesionVoucher>('/mm-vouchers', { method: 'POST', json: {} }),
     onSuccess: async () => {
       setVoucherError(null);
-      setAmountReais('');
+      setJustGenerated(true);
       await qc.invalidateQueries({ queryKey: ['mm-vouchers'] });
     },
     onError: (err) => setVoucherError(errorMessage(err)),
@@ -226,7 +162,7 @@ export function IntegrationsPage() {
 
   const row = status.data;
   const connected = Boolean(row?.connected);
-  const issuerReady = hasIssuerCnpj(tenant.data?.document);
+  const activeVouchers = (vouchers.data ?? []).filter((item) => item.status === 'unused');
 
   return (
     <div className="grid gap-6">
@@ -238,146 +174,15 @@ export function IntegrationsPage() {
         </nav>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-opiina-navy">Integrações</h1>
         <p className="mt-2 text-sm text-opiina-muted">
-          Voucher de 7 dígitos para o cliente aderir no Muito Mais. A chave de API continua opcional
-          para Prêmios.
+          {connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED}
         </p>
       </div>
 
       <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
-        <div className="mb-2 text-lg font-semibold text-opiina-navy">Voucher de adesão</div>
-        <p className="mb-5 text-sm text-opiina-muted">
-          O cliente digita o código no cadastro ou já logado no Muito Mais. A empresa é resolvida
-          pelo CNPJ. Uso único, com validade.
-        </p>
-
-        {tenant.data && !issuerReady && (
-          <div className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Cadastre o CNPJ da empresa para emitir.{' '}
-            <Link className="font-medium text-sky-800 underline" to="/app/company">
-              Ir para Empresa
-            </Link>
-          </div>
-        )}
-
-        {issuerReady && tenant.data?.document && (
-          <div className="mb-5 text-sm text-opiina-muted">
-            CNPJ emissor: <span className="font-medium text-opiina-navy">{formatCnpj(tenant.data.document)}</span>
-          </div>
-        )}
-
-        <form
-          className="grid gap-4 md:grid-cols-[1fr_8rem_auto]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setVoucherError(null);
-            mint.mutate();
-          }}
-        >
-          <label>
-            <div className="mb-1.5 text-sm font-medium text-slate-700">Valor (opcional)</div>
-            <input
-              className={FIELD_CLASS}
-              inputMode="decimal"
-              value={amountReais}
-              onChange={(e) => setAmountReais(e.target.value)}
-              placeholder="Ex.: 15,00 — vazio = só vínculo"
-              disabled={!issuerReady}
-            />
-          </label>
-          <label>
-            <div className="mb-1.5 text-sm font-medium text-slate-700">Validade (dias)</div>
-            <input
-              className={FIELD_CLASS}
-              inputMode="numeric"
-              value={validityDays}
-              onChange={(e) => setValidityDays(e.target.value)}
-              disabled={!issuerReady}
-            />
-          </label>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={mint.isPending || !issuerReady}
-              className="inline-flex h-12 w-full items-center justify-center rounded-full bg-opiina-cta px-6 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {mint.isPending ? 'Gerando...' : 'Gerar voucher'}
-            </button>
-          </div>
-        </form>
-        {voucherError && <div className="mt-3 text-sm text-rose-700">{voucherError}</div>}
-
-        <div className="mt-6 overflow-x-auto">
-          {vouchers.isLoading && <div className="text-sm text-opiina-muted">Carregando vouchers...</div>}
-          {vouchers.data && vouchers.data.length === 0 && (
-            <div className="text-sm text-opiina-muted">Nenhum voucher emitido ainda.</div>
-          )}
-          {vouchers.data && vouchers.data.length > 0 && (
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="pb-2 pr-4 font-medium">Código</th>
-                  <th className="pb-2 pr-4 font-medium">Valor</th>
-                  <th className="pb-2 pr-4 font-medium">Validade</th>
-                  <th className="pb-2 pr-4 font-medium">Status</th>
-                  <th className="pb-2 font-medium"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {vouchers.data.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100">
-                    <td className="py-3 pr-4 font-mono text-base font-semibold tracking-wider text-opiina-navy">
-                      {item.voucher}
-                    </td>
-                    <td className="py-3 pr-4 text-opiina-muted">{formatBRL(item.amountCents)}</td>
-                    <td className="py-3 pr-4 text-opiina-muted">
-                      {new Date(item.expiresAt).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="py-3 pr-4">{statusLabel(item.status)}</td>
-                    <td className="py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          className="rounded-full border border-opiina-border px-3 py-1.5 text-xs font-medium text-opiina-navy hover:bg-slate-50"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(item.voucher);
-                              setCopiedId(item.id);
-                            } catch {
-                              setVoucherError('Não foi possível copiar o código.');
-                            }
-                          }}
-                        >
-                          {copiedId === item.id ? 'Copiado' : 'Copiar'}
-                        </button>
-                        {item.status === 'unused' && (
-                          <button
-                            type="button"
-                            disabled={cancelVoucher.isPending}
-                            className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                            onClick={() => cancelVoucher.mutate(item.id)}
-                          >
-                            Cancelar
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
-        <div className="mb-2 flex flex-wrap items-center gap-2.5">
-          <div className="text-lg font-semibold text-opiina-navy">Chave de API (opcional)</div>
+        <div className="mb-6 flex flex-wrap items-center gap-2.5">
+          <div className="text-lg font-semibold text-opiina-navy">Muito Mais</div>
           <StatusBadge connected={connected} />
         </div>
-        <p className="mb-6 text-sm text-opiina-muted">
-          {connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED} Necessária só para Prêmios
-          automaticamente. O voucher de adesão não usa esta chave.
-        </p>
 
         {status.isLoading && <div className="text-sm text-opiina-muted">Carregando...</div>}
         {status.isError && (
@@ -459,6 +264,63 @@ export function IntegrationsPage() {
             </button>
           </form>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
+        <div className="mb-2 text-lg font-semibold text-opiina-navy">{VOUCHER_COPY.TITLE}</div>
+        <p className="mb-5 text-sm text-opiina-muted">{VOUCHER_COPY.MICRO}</p>
+
+        <button
+          type="button"
+          disabled={mint.isPending}
+          className="inline-flex h-12 items-center justify-center rounded-full bg-opiina-cta px-6 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          onClick={() => mint.mutate()}
+        >
+          {VOUCHER_COPY.CTA_GENERATE}
+        </button>
+        {justGenerated && (
+          <div className="mt-3 text-sm text-opiina-navy">{VOUCHER_COPY.AFTER_GENERATE}</div>
+        )}
+        {voucherError && <div className="mt-3 text-sm text-rose-700">{voucherError}</div>}
+
+        <div className="mt-6">
+          {vouchers.data && activeVouchers.length === 0 && (
+            <div className="text-sm text-opiina-muted">{VOUCHER_COPY.EMPTY}</div>
+          )}
+          {activeVouchers.length > 0 && (
+            <ul className="grid gap-3">
+              {activeVouchers.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 first:border-t-0 first:pt-0"
+                >
+                  <span className="font-mono text-base font-semibold tracking-wider text-opiina-navy">
+                    {item.voucher}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-opiina-border px-3 py-1.5 text-xs font-medium text-opiina-navy hover:bg-slate-50"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(item.voucher);
+                      }}
+                    >
+                      {VOUCHER_COPY.CTA_COPY}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cancelVoucher.isPending}
+                      className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                      onClick={() => cancelVoucher.mutate(item.id)}
+                    >
+                      {VOUCHER_COPY.CTA_CANCEL}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
