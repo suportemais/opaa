@@ -14,7 +14,7 @@ export class WhistleblowerController {
   constructor(private readonly whistleblower: WhistleblowerService) {}
 
   @Get()
-  @RequirePermissions(PermissionCodes.WhistleblowerRead)
+  @RequirePermissions(PermissionCodes.WhistleblowerRead, PermissionCodes.TenantSettingsManage)
   list(
     @CurrentUser() user: AuthUser,
     @Query('cursor') cursor?: string,
@@ -32,19 +32,19 @@ export class WhistleblowerController {
   }
 
   @Get(':id')
-  @RequirePermissions(PermissionCodes.WhistleblowerRead)
+  @RequirePermissions(PermissionCodes.WhistleblowerRead, PermissionCodes.TenantSettingsManage)
   detail(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.whistleblower.detail(user, id);
   }
 
   @Patch(':id')
-  @RequirePermissions(PermissionCodes.WhistleblowerManage)
+  @RequirePermissions(PermissionCodes.WhistleblowerManage, PermissionCodes.TenantSettingsManage)
   update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateWhistleblowerDto) {
     return this.whistleblower.update(user, id, dto);
   }
 
   @Post(':id/events')
-  @RequirePermissions(PermissionCodes.WhistleblowerManage)
+  @RequirePermissions(PermissionCodes.WhistleblowerManage, PermissionCodes.TenantSettingsManage)
   addEvent(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateWhistleblowerEventDto) {
     return this.whistleblower.addEvent(user, id, dto);
   }
