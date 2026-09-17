@@ -1,7 +1,11 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsObject, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsObject, IsOptional, IsUUID, Max, Min } from 'class-validator';
 
 export class CreateAdhesionVoucherDto {
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

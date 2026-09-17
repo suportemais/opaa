@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ReviewPlatform, SyncFrequency, SyncStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
@@ -6,7 +11,11 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import type { CreateUnitDto } from './dto/create-unit.dto';
 import type { UpdateUnitDto } from './dto/update-unit.dto';
 import type { UpsertReviewProfileDto } from './dto/review-profile.dto';
-import { googleBusinessUrlFromSettings, withGoogleBusinessUrl } from '../common/unit-settings';
+import {
+  googleBusinessUrlFromSettings,
+  withGoogleBusinessUrl,
+} from '../common/unit-settings';
+import { normalizeCnpj } from '../common/br-document';
 import { ReviewSyncService } from '../review-sync/review-sync.service';
 
 @Injectable()
@@ -36,7 +45,11 @@ export class UnitsService {
     return user.permissionCodes.includes(PermissionCodes.ReviewRead);
   }
 
-  private async assertUnitAccess(user: AuthUser, unitId: string, requireManage = false) {
+  private async assertUnitAccess(
+    user: AuthUser,
+    unitId: string,
+    requireManage = false,
+  ) {
     if (requireManage && !this.canManage(user) && !this.canReviewManage(user)) {
       throw new ForbiddenException();
     }
@@ -44,14 +57,25 @@ export class UnitsService {
     if (!canSeeAllUnits && !user.unitIds.includes(unitId)) {
       throw new ForbiddenException();
     }
-    const unit = await this.prisma.unit.findFirst({ where: { id: unitId, tenantId: user.tenantId } });
+    const unit = await this.prisma.unit.findFirst({
+      where: { id: unitId, tenantId: user.tenantId },
+    });
     if (!unit) throw new NotFoundException('unit_not_found');
     return unit;
   }
 
-  private readonly DEFAULT_PLATFORMS: ReviewPlatform[] = ['google', 'ifood', 'tripadvisor', 'reclameaqui'];
+  private readonly DEFAULT_PLATFORMS: ReviewPlatform[] = [
+    'google',
+    'ifood',
+    'tripadvisor',
+    'reclameaqui',
+  ];
 
-  private defaultProfile(platform: ReviewPlatform, unitId: string, tenantId: string) {
+  private defaultProfile(
+    platform: ReviewPlatform,
+    unitId: string,
+    tenantId: string,
+  ) {
     const defaults: Record<ReviewPlatform, { syncFrequency: SyncFrequency }> = {
       google: { syncFrequency: 'every6h' },
       ifood: { syncFrequency: 'hourly' },
@@ -83,15 +107,19 @@ export class UnitsService {
 
   async create(user: AuthUser, dto: CreateUnitDto) {
     if (!this.canManage(user)) throw new ForbiddenException();
-    const settings = dto.googleBusinessUrl ? withGoogleBusinessUrl(null, dto.googleBusinessUrl) : undefined;
+    const settings = dto.googleBusinessUrl
+      ? withGoogleBusinessUrl(null, dto.googleBusinessUrl)
+      : undefined;
     const created = await this.prisma.unit.create({
       data: {
         tenantId: user.tenantId,
         name: dto.name,
         internalCode: dto.internalCode,
+        document: parseUnitCnpj(dto.document),
+        legalName: parseOptionalName(dto.legalName),
         timeZone: dto.timeZone,
         address: dto.address,
-        settings: settings as any,
+        settings: settings,
       },
     });
     return this.toOutput(created as any);
@@ -102,7 +130,9 @@ export class UnitsService {
     const rows = await this.prisma.unit.findMany({
       where: {
         tenantId: user.tenantId,
-        ...(canSeeAll ? {} : { id: { in: user.unitIds.length ? user.unitIds : ['__none__'] } }),
+        ...(canSeeAll
+          ? {}
+          : { id: { in: user.unitIds.length ? user.unitIds : ['__none__'] } }),
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -111,20 +141,30 @@ export class UnitsService {
 
   async update(user: AuthUser, id: string, dto: UpdateUnitDto) {
     if (!this.canManage(user)) throw new ForbiddenException();
-    const existing = await this.prisma.unit.findFirst({ where: { id, tenantId: user.tenantId } });
+    const existing = await this.prisma.unit.findFirst({
+      where: { id, tenantId: user.tenantId },
+    });
     if (!existing) throw new NotFoundException('unit_not_found');
 
     const nextSettings =
-      dto.googleBusinessUrl !== undefined ? withGoogleBusinessUrl(existing.settings, dto.googleBusinessUrl) : existing.settings;
+      dto.googleBusinessUrl !== undefined
+        ? withGoogleBusinessUrl(existing.settings, dto.googleBusinessUrl)
+        : existing.settings;
 
     const updated = await this.prisma.unit.update({
       where: { id },
       data: {
         name: dto.name,
         internalCode: dto.internalCode,
+        ...(dto.document !== undefined
+          ? { document: parseUnitCnpj(dto.document) }
+          : {}),
+        ...(dto.legalName !== undefined
+          ? { legalName: parseOptionalName(dto.legalName) }
+          : {}),
         timeZone: dto.timeZone,
         address: dto.address,
-        settings: nextSettings as any,
+        settings: nextSettings,
       },
     });
     return this.toOutput(updated as any);
@@ -139,13 +179,20 @@ export class UnitsService {
       where: { tenantId: user.tenantId, unitId },
       orderBy: { createdAt: 'asc' },
     });
-    const existingMap = new Map(existing.map((p) => [p.platform, { ...p, isPlaceholder: false }]));
-    return this.DEFAULT_PLATFORMS.map((p) =>
-      existingMap.get(p) ?? this.defaultProfile(p, unitId, user.tenantId),
+    const existingMap = new Map(
+      existing.map((p) => [p.platform, { ...p, isPlaceholder: false }]),
+    );
+    return this.DEFAULT_PLATFORMS.map(
+      (p) =>
+        existingMap.get(p) ?? this.defaultProfile(p, unitId, user.tenantId),
     );
   }
 
-  async upsertReviewProfile(user: AuthUser, unitId: string, dto: UpsertReviewProfileDto) {
+  async upsertReviewProfile(
+    user: AuthUser,
+    unitId: string,
+    dto: UpsertReviewProfileDto,
+  ) {
     await this.assertUnitAccess(user, unitId, true);
     if (!this.canReviewManage(user) && !this.canManage(user)) {
       throw new ForbiddenException();
@@ -180,12 +227,35 @@ export class UnitsService {
     return { ...saved, isPlaceholder: false };
   }
 
-  async triggerSyncNow(user: AuthUser, unitId: string, platform: ReviewPlatform) {
+  async triggerSyncNow(
+    user: AuthUser,
+    unitId: string,
+    platform: ReviewPlatform,
+  ) {
     await this.assertUnitAccess(user, unitId, true);
     if (!this.canReviewManage(user) && !this.canManage(user)) {
       throw new ForbiddenException();
     }
-    const result = await this.reviewSync.runSyncNow(user.tenantId, unitId, platform);
+    const result = await this.reviewSync.runSyncNow(
+      user.tenantId,
+      unitId,
+      platform,
+    );
     return { ok: true, status: 'completed', ...result };
   }
+}
+
+function parseUnitCnpj(raw?: string | null): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || !String(raw).trim()) return null;
+  const cnpj = normalizeCnpj(raw);
+  if (!cnpj) throw new BadRequestException('invalid_document');
+  return cnpj;
+}
+
+function parseOptionalName(raw?: string | null): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed || null;
 }

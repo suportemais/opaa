@@ -316,6 +316,8 @@ model Unit {
   tenantId    String  @db.Uuid
   name        String
   internalCode String?
+  document    String?
+  legalName   String?
   phone       String?
   email       String?
   address     String?
@@ -340,8 +342,10 @@ model Unit {
   whistleblowerReports WhistleblowerReport[]
   reviewSyncProfiles ReviewSyncProfile[]
   reviews Review[]
+  mmAdhesionVouchers MmAdhesionVoucher[]
 
   @@index([tenantId])
+  @@index([tenantId, document])
   @@map("units")
 }
 
@@ -1097,6 +1101,7 @@ model TenantMmIntegration {
 model MmAdhesionVoucher {
   id                String                   @id @default(uuid()) @db.Uuid
   tenantId          String                   @db.Uuid
+  unitId            String?                  @db.Uuid
   code              String
   issuerCnpj        String
   issuerLegalName   String
@@ -1114,11 +1119,13 @@ model MmAdhesionVoucher {
   updatedAt         DateTime                 @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit   Unit?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   @@unique([code])
   @@index([tenantId, createdAt])
   @@index([issuerCnpj])
   @@index([status, expiresAt])
+  @@index([unitId])
   @@map("mm_adhesion_vouchers")
 }
 

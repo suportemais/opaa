@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { MmAdhesionVoucherStatus, Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
-import { normalizeBrDocument } from '../common/br-document';
+import { normalizeCnpj } from '../common/br-document';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   generateAdhesionVoucherCode,
@@ -30,6 +30,8 @@ export type AdhesionVoucherView = {
   id: string;
   voucher: string;
   status: 'unused' | 'used' | 'cancelled' | 'expired';
+  unitId: string | null;
+  unitName: string | null;
   issuer: AdhesionVoucherIssuer;
   amountCents: number | null;
   rules: Record<string, unknown> | null;
@@ -47,6 +49,8 @@ export type ResolveAdhesionVoucherResult =
       cnpj: string;
       legalName: string;
       tradeName: string;
+      unitId: string | null;
+      unitName: string | null;
       issuer: AdhesionVoucherIssuer;
       amountCents: number | null;
       rules: Record<string, unknown> | null;
@@ -69,6 +73,8 @@ export type ConsumeAdhesionVoucherResult =
       cnpj: string;
       legalName: string;
       tradeName: string;
+      unitId: string | null;
+      unitName: string | null;
       issuer: AdhesionVoucherIssuer;
       amountCents: number | null;
       rules: Record<string, unknown> | null;
@@ -83,6 +89,7 @@ export type ConsumeAdhesionVoucherResult =
 
 type StoredVoucher = {
   id: string;
+  unitId: string | null;
   code: string;
   issuerCnpj: string;
   issuerLegalName: string;
@@ -100,6 +107,7 @@ type StoredVoucher = {
 
 const STORED_SELECT = {
   id: true,
+  unitId: true,
   code: true,
   issuerCnpj: true,
   issuerLegalName: true,
@@ -135,21 +143,19 @@ export class MmAdhesionVouchersService {
   async mint(
     user: AuthUser,
     input: {
+      unitId?: string;
       amountCents?: number;
       validityDays?: number;
       rules?: Record<string, unknown>;
     },
   ): Promise<AdhesionVoucherView> {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: user.tenantId },
-      select: { document: true, legalName: true, tradeName: true },
-    });
-    if (!tenant) throw new NotFoundException('tenant_not_found');
-
-    const issuer = normalizeBrDocument(tenant.document);
-    if (!issuer || issuer.type !== 'cnpj') {
+    const unit = await this.resolveMintUnit(user, input.unitId);
+    const issuerCnpj = normalizeCnpj(unit.document);
+    if (!issuerCnpj) {
       throw new BadRequestException('issuer_cnpj_required');
     }
+    const issuerLegalName = unit.legalName?.trim() || unit.name;
+    const issuerTradeName = unit.name;
 
     const defaultDays = Math.min(
       365,
@@ -179,10 +185,11 @@ export class MmAdhesionVouchersService {
         const row = await this.prisma.mmAdhesionVoucher.create({
           data: {
             tenantId: user.tenantId,
+            unitId: unit.id,
             code,
-            issuerCnpj: issuer.value,
-            issuerLegalName: tenant.legalName,
-            issuerTradeName: tenant.tradeName,
+            issuerCnpj,
+            issuerLegalName,
+            issuerTradeName,
             amountCents,
             rules,
             expiresAt,
@@ -239,6 +246,7 @@ export class MmAdhesionVouchersService {
       cnpj: loaded.row.issuerCnpj,
       legalName: loaded.row.issuerLegalName,
       tradeName: loaded.row.issuerTradeName,
+      ...this.unitSnapshot(loaded.row),
       issuer: this.issuer(loaded.row),
       amountCents: loaded.row.amountCents,
       rules: asRules(loaded.row.rules),
@@ -296,6 +304,7 @@ export class MmAdhesionVouchersService {
       cnpj: loaded.row.issuerCnpj,
       legalName: loaded.row.issuerLegalName,
       tradeName: loaded.row.issuerTradeName,
+      ...this.unitSnapshot(loaded.row),
       issuer: this.issuer(loaded.row),
       amountCents: loaded.row.amountCents,
       rules: asRules(loaded.row.rules),
@@ -348,11 +357,39 @@ export class MmAdhesionVouchersService {
     };
   }
 
+  private async resolveMintUnit(user: AuthUser, unitId?: string) {
+    const requested = unitId?.trim() || '';
+    const units = await this.prisma.unit.findMany({
+      where: { tenantId: user.tenantId },
+      select: { id: true, name: true, document: true, legalName: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (requested) {
+      const unit = units.find((row) => row.id === requested);
+      if (!unit) throw new NotFoundException('unit_not_found');
+      return unit;
+    }
+
+    if (units.length === 1) return units[0];
+    throw new BadRequestException('unit_required');
+  }
+
   private issuer(row: StoredVoucher): AdhesionVoucherIssuer {
     return {
       cnpj: row.issuerCnpj,
       legalName: row.issuerLegalName,
       tradeName: row.issuerTradeName,
+    };
+  }
+
+  private unitSnapshot(row: StoredVoucher): {
+    unitId: string | null;
+    unitName: string | null;
+  } {
+    return {
+      unitId: row.unitId,
+      unitName: row.unitId ? row.issuerTradeName : null,
     };
   }
 
@@ -370,6 +407,7 @@ export class MmAdhesionVouchersService {
       id: row.id,
       voucher: row.code,
       status,
+      ...this.unitSnapshot(row),
       issuer: this.issuer(row),
       amountCents: row.amountCents,
       rules: asRules(row.rules),
@@ -386,5 +424,5 @@ function asRules(
   value: Prisma.JsonValue | null,
 ): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
+  return value;
 }

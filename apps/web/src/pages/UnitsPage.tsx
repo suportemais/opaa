@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { unitCnpjLine } from '../lib/cnpj';
 
 type ReviewPlatform = 'google' | 'ifood' | 'tripadvisor' | 'reclameaqui';
 type SyncFrequency = 'every30m' | 'hourly' | 'every6h' | 'daily';
@@ -28,6 +29,8 @@ type Unit = {
   name: string;
   timeZone: string | null;
   internalCode: string | null;
+  document: string | null;
+  legalName: string | null;
   address: string | null;
   googleBusinessUrl: string | null;
 };
@@ -61,12 +64,16 @@ export function UnitsPage() {
   });
 
   const [name, setName] = useState('');
+  const [document, setDocument] = useState('');
+  const [legalName, setLegalName] = useState('');
   const [timeZone, setTimeZone] = useState('America/Sao_Paulo');
   const [address, setAddress] = useState('');
   const [googleBusinessUrl, setGoogleBusinessUrl] = useState('');
 
   const [editingId, setEditingId] = useState<string>('');
   const [editName, setEditName] = useState('');
+  const [editDocument, setEditDocument] = useState('');
+  const [editLegalName, setEditLegalName] = useState('');
   const [editTimeZone, setEditTimeZone] = useState('America/Sao_Paulo');
   const [editAddress, setEditAddress] = useState('');
   const [editGoogleBusinessUrl, setEditGoogleBusinessUrl] = useState('');
@@ -110,6 +117,8 @@ export function UnitsPage() {
         method: 'POST',
         json: {
           name,
+          document: document.trim() || undefined,
+          legalName: legalName.trim() || undefined,
           timeZone,
           address: address.trim() || undefined,
           googleBusinessUrl: googleBusinessUrl.trim() || undefined,
@@ -117,6 +126,8 @@ export function UnitsPage() {
       }),
     onSuccess: async () => {
       setName('');
+      setDocument('');
+      setLegalName('');
       setAddress('');
       setGoogleBusinessUrl('');
       await qc.invalidateQueries({ queryKey: ['units'] });
@@ -129,6 +140,8 @@ export function UnitsPage() {
         method: 'PATCH',
         json: {
           name: editName.trim() || undefined,
+          document: editDocument.trim(),
+          legalName: editLegalName.trim(),
           timeZone: editTimeZone.trim() || undefined,
           address: editAddress.trim() || undefined,
           googleBusinessUrl: editGoogleBusinessUrl.trim() || undefined,
@@ -138,6 +151,8 @@ export function UnitsPage() {
     onSuccess: async () => {
       setEditingId('');
       setEditName('');
+      setEditDocument('');
+      setEditLegalName('');
       setEditTimeZone('America/Sao_Paulo');
       setEditAddress('');
       setEditGoogleBusinessUrl('');
@@ -162,6 +177,14 @@ export function UnitsPage() {
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Fuso horário</div>
               <Input value={editTimeZone} onChange={(e) => setEditTimeZone(e.target.value)} placeholder="Fuso horário" />
+            </div>
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">CNPJ</div>
+              <Input value={editDocument} onChange={(e) => setEditDocument(e.target.value)} placeholder="CNPJ da unidade" />
+            </div>
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Razão social</div>
+              <Input value={editLegalName} onChange={(e) => setEditLegalName(e.target.value)} placeholder="Razão social (opcional)" />
             </div>
             <div className="md:col-span-3">
               <div className="mb-1 text-sm font-medium text-slate-700">Endereço</div>
@@ -353,6 +376,12 @@ export function UnitsPage() {
             <div>
               <Input value={timeZone} onChange={(e) => setTimeZone(e.target.value)} placeholder="Fuso horário" />
             </div>
+            <div>
+              <Input value={document} onChange={(e) => setDocument(e.target.value)} placeholder="CNPJ da unidade" />
+            </div>
+            <div>
+              <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Razão social (opcional)" />
+            </div>
             <div className="md:col-span-3">
               <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço (opcional)" />
             </div>
@@ -382,6 +411,7 @@ export function UnitsPage() {
               <div key={u.id} className="flex items-center justify-between py-3">
                 <div>
                   <div className="text-sm font-medium">{u.name}</div>
+                  <div className="text-xs text-slate-500">{unitCnpjLine(u.name, u.document)}</div>
                   <div className="text-xs text-slate-500">{u.timeZone ?? '—'}</div>
                   <div className="text-xs text-slate-500">{u.address ?? '—'}</div>
                   <div className="text-xs text-slate-500">
@@ -412,6 +442,8 @@ export function UnitsPage() {
                       onClick={() => {
                         setEditingId(u.id);
                         setEditName(u.name);
+                        setEditDocument(u.document ?? '');
+                        setEditLegalName(u.legalName ?? '');
                         setEditTimeZone(u.timeZone ?? 'America/Sao_Paulo');
                         setEditAddress(u.address ?? '');
                         setEditGoogleBusinessUrl(u.googleBusinessUrl ?? '');
