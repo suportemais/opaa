@@ -25,6 +25,7 @@ import { PlansModule } from './plans/plans.module';
 import { PlatformModule } from './platform/platform.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { IntegrationsModule } from './integrations/mm-integrations.module';
+import { VouchersModule } from './vouchers/vouchers.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { IntegrationsModule } from './integrations/mm-integrations.module';
     PlatformModule,
     RewardsModule,
     IntegrationsModule,
+    VouchersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../lib/api';
 
@@ -25,6 +26,21 @@ type MmIntegrationStatus = {
   apiKeyLast4: string | null;
 };
 
+type TenantMe = {
+  document: string | null;
+};
+
+type AdhesionVoucher = {
+  id: string;
+  voucher: string;
+  status: 'unused' | 'used' | 'cancelled' | 'expired';
+  issuer: { cnpj: string; legalName: string; tradeName: string };
+  amountCents: number | null;
+  expiresAt: string;
+  usedAt: string | null;
+  createdAt: string;
+};
+
 function errorMessage(err: unknown): string {
   const code =
     err instanceof ApiError &&
@@ -48,8 +64,59 @@ function errorMessage(err: unknown): string {
     case 'mm_validate_unavailable':
     case 'invalid_mm_validate_response':
       return 'Não foi possível validar a chave no Muito Mais. Tente novamente.';
+    case 'issuer_cnpj_required':
+      return 'Cadastre um CNPJ válido em Empresa para emitir o voucher.';
+    case 'voucher_already_used':
+      return 'Este voucher já foi usado e não pode ser cancelado.';
+    case 'voucher_expired':
+      return 'Este voucher já expirou.';
     default:
       return 'Não foi possível concluir a operação.';
+  }
+}
+
+function digitsOnly(value: string | null | undefined) {
+  return (value ?? '').replace(/\D+/g, '');
+}
+
+function hasIssuerCnpj(document: string | null | undefined) {
+  return digitsOnly(document).length === 14;
+}
+
+function formatCnpj(digits: string) {
+  const raw = digitsOnly(digits);
+  if (raw.length !== 14) return digits;
+  return raw.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
+function formatBRL(cents: number | null | undefined) {
+  if (typeof cents !== 'number' || !Number.isFinite(cents)) return 'Somente vínculo';
+  return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
+}
+
+function centsFromReais(raw: string) {
+  const trimmed = raw.trim().replace(/[R$\s]/g, '');
+  if (!trimmed) return null;
+  const normalized = trimmed.includes(',')
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : trimmed;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100);
+}
+
+function statusLabel(status: AdhesionVoucher['status']) {
+  switch (status) {
+    case 'unused':
+      return 'Disponível';
+    case 'used':
+      return 'Usado';
+    case 'expired':
+      return 'Expirado';
+    case 'cancelled':
+      return 'Cancelado';
+    default:
+      return status;
   }
 }
 
@@ -79,10 +146,56 @@ export function IntegrationsPage() {
   const qc = useQueryClient();
   const [apiKey, setApiKey] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [amountReais, setAmountReais] = useState('');
+  const [validityDays, setValidityDays] = useState('30');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const tenant = useQuery({
+    queryKey: ['tenantMe'],
+    queryFn: () => apiFetch<TenantMe>('/tenant/me'),
+  });
+
+  const vouchers = useQuery({
+    queryKey: ['mm-vouchers'],
+    queryFn: () => apiFetch<AdhesionVoucher[]>('/mm-vouchers'),
+  });
 
   const status = useQuery({
     queryKey: ['integrations-mm'],
     queryFn: () => apiFetch<MmIntegrationStatus>('/integrations/mm'),
+  });
+
+  const mint = useMutation({
+    mutationFn: () => {
+      const amountCents = centsFromReais(amountReais);
+      const days = Number(validityDays);
+      return apiFetch<AdhesionVoucher>('/mm-vouchers', {
+        method: 'POST',
+        json: {
+          ...(amountCents !== null ? { amountCents } : {}),
+          ...(Number.isFinite(days) && days >= 1
+            ? { validityDays: Math.min(365, Math.floor(days)) }
+            : {}),
+        },
+      });
+    },
+    onSuccess: async () => {
+      setVoucherError(null);
+      setAmountReais('');
+      await qc.invalidateQueries({ queryKey: ['mm-vouchers'] });
+    },
+    onError: (err) => setVoucherError(errorMessage(err)),
+  });
+
+  const cancelVoucher = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<AdhesionVoucher>(`/mm-vouchers/${id}/cancel`, { method: 'POST' }),
+    onSuccess: async () => {
+      setVoucherError(null);
+      await qc.invalidateQueries({ queryKey: ['mm-vouchers'] });
+    },
+    onError: (err) => setVoucherError(errorMessage(err)),
   });
 
   const connect = useMutation({
@@ -113,6 +226,7 @@ export function IntegrationsPage() {
 
   const row = status.data;
   const connected = Boolean(row?.connected);
+  const issuerReady = hasIssuerCnpj(tenant.data?.document);
 
   return (
     <div className="grid gap-6">
@@ -124,15 +238,146 @@ export function IntegrationsPage() {
         </nav>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-opiina-navy">Integrações</h1>
         <p className="mt-2 text-sm text-opiina-muted">
-          {connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED}
+          Voucher de 7 dígitos para o cliente aderir no Muito Mais. A chave de API continua opcional
+          para Prêmios.
         </p>
       </div>
 
       <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
-        <div className="mb-6 flex flex-wrap items-center gap-2.5">
-          <div className="text-lg font-semibold text-opiina-navy">Muito Mais</div>
+        <div className="mb-2 text-lg font-semibold text-opiina-navy">Voucher de adesão</div>
+        <p className="mb-5 text-sm text-opiina-muted">
+          O cliente digita o código no cadastro ou já logado no Muito Mais. A empresa é resolvida
+          pelo CNPJ. Uso único, com validade.
+        </p>
+
+        {tenant.data && !issuerReady && (
+          <div className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Cadastre o CNPJ da empresa para emitir.{' '}
+            <Link className="font-medium text-sky-800 underline" to="/app/company">
+              Ir para Empresa
+            </Link>
+          </div>
+        )}
+
+        {issuerReady && tenant.data?.document && (
+          <div className="mb-5 text-sm text-opiina-muted">
+            CNPJ emissor: <span className="font-medium text-opiina-navy">{formatCnpj(tenant.data.document)}</span>
+          </div>
+        )}
+
+        <form
+          className="grid gap-4 md:grid-cols-[1fr_8rem_auto]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setVoucherError(null);
+            mint.mutate();
+          }}
+        >
+          <label>
+            <div className="mb-1.5 text-sm font-medium text-slate-700">Valor (opcional)</div>
+            <input
+              className={FIELD_CLASS}
+              inputMode="decimal"
+              value={amountReais}
+              onChange={(e) => setAmountReais(e.target.value)}
+              placeholder="Ex.: 15,00 — vazio = só vínculo"
+              disabled={!issuerReady}
+            />
+          </label>
+          <label>
+            <div className="mb-1.5 text-sm font-medium text-slate-700">Validade (dias)</div>
+            <input
+              className={FIELD_CLASS}
+              inputMode="numeric"
+              value={validityDays}
+              onChange={(e) => setValidityDays(e.target.value)}
+              disabled={!issuerReady}
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              disabled={mint.isPending || !issuerReady}
+              className="inline-flex h-12 w-full items-center justify-center rounded-full bg-opiina-cta px-6 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {mint.isPending ? 'Gerando...' : 'Gerar voucher'}
+            </button>
+          </div>
+        </form>
+        {voucherError && <div className="mt-3 text-sm text-rose-700">{voucherError}</div>}
+
+        <div className="mt-6 overflow-x-auto">
+          {vouchers.isLoading && <div className="text-sm text-opiina-muted">Carregando vouchers...</div>}
+          {vouchers.data && vouchers.data.length === 0 && (
+            <div className="text-sm text-opiina-muted">Nenhum voucher emitido ainda.</div>
+          )}
+          {vouchers.data && vouchers.data.length > 0 && (
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="pb-2 pr-4 font-medium">Código</th>
+                  <th className="pb-2 pr-4 font-medium">Valor</th>
+                  <th className="pb-2 pr-4 font-medium">Validade</th>
+                  <th className="pb-2 pr-4 font-medium">Status</th>
+                  <th className="pb-2 font-medium"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {vouchers.data.map((item) => (
+                  <tr key={item.id} className="border-t border-slate-100">
+                    <td className="py-3 pr-4 font-mono text-base font-semibold tracking-wider text-opiina-navy">
+                      {item.voucher}
+                    </td>
+                    <td className="py-3 pr-4 text-opiina-muted">{formatBRL(item.amountCents)}</td>
+                    <td className="py-3 pr-4 text-opiina-muted">
+                      {new Date(item.expiresAt).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="py-3 pr-4">{statusLabel(item.status)}</td>
+                    <td className="py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          className="rounded-full border border-opiina-border px-3 py-1.5 text-xs font-medium text-opiina-navy hover:bg-slate-50"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(item.voucher);
+                              setCopiedId(item.id);
+                            } catch {
+                              setVoucherError('Não foi possível copiar o código.');
+                            }
+                          }}
+                        >
+                          {copiedId === item.id ? 'Copiado' : 'Copiar'}
+                        </button>
+                        {item.status === 'unused' && (
+                          <button
+                            type="button"
+                            disabled={cancelVoucher.isPending}
+                            className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            onClick={() => cancelVoucher.mutate(item.id)}
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-2.5">
+          <div className="text-lg font-semibold text-opiina-navy">Chave de API (opcional)</div>
           <StatusBadge connected={connected} />
         </div>
+        <p className="mb-6 text-sm text-opiina-muted">
+          {connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED} Necessária só para Prêmios
+          automaticamente. O voucher de adesão não usa esta chave.
+        </p>
 
         {status.isLoading && <div className="text-sm text-opiina-muted">Carregando...</div>}
         {status.isError && (

@@ -2,6 +2,8 @@
 
 Post-survey reward **emit** is owned by OPIINA. Muito Mais does not generate or store the source of truth for codes. MM validates a code with HMAC (local check of the signed payload) and/or a server-to-server verify call.
 
+This file is **only** the survey `OPIINA_REWARD` / Coupon contract (`/internal/mm/rewards/*`). The 7-digit multi-tenant **adhesion voucher** is a separate table and API — see [mm-adhesion-voucher.md](./mm-adhesion-voucher.md). Do not reuse this redeem model for adhesion.
+
 ## Product rules
 
 - One reward code per `(campaignId, customerKey)`. Extra survey responses for the same customer do not issue another code.
