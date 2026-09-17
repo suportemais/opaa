@@ -2,6 +2,8 @@
 
 **Tenant admin** pastes a Muito Mais API key on **`/app/integracoes`** (Configurações › Integrações). OPIINA validates it server-to-server, then stores **`tenantId ↔ mmCompanyId`** plus an **encrypted** copy of the key. Existing campaigns, coupons, and HMAC voucher verify (`MM_REWARD_*`, global env) are unchanged. Disconnect removes only the link row.
 
+The **7-digit adhesion voucher** (emit on the same page, resolve/consume under `/internal/mm/vouchers/*`) is the natural multi-tenant path and does **not** use this API key. See [mm-adhesion-voucher.md](./mm-adhesion-voucher.md). After that flow is live, this API-key link is optional/legacy. Prêmios stay on the linked company when a key is present.
+
 ## Product rules
 
 - Integrações is **tenant admin only** (`tenant:settings:manage` / `tenant_admin`).

@@ -14,6 +14,16 @@ const COPY = {
   CONFIRM_DISCONNECT: 'Desconectar remove o vínculo. Prêmios param de emitir.',
 } as const;
 
+const VOUCHER_COPY = {
+  TITLE: 'Voucher Muito Mais',
+  MICRO: 'Gere um código de 7 dígitos pra o cliente vincular no Muito Mais.',
+  CTA_GENERATE: 'Gerar voucher',
+  CTA_COPY: 'Copiar',
+  CTA_CANCEL: 'Cancelar',
+  AFTER_GENERATE: 'Copie agora. Cada voucher vale uma vez.',
+  EMPTY: 'Nenhum voucher ativo.',
+} as const;
+
 const FIELD_CLASS =
   'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-500';
 
@@ -23,6 +33,12 @@ type MmIntegrationStatus = {
   tradeName: string | null;
   connectedAt: string | null;
   apiKeyLast4: string | null;
+};
+
+type AdhesionVoucher = {
+  id: string;
+  voucher: string;
+  status: 'unused' | 'used' | 'cancelled' | 'expired';
 };
 
 function errorMessage(err: unknown): string {
@@ -48,6 +64,12 @@ function errorMessage(err: unknown): string {
     case 'mm_validate_unavailable':
     case 'invalid_mm_validate_response':
       return 'Não foi possível validar a chave no Muito Mais. Tente novamente.';
+    case 'issuer_cnpj_required':
+      return 'Cadastre um CNPJ válido em Empresa para emitir o voucher.';
+    case 'voucher_already_used':
+      return 'Este voucher já foi usado e não pode ser cancelado.';
+    case 'voucher_expired':
+      return 'Este voucher já expirou.';
     default:
       return 'Não foi possível concluir a operação.';
   }
@@ -79,10 +101,37 @@ export function IntegrationsPage() {
   const qc = useQueryClient();
   const [apiKey, setApiKey] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [justGenerated, setJustGenerated] = useState(false);
+
+  const vouchers = useQuery({
+    queryKey: ['mm-vouchers'],
+    queryFn: () => apiFetch<AdhesionVoucher[]>('/mm-vouchers'),
+  });
 
   const status = useQuery({
     queryKey: ['integrations-mm'],
     queryFn: () => apiFetch<MmIntegrationStatus>('/integrations/mm'),
+  });
+
+  const mint = useMutation({
+    mutationFn: () => apiFetch<AdhesionVoucher>('/mm-vouchers', { method: 'POST', json: {} }),
+    onSuccess: async () => {
+      setVoucherError(null);
+      setJustGenerated(true);
+      await qc.invalidateQueries({ queryKey: ['mm-vouchers'] });
+    },
+    onError: (err) => setVoucherError(errorMessage(err)),
+  });
+
+  const cancelVoucher = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<AdhesionVoucher>(`/mm-vouchers/${id}/cancel`, { method: 'POST' }),
+    onSuccess: async () => {
+      setVoucherError(null);
+      await qc.invalidateQueries({ queryKey: ['mm-vouchers'] });
+    },
+    onError: (err) => setVoucherError(errorMessage(err)),
   });
 
   const connect = useMutation({
@@ -113,6 +162,7 @@ export function IntegrationsPage() {
 
   const row = status.data;
   const connected = Boolean(row?.connected);
+  const activeVouchers = (vouchers.data ?? []).filter((item) => item.status === 'unused');
 
   return (
     <div className="grid gap-6">
@@ -214,6 +264,63 @@ export function IntegrationsPage() {
             </button>
           </form>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
+        <div className="mb-2 text-lg font-semibold text-opiina-navy">{VOUCHER_COPY.TITLE}</div>
+        <p className="mb-5 text-sm text-opiina-muted">{VOUCHER_COPY.MICRO}</p>
+
+        <button
+          type="button"
+          disabled={mint.isPending}
+          className="inline-flex h-12 items-center justify-center rounded-full bg-opiina-cta px-6 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          onClick={() => mint.mutate()}
+        >
+          {VOUCHER_COPY.CTA_GENERATE}
+        </button>
+        {justGenerated && (
+          <div className="mt-3 text-sm text-opiina-navy">{VOUCHER_COPY.AFTER_GENERATE}</div>
+        )}
+        {voucherError && <div className="mt-3 text-sm text-rose-700">{voucherError}</div>}
+
+        <div className="mt-6">
+          {vouchers.data && activeVouchers.length === 0 && (
+            <div className="text-sm text-opiina-muted">{VOUCHER_COPY.EMPTY}</div>
+          )}
+          {activeVouchers.length > 0 && (
+            <ul className="grid gap-3">
+              {activeVouchers.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 first:border-t-0 first:pt-0"
+                >
+                  <span className="font-mono text-base font-semibold tracking-wider text-opiina-navy">
+                    {item.voucher}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-opiina-border px-3 py-1.5 text-xs font-medium text-opiina-navy hover:bg-slate-50"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(item.voucher);
+                      }}
+                    >
+                      {VOUCHER_COPY.CTA_COPY}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cancelVoucher.isPending}
+                      className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                      onClick={() => cancelVoucher.mutate(item.id)}
+                    >
+                      {VOUCHER_COPY.CTA_CANCEL}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

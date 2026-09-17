@@ -124,6 +124,12 @@ enum CouponStatus {
   cancelled
 }
 
+enum MmAdhesionVoucherStatus {
+  unused
+  used
+  cancelled
+}
+
 enum AuditActorType {
   user
   system
@@ -217,6 +223,7 @@ model Tenant {
   reviewSyncProfiles ReviewSyncProfile[]
   reviews Review[]
   mmIntegration TenantMmIntegration?
+  mmAdhesionVouchers MmAdhesionVoucher[]
 
   @@unique([email])
   @@unique([slug])
@@ -1081,6 +1088,36 @@ model TenantMmIntegration {
 
   @@index([mmCompanyId])
   @@map("tenant_mm_integrations")
+}
+
+/// 7-digit one-time MM adhesion voucher. Attribution is issuer CNPJ, not API key.
+/// Distinct from survey Coupon / OPIINA_REWARD codes.
+model MmAdhesionVoucher {
+  id                String                   @id @default(uuid()) @db.Uuid
+  tenantId          String                   @db.Uuid
+  code              String
+  issuerCnpj        String
+  issuerLegalName   String
+  issuerTradeName   String
+  amountCents       Int?
+  rules             Json?
+  expiresAt         DateTime
+  status            MmAdhesionVoucherStatus  @default(unused)
+  usedAt            DateTime?
+  usedByMmUserId    String?
+  usedByMmCompanyId String?
+  cancelledAt       DateTime?
+  createdByUserId   String?                  @db.Uuid
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([code])
+  @@index([tenantId, createdAt])
+  @@index([issuerCnpj])
+  @@index([status, expiresAt])
+  @@map("mm_adhesion_vouchers")
 }
 
 model Plan {

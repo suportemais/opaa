@@ -104,6 +104,31 @@ export function signVerifyRequest(params: {
   return signHmacSha256Hex(params.secret, `${params.timestamp}.${canonical}`);
 }
 
+export function verifyTimestampedBodies(params: {
+  timestamp: string;
+  signature: string;
+  secret: string;
+  bodies: Array<string | undefined | null>;
+}): boolean {
+  const normalized = normalizeHmacSignature(params.signature);
+  const seen = new Set<string>();
+  for (const body of params.bodies) {
+    if (typeof body !== 'string' || body.length === 0 || seen.has(body)) {
+      continue;
+    }
+    seen.add(body);
+    if (
+      timingSafeEqualHex(
+        signTimestampedBody(params.secret, params.timestamp, body),
+        normalized,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function verifyVerifyRequestSignature(params: {
   timestamp: string;
   body: VerifyRequestBody;
@@ -111,23 +136,15 @@ export function verifyVerifyRequestSignature(params: {
   secret: string;
   rawBody?: string;
 }): boolean {
-  const normalized = normalizeHmacSignature(params.signature);
-  const candidates: string[] = [];
-  if (typeof params.rawBody === 'string' && params.rawBody.length > 0) {
-    candidates.push(params.rawBody);
-  }
   // MM client signs the exact compact JSON `{"code":"..."}`.
   const mmCompact = JSON.stringify({ code: params.body.code });
   const canonical = canonicalizeVerifyRequest(params.body);
-  for (const payload of [mmCompact, canonical]) {
-    if (!candidates.includes(payload)) candidates.push(payload);
-  }
-  return candidates.some((raw) =>
-    timingSafeEqualHex(
-      signTimestampedBody(params.secret, params.timestamp, raw),
-      normalized,
-    ),
-  );
+  return verifyTimestampedBodies({
+    timestamp: params.timestamp,
+    signature: params.signature,
+    secret: params.secret,
+    bodies: [params.rawBody, mmCompact, canonical],
+  });
 }
 
 export function timingSafeEqualHex(expected: string, actual: string): boolean {
