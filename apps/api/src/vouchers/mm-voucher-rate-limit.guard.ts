@@ -1,8 +1,9 @@
 import {
   CanActivate,
   ExecutionContext,
+  HttpException,
+  HttpStatus,
   Injectable,
-  TooManyRequestsException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -58,10 +59,13 @@ export class MmVoucherRateLimitGuard implements CanActivate {
 }
 
 function rateLimited(retryAfterSeconds: number) {
-  return new TooManyRequestsException({
-    message: 'mm_voucher_rate_limited',
-    retryAfterSeconds,
-  });
+  return new HttpException(
+    {
+      message: 'mm_voucher_rate_limited',
+      retryAfterSeconds,
+    },
+    HttpStatus.TOO_MANY_REQUESTS,
+  );
 }
 
 function clientIp(req: {

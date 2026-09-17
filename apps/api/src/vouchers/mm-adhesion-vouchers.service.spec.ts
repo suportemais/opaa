@@ -55,12 +55,14 @@ function setup(opts?: { document?: string | null; tenant?: boolean }) {
     },
     mmAdhesionVoucher: {
       findMany: jest.fn(async () => [unusedRow()]),
-      findUnique: jest.fn(async ({ where }: { where: { id?: string; code?: string } }) => {
-        if (where.code === '1234567' || where.id === unusedRow().id) {
-          return unusedRow();
-        }
-        return null;
-      }),
+      findUnique: jest.fn(
+        async ({ where }: { where: { id?: string; code?: string } }) => {
+          if (where.code === '1234567' || where.id === unusedRow().id) {
+            return unusedRow();
+          }
+          return null;
+        },
+      ),
       findFirst: jest.fn(async ({ where }: { where: { id: string } }) =>
         where.id === unusedRow().id ? unusedRow() : null,
       ),

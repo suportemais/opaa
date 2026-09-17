@@ -111,8 +111,7 @@ describe('MmVouchersController (MM HTTP contract)', () => {
 
   it('consumes with extra MM identity fields signed in the raw body', async () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const rawBody =
-      '{"voucher":"1234567","mmUserId":"u1","mmCompanyId":"c1"}';
+    const rawBody = '{"voucher":"1234567","mmUserId":"u1","mmCompanyId":"c1"}';
     const signature = formatHmacSignatureHeader(
       signTimestampedBody(secret, timestamp, rawBody),
     );

@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MmRewardVerifyResponseInterceptor } from '../rewards/mm-reward-verify-response.interceptor';
-import { ConsumeAdhesionVoucherDto, ResolveAdhesionVoucherDto } from './dto/resolve-adhesion-voucher.dto';
+import {
+  ConsumeAdhesionVoucherDto,
+  ResolveAdhesionVoucherDto,
+} from './dto/resolve-adhesion-voucher.dto';
 import { MmAdhesionVouchersService } from './mm-adhesion-vouchers.service';
 import { MmVoucherHmacGuard } from './mm-voucher-hmac.guard';
 import { MmVoucherRateLimitGuard } from './mm-voucher-rate-limit.guard';
@@ -27,11 +30,13 @@ import { MmVoucherRateLimitGuard } from './mm-voucher-rate-limit.guard';
 })
 @ApiHeader({
   name: 'X-OPIINA-Timestamp',
-  description: 'Legacy inbound timestamp header (same rules as X-MM-Timestamp).',
+  description:
+    'Legacy inbound timestamp header (same rules as X-MM-Timestamp).',
 })
 @ApiHeader({
   name: 'X-OPIINA-Signature',
-  description: 'Legacy inbound signature header (same rules as X-MM-Signature).',
+  description:
+    'Legacy inbound signature header (same rules as X-MM-Signature).',
 })
 @Controller('internal/mm/vouchers')
 @UseGuards(MmVoucherHmacGuard, MmVoucherRateLimitGuard)

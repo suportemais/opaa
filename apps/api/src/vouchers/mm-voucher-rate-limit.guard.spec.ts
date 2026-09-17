@@ -1,4 +1,4 @@
-import { TooManyRequestsException } from '@nestjs/common';
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { MmVoucherRateLimitGuard } from './mm-voucher-rate-limit.guard';
 
 function context(req: Record<string, unknown>) {
@@ -26,8 +26,14 @@ describe('MmVoucherRateLimitGuard', () => {
     };
     expect(guard.canActivate(context(req) as never)).toBe(true);
     expect(guard.canActivate(context(req) as never)).toBe(true);
-    expect(() => guard.canActivate(context(req) as never)).toThrow(
-      TooManyRequestsException,
-    );
+    try {
+      guard.canActivate(context(req) as never);
+      throw new Error('expected rate limit');
+    } catch (err) {
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   });
 });

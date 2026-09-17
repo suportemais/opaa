@@ -18,11 +18,7 @@ import {
 import { parsePositiveInt } from '../domain/vouchers/rate-limit';
 
 export type AdhesionVoucherFailureReason =
-  | 'not_found'
-  | 'expired'
-  | 'used'
-  | 'cancelled'
-  | 'invalid_format';
+  'not_found' | 'expired' | 'used' | 'cancelled' | 'invalid_format';
 
 export type AdhesionVoucherIssuer = {
   cnpj: string;
@@ -173,7 +169,11 @@ export class MmAdhesionVouchersService {
       ? (input.rules as Prisma.InputJsonValue)
       : undefined;
 
-    for (let attempt = 0; attempt < MM_ADHESION_VOUCHER_MINT_ATTEMPTS; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < MM_ADHESION_VOUCHER_MINT_ATTEMPTS;
+      attempt += 1
+    ) {
       const code = generateAdhesionVoucherCode();
       try {
         const row = await this.prisma.mmAdhesionVoucher.create({
@@ -208,7 +208,8 @@ export class MmAdhesionVouchersService {
     if (!row) throw new NotFoundException('voucher_not_found');
 
     const blocked = this.failureReason(row);
-    if (blocked === 'used') throw new BadRequestException('voucher_already_used');
+    if (blocked === 'used')
+      throw new BadRequestException('voucher_already_used');
     if (blocked === 'expired') throw new BadRequestException('voucher_expired');
     if (blocked === 'cancelled') return this.toView(row);
 
@@ -221,7 +222,9 @@ export class MmAdhesionVouchersService {
     return this.toView(updated);
   }
 
-  async resolve(input: { voucher: string }): Promise<ResolveAdhesionVoucherResult> {
+  async resolve(input: {
+    voucher: string;
+  }): Promise<ResolveAdhesionVoucherResult> {
     const loaded = await this.loadByCode(input.voucher);
     if (!loaded.row) {
       return { ok: false, reason: loaded.reason };
@@ -300,7 +303,9 @@ export class MmAdhesionVouchersService {
     };
   }
 
-  private async loadByCode(raw: string): Promise<
+  private async loadByCode(
+    raw: string,
+  ): Promise<
     | { row: StoredVoucher; reason?: never }
     | { row: null; reason: AdhesionVoucherFailureReason }
   > {
@@ -316,7 +321,10 @@ export class MmAdhesionVouchersService {
 
   private failureReason(
     row: StoredVoucher,
-  ): Exclude<AdhesionVoucherFailureReason, 'not_found' | 'invalid_format'> | null {
+  ): Exclude<
+    AdhesionVoucherFailureReason,
+    'not_found' | 'invalid_format'
+  > | null {
     if (row.cancelledAt || row.status === 'cancelled') return 'cancelled';
     if (row.usedAt || row.status === 'used') return 'used';
     if (row.expiresAt.getTime() <= Date.now()) return 'expired';
@@ -326,7 +334,12 @@ export class MmAdhesionVouchersService {
   private failure(
     row: StoredVoucher,
     reason: AdhesionVoucherFailureReason,
-  ): { ok: false; reason: AdhesionVoucherFailureReason; voucher: string; usedAt?: string } {
+  ): {
+    ok: false;
+    reason: AdhesionVoucherFailureReason;
+    voucher: string;
+    usedAt?: string;
+  } {
     return {
       ok: false,
       reason,
@@ -369,7 +382,9 @@ export class MmAdhesionVouchersService {
   }
 }
 
-function asRules(value: Prisma.JsonValue | null): Record<string, unknown> | null {
+function asRules(
+  value: Prisma.JsonValue | null,
+): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 }
