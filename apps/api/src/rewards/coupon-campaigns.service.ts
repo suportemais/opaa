@@ -7,10 +7,20 @@ import { CouponCampaignStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
 import { formatRewardAmountBrl } from '../domain/rewards/code';
+import {
+  rewardUnitContract,
+  snapshotUnitIssuer,
+  type RewardUnitSnapshot,
+} from '../domain/rewards/unit-issuer';
 import type { CreateCouponCampaignDto } from './dto/create-coupon-campaign.dto';
 import type { UpdateCouponCampaignDto } from './dto/update-coupon-campaign.dto';
 
 const V1_PER_CUSTOMER_LIMIT = 1;
+
+const CAMPAIGN_INCLUDE = {
+  survey: { select: { id: true, name: true } },
+  unit: { select: { id: true, name: true, document: true, legalName: true } },
+} as const;
 
 @Injectable()
 export class CouponCampaignsService {
@@ -19,7 +29,7 @@ export class CouponCampaignsService {
   async list(user: AuthUser) {
     const rows = await this.prisma.couponCampaign.findMany({
       where: { tenantId: user.tenantId },
-      include: { survey: { select: { id: true, name: true } } },
+      include: CAMPAIGN_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
     return this.withKpis(user.tenantId, rows);
@@ -28,7 +38,7 @@ export class CouponCampaignsService {
   async getById(user: AuthUser, id: string) {
     const row = await this.prisma.couponCampaign.findFirst({
       where: { id, tenantId: user.tenantId },
-      include: { survey: { select: { id: true, name: true } } },
+      include: CAMPAIGN_INCLUDE,
     });
     if (!row) throw new NotFoundException('campaign_not_found');
     const [mapped] = await this.withKpis(user.tenantId, [row]);
@@ -40,6 +50,7 @@ export class CouponCampaignsService {
     if (!mmCompanyId) throw new BadRequestException('mm_company_id_required');
     await this.assertSurvey(user.tenantId, dto.surveyId);
     await this.assertMmCompany(user.tenantId, mmCompanyId);
+    const unit = await this.resolveCampaignUnit(user, dto.unitId);
 
     const status: CouponCampaignStatus =
       dto.activate === false ? 'draft' : 'active';
@@ -63,8 +74,9 @@ export class CouponCampaignsService {
         rewardEnabled: true,
         rewardAmountCents: dto.rewardAmountCents,
         validityDays: dto.validityDays ?? null,
+        ...unit,
       },
-      include: { survey: { select: { id: true, name: true } } },
+      include: CAMPAIGN_INCLUDE,
     });
 
     if (status === 'active') {
@@ -91,6 +103,14 @@ export class CouponCampaignsService {
     if (dto.mmCompanyId !== undefined) {
       await this.assertMmCompany(user.tenantId, dto.mmCompanyId.trim());
     }
+
+    const nextStatus = dto.status ?? existing.status;
+    const unit = await this.resolveUnitForUpdate(
+      user,
+      existing,
+      dto,
+      nextStatus,
+    );
 
     const rewardAmountCents =
       dto.rewardAmountCents ?? existing.rewardAmountCents ?? undefined;
@@ -133,9 +153,10 @@ export class CouponCampaignsService {
           dto.validityDays !== undefined
             ? dto.validityDays
             : existing.validityDays,
-        status: dto.status ?? existing.status,
+        status: nextStatus,
+        ...unit,
       },
-      include: { survey: { select: { id: true, name: true } } },
+      include: CAMPAIGN_INCLUDE,
     });
 
     if (updated.status === 'active' && updated.surveyId) {
@@ -175,10 +196,69 @@ export class CouponCampaignsService {
     if (!survey) throw new BadRequestException('survey_not_found');
   }
 
+  private async resolveUnitForUpdate(
+    user: AuthUser,
+    existing: {
+      unitId: string | null;
+      issuerCnpj: string | null;
+      issuerLegalName: string | null;
+      issuerTradeName: string | null;
+    },
+    dto: UpdateCouponCampaignDto,
+    nextStatus: CouponCampaignStatus,
+  ): Promise<RewardUnitSnapshot | Record<string, never>> {
+    if (dto.unitId !== undefined) {
+      return this.resolveCampaignUnit(user, dto.unitId);
+    }
+    if (existing.unitId && existing.issuerCnpj) {
+      return {};
+    }
+    if (nextStatus === 'active') {
+      return this.resolveCampaignUnit(user, existing.unitId);
+    }
+    return {};
+  }
+
+  private async resolveCampaignUnit(
+    user: AuthUser,
+    unitId?: string | null,
+  ): Promise<RewardUnitSnapshot> {
+    const requested = unitId?.trim() || '';
+    const units = await this.prisma.unit.findMany({
+      where: { tenantId: user.tenantId },
+      select: { id: true, name: true, document: true, legalName: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (requested) {
+      const unit = units.find((row) => row.id === requested);
+      if (!unit) throw new NotFoundException('unit_not_found');
+      return this.requireIssuer(unit);
+    }
+
+    if (units.length === 1) return this.requireIssuer(units[0]);
+    throw new BadRequestException('unit_required');
+  }
+
+  private requireIssuer(unit: {
+    id: string;
+    name: string;
+    document: string | null;
+    legalName: string | null;
+  }): RewardUnitSnapshot {
+    const snap = snapshotUnitIssuer(unit);
+    if (!snap) throw new BadRequestException('issuer_cnpj_required');
+    return snap;
+  }
+
   private async withKpis<
     T extends {
       id: string;
       survey: { id: string; name: string } | null;
+      unitId: string | null;
+      issuerCnpj: string | null;
+      issuerLegalName: string | null;
+      issuerTradeName: string | null;
     },
   >(tenantId: string, rows: T[]) {
     const ids = rows.map((row) => row.id);
@@ -216,6 +296,7 @@ export class CouponCampaignsService {
       surveyName: row.survey?.name ?? null,
       issuedCount: issuedBy.get(row.id) ?? 0,
       redeemedCount: redeemedBy.get(row.id) ?? 0,
+      ...rewardUnitContract(row),
     }));
   }
 }

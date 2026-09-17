@@ -16,6 +16,7 @@ import {
   type RewardSignedPayload,
 } from '../domain/rewards/hmac';
 import { renderRewardWhatsappMessage } from '../domain/rewards/whatsapp-message';
+import { rewardUnitContract } from '../domain/rewards/unit-issuer';
 
 export const REWARD_WHATSAPP_EVENT_TYPE = 'reward.whatsapp.send';
 
@@ -46,6 +47,10 @@ type EligibleCampaign = {
   validityDays: number | null;
   endsAt: Date | null;
   totalLimit: number | null;
+  unitId: string;
+  issuerCnpj: string;
+  issuerLegalName: string;
+  issuerTradeName: string;
 };
 
 @Injectable()
@@ -69,9 +74,15 @@ export class RewardEmitService {
       return { status: 'skipped', reason: 'survey_not_found' };
     }
 
+    const response = await this.prisma.surveyResponse.findFirst({
+      where: { id: input.surveyResponseId, tenantId: input.tenantId },
+      select: { unitId: true },
+    });
+
     const campaign = await this.findEligibleCampaign(
       input.tenantId,
       input.surveyId,
+      response?.unitId ?? null,
     );
     if (!campaign) {
       return { status: 'skipped', reason: 'no_eligible_campaign' };
@@ -123,6 +134,10 @@ export class RewardEmitService {
       amountCents: number | null;
       mmCompanyId: string | null;
       expiresAt: Date | null;
+      unitId: string | null;
+      issuerCnpj: string | null;
+      issuerLegalName: string | null;
+      issuerTradeName: string | null;
     } | null = null;
 
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -140,6 +155,10 @@ export class RewardEmitService {
             mmCompanyId: campaign.mmCompanyId,
             surveyResponseId: input.surveyResponseId,
             expiresAt,
+            unitId: campaign.unitId,
+            issuerCnpj: campaign.issuerCnpj,
+            issuerLegalName: campaign.issuerLegalName,
+            issuerTradeName: campaign.issuerTradeName,
           },
           select: {
             id: true,
@@ -147,6 +166,10 @@ export class RewardEmitService {
             amountCents: true,
             mmCompanyId: true,
             expiresAt: true,
+            unitId: true,
+            issuerCnpj: true,
+            issuerLegalName: true,
+            issuerTradeName: true,
           },
         });
         break;
@@ -214,6 +237,12 @@ export class RewardEmitService {
           deepLinkPath: `/app?voucher=${encodeURIComponent(created.code)}`,
           amountCents: signedPayload.amountCents,
           mmCompanyId: signedPayload.mmCompanyId,
+          ...rewardUnitContract({
+            unitId: created.unitId,
+            issuerCnpj: created.issuerCnpj,
+            issuerLegalName: created.issuerLegalName,
+            issuerTradeName: created.issuerTradeName,
+          }),
           campaignId: campaign.id,
           customerKey: customerKey.key,
           expiresAt: signedPayload.expiresAt,
@@ -245,6 +274,7 @@ export class RewardEmitService {
   private async findEligibleCampaign(
     tenantId: string,
     surveyId: string,
+    responseUnitId: string | null,
   ): Promise<EligibleCampaign | null> {
     const now = new Date();
     const row = await this.prisma.couponCampaign.findFirst({
@@ -255,6 +285,8 @@ export class RewardEmitService {
         rewardEnabled: true,
         mmCompanyId: { not: null },
         rewardAmountCents: { gt: 0 },
+        unitId: responseUnitId ?? { not: null },
+        issuerCnpj: { not: null },
         AND: [
           { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
           { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
@@ -270,12 +302,17 @@ export class RewardEmitService {
         validityDays: true,
         endsAt: true,
         totalLimit: true,
+        unitId: true,
+        issuerCnpj: true,
+        issuerLegalName: true,
+        issuerTradeName: true,
       },
     });
 
     if (!row?.mmCompanyId || row.mmCompanyId.trim().length === 0) return null;
     if (typeof row.rewardAmountCents !== 'number' || row.rewardAmountCents <= 0)
       return null;
+    if (!row.unitId || !row.issuerCnpj) return null;
 
     return {
       id: row.id,
@@ -286,6 +323,10 @@ export class RewardEmitService {
       validityDays: row.validityDays,
       endsAt: row.endsAt,
       totalLimit: row.totalLimit,
+      unitId: row.unitId,
+      issuerCnpj: row.issuerCnpj,
+      issuerLegalName: row.issuerLegalName ?? '',
+      issuerTradeName: row.issuerTradeName ?? '',
     };
   }
 

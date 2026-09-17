@@ -337,6 +337,8 @@ model Unit {
   customers   Customer[]
   feedbackCases FeedbackCase[]
   couponRedemptions CouponRedemption[]
+  couponCampaigns CouponCampaign[]
+  coupons Coupon[]
   reviewLinks PublicReviewLink[]
   customerInteractions CustomerInteraction[] @relation("CustomerInteractionUnit")
   whistleblowerReports WhistleblowerReport[]
@@ -878,15 +880,23 @@ model CouponCampaign {
   rewardEnabled Boolean @default(false)
   rewardAmountCents Int?
   validityDays Int?
+  /// Prêmios lock: 1 campaign → 1 unit. Snapshot at create/update; never tenant/matriz.
+  unitId       String? @db.Uuid
+  issuerCnpj   String?
+  issuerLegalName String?
+  issuerTradeName String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   tenant       Tenant @relation(fields: [tenantId], references: [id])
   survey       Survey? @relation(fields: [surveyId], references: [id], onDelete: SetNull)
+  unit         Unit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
   coupons      Coupon[]
 
   @@index([tenantId, status])
   @@index([tenantId, surveyId, status])
+  @@index([tenantId, unitId])
+  @@index([issuerCnpj])
   @@map("coupon_campaigns")
 }
 
@@ -906,17 +916,24 @@ model Coupon {
   amountCents  Int?
   mmCompanyId  String?
   surveyResponseId String? @db.Uuid
+  unitId       String? @db.Uuid
+  issuerCnpj   String?
+  issuerLegalName String?
+  issuerTradeName String?
 
   tenant       Tenant @relation(fields: [tenantId], references: [id])
   campaign     CouponCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   surveyResponse SurveyResponse? @relation(fields: [surveyResponseId], references: [id], onDelete: SetNull)
+  unit         Unit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
   redemptions  CouponRedemption[]
 
   @@unique([tenantId, code])
   @@unique([campaignId, customerKey])
   @@index([tenantId, status])
   @@index([tenantId, customerKey])
+  @@index([unitId])
+  @@index([issuerCnpj])
   @@map("coupons")
 }
 

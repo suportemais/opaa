@@ -30,6 +30,11 @@ export class UpdateCouponCampaignDto {
   @MinLength(1)
   mmCompanyId?: string;
 
+  /** Re-snapshots the unit CNPJ when set. Required to activate a campaign without a unit. */
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

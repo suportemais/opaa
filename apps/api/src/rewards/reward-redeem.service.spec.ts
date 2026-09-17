@@ -16,6 +16,10 @@ function couponRow(overrides: Record<string, unknown> = {}) {
     cancelledAt: null,
     redeemedAt: null,
     expiresAt,
+    unitId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    issuerCnpj: '33000167000101',
+    issuerLegalName: 'Centro Alimentos LTDA',
+    issuerTradeName: 'Unidade Centro',
     ...overrides,
   };
 }
@@ -55,6 +59,13 @@ describe('RewardRedeemService', () => {
       amountCents: 1500,
       mmCompanyId: 'mm-company-gepos',
       campaignId: 'camp-1',
+      cnpj: '33000167000101',
+      unitId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      issuer: {
+        cnpj: '33000167000101',
+        legalName: 'Centro Alimentos LTDA',
+        tradeName: 'Unidade Centro',
+      },
     });
     if (result.ok) {
       expect(result.redeemedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -69,7 +80,8 @@ describe('RewardRedeemService', () => {
         tenantId: 'tenant-a',
         couponId: 'c1',
         customerId: 'cust-1',
-        metadata: { source: 'mm' },
+        unitId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        metadata: { source: 'mm', cnpj: '33000167000101' },
       }),
     });
   });

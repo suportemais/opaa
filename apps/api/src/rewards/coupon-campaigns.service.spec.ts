@@ -1,7 +1,23 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CouponCampaignsService } from './coupon-campaigns.service';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
+
+const UNIT_A = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  name: 'Unidade Centro',
+  document: '33000167000101',
+  legalName: 'Centro Alimentos LTDA',
+};
+
+const UNIT_B = {
+  id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  name: 'Unidade Shopping',
+  document: '00000000000191',
+  legalName: 'Shopping Alimentos LTDA',
+};
+
+const TENANT_MATRIZ_CNPJ = '00360305000104';
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -17,7 +33,8 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
   };
 }
 
-function setup() {
+function setup(opts?: { units?: (typeof UNIT_A)[] }) {
+  const units = opts?.units ?? [UNIT_A];
   const created = {
     id: 'camp-1',
     tenantId: 'tenant-a',
@@ -36,14 +53,29 @@ function setup() {
     rewardEnabled: true,
     rewardAmountCents: 1500,
     validityDays: 30,
+    unitId: UNIT_A.id,
+    issuerCnpj: UNIT_A.document,
+    issuerLegalName: UNIT_A.legalName,
+    issuerTradeName: UNIT_A.name,
     createdAt: new Date(),
     updatedAt: new Date(),
     survey: { id: 'survey-1', name: 'NPS loja' },
+    unit: UNIT_A,
   };
   const prisma = {
     survey: {
       findFirst: jest.fn().mockResolvedValue({ id: 'survey-1' }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    unit: {
+      findMany: jest.fn().mockResolvedValue(units),
+    },
+    tenant: {
+      findUnique: jest.fn().mockResolvedValue({
+        document: TENANT_MATRIZ_CNPJ,
+        legalName: 'Matriz LTDA',
+        tradeName: 'Matriz',
+      }),
     },
     couponCampaign: {
       findMany: jest.fn().mockResolvedValue([created]),
@@ -56,6 +88,7 @@ function setup() {
             ...created,
             ...data,
             survey: created.survey,
+            unit: created.unit,
           }),
         ),
     },
@@ -63,7 +96,8 @@ function setup() {
       groupBy: jest
         .fn()
         .mockResolvedValueOnce([{ campaignId: 'camp-1', _count: { _all: 4 } }])
-        .mockResolvedValueOnce([{ campaignId: 'camp-1', _count: { _all: 1 } }]),
+        .mockResolvedValueOnce([{ campaignId: 'camp-1', _count: { _all: 1 } }])
+        .mockResolvedValue([]),
     },
     tenantMmIntegration: {
       findUnique: jest.fn().mockResolvedValue({ mmCompanyId: 'mm-co-1' }),
@@ -97,9 +131,21 @@ describe('CouponCampaignsService', () => {
           rewardAmountCents: 1500,
           status: 'active',
           surveyId: 'survey-1',
+          unitId: UNIT_A.id,
+          issuerCnpj: UNIT_A.document,
+          issuerLegalName: UNIT_A.legalName,
+          issuerTradeName: UNIT_A.name,
         }),
       }),
     );
+    expect(row.issuer).toEqual({
+      cnpj: UNIT_A.document,
+      legalName: UNIT_A.legalName,
+      tradeName: UNIT_A.name,
+    });
+    expect(row.cnpj).toBe(UNIT_A.document);
+    expect(row.cnpj).not.toBe(TENANT_MATRIZ_CNPJ);
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
     expect(prisma.survey.updateMany).toHaveBeenCalledWith({
       where: { id: 'survey-1', tenantId: 'tenant-a' },
       data: { enableCoupon: true },
@@ -151,6 +197,104 @@ describe('CouponCampaignsService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.couponCampaign.create).not.toHaveBeenCalled();
+  });
+
+  it('auto-selects the only unit and snapshots its CNPJ (never tenant/matriz)', async () => {
+    const { service, prisma } = setup();
+    await service.create(user(), {
+      name: 'Pós-pesquisa MM',
+      surveyId: 'survey-1',
+      mmCompanyId: 'mm-co-1',
+      rewardAmountCents: 1500,
+    });
+    expect(prisma.couponCampaign.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          unitId: UNIT_A.id,
+          issuerCnpj: UNIT_A.document,
+        }),
+      }),
+    );
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('requires unitId when the tenant has multiple units', async () => {
+    const { service, prisma } = setup({ units: [UNIT_A, UNIT_B] });
+    await expect(
+      service.create(user(), {
+        name: 'X',
+        surveyId: 'survey-1',
+        mmCompanyId: 'mm-co-1',
+        rewardAmountCents: 100,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        constructor: BadRequestException,
+        message: expect.stringMatching(/unit_required/),
+      }),
+    );
+    expect(prisma.couponCampaign.create).not.toHaveBeenCalled();
+  });
+
+  it('snapshots unit A vs unit B with different issuer CNPJs', async () => {
+    const { service, prisma } = setup({ units: [UNIT_A, UNIT_B] });
+    await service.create(user(), {
+      name: 'A',
+      surveyId: 'survey-1',
+      mmCompanyId: 'mm-co-1',
+      rewardAmountCents: 100,
+      unitId: UNIT_A.id,
+    });
+    await service.create(user(), {
+      name: 'B',
+      surveyId: 'survey-1',
+      mmCompanyId: 'mm-co-1',
+      rewardAmountCents: 100,
+      unitId: UNIT_B.id,
+    });
+    const snaps = prisma.couponCampaign.create.mock.calls.map(
+      (call) => call[0].data as { issuerCnpj: string; unitId: string },
+    );
+    expect(snaps.map((row) => row.issuerCnpj)).toEqual([
+      UNIT_A.document,
+      UNIT_B.document,
+    ]);
+    expect(snaps[0].issuerCnpj).not.toBe(snaps[1].issuerCnpj);
+  });
+
+  it('rejects create when the unit has no CNPJ', async () => {
+    const { service, prisma } = setup({
+      units: [{ ...UNIT_A, document: null as never }],
+    });
+    await expect(
+      service.create(user(), {
+        name: 'X',
+        surveyId: 'survey-1',
+        mmCompanyId: 'mm-co-1',
+        rewardAmountCents: 100,
+        unitId: UNIT_A.id,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        constructor: BadRequestException,
+        message: expect.stringMatching(/issuer_cnpj_required/),
+      }),
+    );
+    expect(prisma.couponCampaign.create).not.toHaveBeenCalled();
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown unitId', async () => {
+    const { service } = setup({ units: [UNIT_A] });
+    await expect(
+      service.create(user(), {
+        name: 'X',
+        surveyId: 'survey-1',
+        mmCompanyId: 'mm-co-1',
+        rewardAmountCents: 100,
+        unitId: UNIT_B.id,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('pauses instead of deleting and keeps perCustomerLimit at 1', async () => {

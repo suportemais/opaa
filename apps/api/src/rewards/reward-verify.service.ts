@@ -6,6 +6,10 @@ import {
   signRewardPayload,
   type RewardSignedPayload,
 } from '../domain/rewards/hmac';
+import {
+  rewardUnitContract,
+  type RewardIssuer,
+} from '../domain/rewards/unit-issuer';
 
 export type VerifyRewardInput = {
   code: string;
@@ -26,6 +30,12 @@ export type VerifyRewardResult = {
   status?: string;
   signature?: string | null;
   signedPayload?: RewardSignedPayload;
+  cnpj?: string | null;
+  legalName?: string | null;
+  tradeName?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  issuer?: RewardIssuer | null;
 };
 
 @Injectable()
@@ -55,6 +65,10 @@ export class RewardVerifyService {
         campaignId: true,
         cancelledAt: true,
         redeemedAt: true,
+        unitId: true,
+        issuerCnpj: true,
+        issuerLegalName: true,
+        issuerTradeName: true,
       },
     });
 
@@ -133,6 +147,7 @@ export class RewardVerifyService {
       status: coupon.status,
       signature,
       signedPayload,
+      ...rewardUnitContract(coupon),
     };
   }
 }

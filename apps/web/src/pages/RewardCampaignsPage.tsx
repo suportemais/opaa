@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../lib/api';
+import { ApiError, apiFetch } from '../lib/api';
+import { unitCnpjLine } from '../lib/cnpj';
 import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
 import { isActiveSurvey } from '../lib/survey-list';
 
@@ -22,7 +23,24 @@ type RewardCampaign = {
   perCustomerLimit: number;
   issuedCount: number;
   redeemedCount: number;
+  unitId?: string | null;
+  unitName?: string | null;
+  cnpj?: string | null;
+  issuer?: { cnpj: string; legalName: string; tradeName: string } | null;
 };
+
+type Unit = {
+  id: string;
+  name: string;
+  document: string | null;
+  legalName?: string | null;
+};
+
+const UNIT_COPY = {
+  LABEL: 'Unidade',
+  MULTI: 'Escolha a unidade antes de gerar',
+  MICRO: 'O voucher vincula no Muito Mais pelo CNPJ desta unidade.',
+} as const;
 
 /** Muito Mais Company.id + Company.tradeName — never an establishment. */
 type MmCompany = { id: string; tradeName: string };
@@ -39,6 +57,15 @@ const DESIGN_PREVIEW_SURVEYS: Survey[] = [
 
 const DESIGN_PREVIEW_COMPANIES: MmCompany[] = [
   { id: 'mm-company-gepos', tradeName: 'Grupo Geppos' },
+];
+
+const DESIGN_PREVIEW_UNITS: Unit[] = [
+  {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    name: 'Unidade Centro',
+    document: '33000167000101',
+    legalName: 'Centro Alimentos LTDA',
+  },
 ];
 
 const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
@@ -58,6 +85,14 @@ const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
     perCustomerLimit: 1,
     issuedCount: 128,
     redeemedCount: 47,
+    unitId: DESIGN_PREVIEW_UNITS[0].id,
+    unitName: DESIGN_PREVIEW_UNITS[0].name,
+    cnpj: DESIGN_PREVIEW_UNITS[0].document,
+    issuer: {
+      cnpj: DESIGN_PREVIEW_UNITS[0].document!,
+      legalName: DESIGN_PREVIEW_UNITS[0].legalName!,
+      tradeName: DESIGN_PREVIEW_UNITS[0].name,
+    },
   },
   {
     id: 'c2',
@@ -75,6 +110,9 @@ const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
     perCustomerLimit: 1,
     issuedCount: 56,
     redeemedCount: 12,
+    unitId: DESIGN_PREVIEW_UNITS[0].id,
+    unitName: DESIGN_PREVIEW_UNITS[0].name,
+    cnpj: DESIGN_PREVIEW_UNITS[0].document,
   },
   {
     id: 'c3',
@@ -92,8 +130,40 @@ const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
     perCustomerLimit: 1,
     issuedCount: 210,
     redeemedCount: 98,
+    unitId: DESIGN_PREVIEW_UNITS[0].id,
+    unitName: DESIGN_PREVIEW_UNITS[0].name,
+    cnpj: DESIGN_PREVIEW_UNITS[0].document,
   },
 ];
+
+function campaignFormError(err: unknown): string {
+  const code =
+    err instanceof ApiError &&
+    typeof err.body === 'object' &&
+    err.body &&
+    'message' in err.body
+      ? String((err.body as { message?: unknown }).message)
+      : err instanceof Error
+        ? err.message
+        : '';
+
+  switch (code) {
+    case 'issuer_cnpj_required':
+      return 'Cadastre um CNPJ válido nesta unidade para emitir o voucher.';
+    case 'unit_required':
+      return UNIT_COPY.MULTI;
+    case 'unit_not_found':
+      return 'Unidade não encontrada.';
+    case 'invalid_document':
+      return 'Informe um CNPJ válido da unidade.';
+    default:
+      return err instanceof Error ? err.message : 'Falha ao salvar a campanha.';
+  }
+}
+
+function campaignUnitLine(row: RewardCampaign): string {
+  return unitCnpjLine(row.unitName || row.issuer?.tradeName || 'Unidade', row.cnpj || row.issuer?.cnpj);
+}
 
 function isDesignPreview() {
   if (!import.meta.env.DEV) return false;
@@ -186,6 +256,11 @@ export function RewardCampaignsPage() {
     staleTime: 60 * 1000,
     enabled: !preview,
   });
+  const units = useQuery({
+    queryKey: ['units'],
+    queryFn: () => apiFetch<Unit[]>('/units'),
+    enabled: !preview,
+  });
   const surveyRows = useMemo(
     () =>
       preview
@@ -201,12 +276,17 @@ export function RewardCampaignsPage() {
     () => (preview ? DESIGN_PREVIEW_COMPANIES : (mmCompanies.data ?? [])),
     [preview, mmCompanies.data],
   );
+  const unitRows = useMemo(
+    () => (preview ? DESIGN_PREVIEW_UNITS : (units.data ?? [])),
+    [preview, units.data],
+  );
 
   const [mode, setMode] = useState<'list' | 'form'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [surveyId, setSurveyId] = useState('');
   const [mmCompanyId, setMmCompanyId] = useState('');
+  const [unitId, setUnitId] = useState('');
   const [amountReais, setAmountReais] = useState('10,00');
   const [validityDays, setValidityDays] = useState('30');
   const [startsAt, setStartsAt] = useState('');
@@ -221,6 +301,12 @@ export function RewardCampaignsPage() {
 
   const defaultSurveyId = useMemo(() => surveyRows[0]?.id ?? '', [surveyRows]);
   const defaultCompanyId = companyOptions[0]?.id ?? '';
+  const isMultiUnit = unitRows.length > 1;
+  const selectedUnit = useMemo(() => {
+    return unitRows.find((item) => item.id === unitId) ?? (unitRows.length === 1 ? unitRows[0] : undefined);
+  }, [unitRows, unitId]);
+  const selectedUnitId = selectedUnit?.id ?? '';
+  const selectedHasCnpj = Boolean(selectedUnit?.document?.trim());
 
   useEffect(() => {
     if (!surveyId && defaultSurveyId) setSurveyId(defaultSurveyId);
@@ -230,11 +316,16 @@ export function RewardCampaignsPage() {
     if (!mmCompanyId && defaultCompanyId) setMmCompanyId(defaultCompanyId);
   }, [defaultCompanyId, mmCompanyId]);
 
+  useEffect(() => {
+    if (unitRows.length === 1) setUnitId(unitRows[0].id);
+  }, [unitRows]);
+
   function resetForm() {
     setEditingId(null);
     setName('');
     setSurveyId(defaultSurveyId);
     setMmCompanyId(defaultCompanyId);
+    setUnitId(unitRows.length === 1 ? unitRows[0].id : '');
     setAmountReais('10,00');
     setValidityDays('30');
     setStartsAt('');
@@ -253,6 +344,7 @@ export function RewardCampaignsPage() {
     setName(row.name);
     setSurveyId(row.surveyId ?? defaultSurveyId);
     setMmCompanyId(row.mmCompanyId ?? defaultCompanyId);
+    setUnitId(row.unitId ?? (unitRows.length === 1 ? unitRows[0].id : ''));
     setAmountReais(reaisFromCents(row.rewardAmountCents) || '10,00');
     setValidityDays(row.validityDays ? String(row.validityDays) : '');
     setStartsAt(toDateTimeLocal(row.startsAt));
@@ -272,6 +364,11 @@ export function RewardCampaignsPage() {
     if (!name.trim()) throw new Error('Informe o nome da campanha.');
     if (!surveyId) throw new Error('Selecione a pesquisa elegível.');
     if (!mmCompanyId.trim()) throw new Error('Selecione a empresa Muito Mais.');
+    if (isMultiUnit && !selectedUnitId) throw new Error(UNIT_COPY.MULTI);
+    if (!selectedUnitId) throw new Error(UNIT_COPY.MULTI);
+    if (!selectedHasCnpj) {
+      throw new Error('Cadastre um CNPJ válido nesta unidade para emitir o voucher.');
+    }
     if (!rewardAmountCents) throw new Error('Informe um valor em R$ maior que zero.');
     const days = validityDays.trim() ? Number(validityDays) : undefined;
     if (days != null && (!Number.isInteger(days) || days < 1))
@@ -280,6 +377,7 @@ export function RewardCampaignsPage() {
       name: name.trim(),
       surveyId,
       mmCompanyId: mmCompanyId.trim(),
+      unitId: selectedUnitId,
       rewardAmountCents,
       validityDays: days,
       startsAt: fromDateTimeLocal(startsAt),
@@ -308,7 +406,7 @@ export function RewardCampaignsPage() {
       await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
     },
     onError: (err) => {
-      setFormError(err instanceof Error ? err.message : 'Falha ao salvar a campanha.');
+      setFormError(campaignFormError(err));
     },
   });
 
@@ -359,6 +457,12 @@ export function RewardCampaignsPage() {
           companyOptions={companyOptions}
           companiesLoading={preview ? false : mmCompanies.isLoading}
           companiesError={preview ? false : mmCompanies.isError}
+          unitId={unitId}
+          setUnitId={setUnitId}
+          unitRows={unitRows}
+          selectedUnit={selectedUnit}
+          isMultiUnit={isMultiUnit}
+          unitsLoading={preview ? false : units.isLoading}
           amountReais={amountReais}
           setAmountReais={setAmountReais}
           validityDays={validityDays}
@@ -431,6 +535,7 @@ export function RewardCampaignsPage() {
                   <tr className="border-b border-opiina-border text-opiina-muted">
                     <th className="px-5 py-3.5 font-medium">Nome</th>
                     <th className="px-5 py-3.5 font-medium">Pesquisa</th>
+                    <th className="px-5 py-3.5 font-medium">Unidade</th>
                     <th className="px-5 py-3.5 font-medium">Valor</th>
                     <th className="px-5 py-3.5 font-medium">Status</th>
                     <th className="px-5 py-3.5 font-medium">Emitidos</th>
@@ -443,6 +548,9 @@ export function RewardCampaignsPage() {
                     <tr key={row.id} className="border-t border-opiina-border">
                       <td className="px-5 py-4 font-medium text-opiina-navy">{row.name}</td>
                       <td className="px-5 py-4 text-opiina-navy">{row.surveyName ?? '—'}</td>
+                      <td className="px-5 py-4 text-opiina-navy">
+                        {row.unitId || row.cnpj || row.issuer ? campaignUnitLine(row) : '—'}
+                      </td>
                       <td className="px-5 py-4 text-opiina-navy">
                         {formatBRL(row.rewardAmountCents)}
                       </td>
@@ -492,6 +600,12 @@ function CampaignCard(props: {
         <div>
           <dt className="text-opiina-muted">Pesquisa</dt>
           <dd className="mt-0.5 font-medium text-opiina-navy">{row.surveyName ?? '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-opiina-muted">Unidade</dt>
+          <dd className="mt-0.5 font-medium text-opiina-navy">
+            {row.unitId || row.cnpj || row.issuer ? campaignUnitLine(row) : '—'}
+          </dd>
         </div>
         <div>
           <dt className="text-opiina-muted">Valor</dt>
@@ -585,6 +699,12 @@ function CampaignForm(props: {
   companyOptions: MmCompanyOption[];
   companiesLoading: boolean;
   companiesError: boolean;
+  unitId: string;
+  setUnitId: (v: string) => void;
+  unitRows: Unit[];
+  selectedUnit?: Unit;
+  isMultiUnit: boolean;
+  unitsLoading: boolean;
   amountReais: string;
   setAmountReais: (v: string) => void;
   validityDays: string;
@@ -680,6 +800,55 @@ function CampaignForm(props: {
                 .
               </div>
             )}
+        </label>
+        <label>
+          <FieldLabel>{UNIT_COPY.LABEL}</FieldLabel>
+          {props.isMultiUnit ? (
+            <select
+              className={FIELD_CLASS}
+              value={props.unitId}
+              onChange={(e) => props.setUnitId(e.target.value)}
+              disabled={props.unitsLoading}
+            >
+              <option value="">{UNIT_COPY.MULTI}</option>
+              {props.unitRows.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {unitCnpjLine(item.name, item.document)}
+                </option>
+              ))}
+            </select>
+          ) : props.selectedUnit ? (
+            <div className="flex h-12 items-center text-sm font-medium text-opiina-navy">
+              {unitCnpjLine(props.selectedUnit.name, props.selectedUnit.document)}
+            </div>
+          ) : (
+            <div className="flex h-12 items-center text-sm text-opiina-muted">
+              {props.unitsLoading ? 'Carregando...' : UNIT_COPY.MULTI}
+            </div>
+          )}
+          {props.isMultiUnit && props.selectedUnit && (
+            <div className="mt-2 text-sm font-medium text-opiina-navy">
+              {unitCnpjLine(props.selectedUnit.name, props.selectedUnit.document)}
+            </div>
+          )}
+          <div className="mt-1.5 text-xs text-opiina-muted">{UNIT_COPY.MICRO}</div>
+          {!props.unitsLoading && props.unitRows.length === 0 && (
+            <div className="mt-1.5 text-xs text-opiina-muted">
+              Nenhuma unidade cadastrada.{' '}
+              <Link to="/app/unidades" className="font-medium text-opiina-cyan hover:underline">
+                Cadastre a unidade e o CNPJ em Unidades
+              </Link>
+              .
+            </div>
+          )}
+          {props.selectedUnit && !props.selectedUnit.document?.trim() && (
+            <div className="mt-1.5 text-xs text-rose-700">
+              Cadastre um CNPJ válido nesta unidade para emitir o voucher.{' '}
+              <Link to="/app/unidades" className="font-medium text-opiina-cyan hover:underline">
+                Ir para Unidades
+              </Link>
+            </div>
+          )}
         </label>
         <label>
           <FieldLabel>Valor R$ (fixo)</FieldLabel>

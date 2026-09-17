@@ -7,6 +7,8 @@ import {
 const CAMPAIGN_ID = '22222222-2222-4222-8222-222222222222';
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const SURVEY_ID = '33333333-3333-4333-8333-333333333333';
+const UNIT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const UNIT_CNPJ = '33000167000101';
 
 function campaignRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -18,6 +20,10 @@ function campaignRow(overrides: Record<string, unknown> = {}) {
     validityDays: 30,
     endsAt: null,
     totalLimit: null,
+    unitId: UNIT_ID,
+    issuerCnpj: UNIT_CNPJ,
+    issuerLegalName: 'Centro Alimentos LTDA',
+    issuerTradeName: 'Unidade Centro',
     ...overrides,
   };
 }
@@ -54,6 +60,10 @@ function setup(opts?: {
             amountCents: 1500,
             mmCompanyId: 'mm-co-1',
             expiresAt: new Date('2026-10-14T00:00:00.000Z'),
+            unitId: UNIT_ID,
+            issuerCnpj: UNIT_CNPJ,
+            issuerLegalName: 'Centro Alimentos LTDA',
+            issuerTradeName: 'Unidade Centro',
           };
           couponStore.push(row);
           return row;
@@ -63,6 +73,9 @@ function setup(opts?: {
   const count = jest.fn().mockResolvedValue(0);
   const prisma = {
     survey: { findFirst: jest.fn().mockResolvedValue({ id: SURVEY_ID }) },
+    surveyResponse: {
+      findFirst: jest.fn().mockResolvedValue({ unitId: UNIT_ID }),
+    },
     couponCampaign: { findFirst: jest.fn().mockResolvedValue(campaignRow()) },
     coupon: { findUnique, create, update, count },
   };
@@ -102,6 +115,9 @@ describe('RewardEmitService', () => {
       payload: {
         deepLink: string;
         to: string;
+        cnpj?: string;
+        unitId?: string;
+        issuer?: { cnpj: string; tradeName: string };
         signedPayload: { customerKey: string };
       };
     };
@@ -111,6 +127,41 @@ describe('RewardEmitService', () => {
       /^https:\/\/app\.muitomais\.example\/app\?voucher=/,
     );
     expect(event.payload.signedPayload.customerKey).toBe('phone:5511988887777');
+    expect(event.payload).toMatchObject({
+      cnpj: UNIT_CNPJ,
+      unitId: UNIT_ID,
+      issuer: { cnpj: UNIT_CNPJ, tradeName: 'Unidade Centro' },
+    });
+    expect(event.payload.signedPayload).not.toHaveProperty('cnpj');
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          unitId: UNIT_ID,
+          issuerCnpj: UNIT_CNPJ,
+        }),
+      }),
+    );
+  });
+
+  it('skips when the response unit does not match the campaign unit', async () => {
+    const { service, prisma, create } = setup();
+    prisma.surveyResponse.findFirst.mockResolvedValue({
+      unitId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+    prisma.couponCampaign.findFirst.mockResolvedValue(null);
+    await expect(service.emitForCompletedResponse(input)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'no_eligible_campaign',
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(prisma.couponCampaign.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          unitId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          issuerCnpj: { not: null },
+        }),
+      }),
+    );
   });
 
   it('does not create another code on a second completion for the same customerKey', async () => {
