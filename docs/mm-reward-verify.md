@@ -13,6 +13,7 @@ This file is **only** the survey `OPIINA_REWARD` / Coupon contract (`/internal/m
   - Absolute URL: `{MM_APP_BASE_URL}/app?voucher={urlEncodedCode}`.
   - Alternative `/resgatar?code=CODE` is **not** used in v1.
 - Not a fiscal coupon. No NFC-e. One MM company per network in v1 (`mmCompanyId` on the campaign).
+- **1 campaign → 1 unidade (CNPJ)**. Operator picks the unit at `/app/premios`. Tenant/matriz document is never used. Codes snapshot that unit CNPJ at emit so MM redeem binds the establishment, same as adhesion resolve.
 
 ## Campaign CRUD (OPIINA panel)
 
@@ -25,6 +26,7 @@ Tenant operators manage campaigns at **`/app/premios`** (API `/coupon-campaigns`
 | startsAt / endsAt           | Optional window                                                                                 |
 | rewardAmountCents           | Fixed BRL                                                                                       |
 | mmCompanyId                 | Required. **Muito Mais `Company.id`** (never Establishment.id, OPIINA `Tenant.id`, or unit id). |
+| unitId                      | Required when the tenant has more than one unit. Single-unit tenants auto-select. Snapshots unit CNPJ/name. Never tenant/matriz. |
 | perCustomerLimit            | Always `1` in v1                                                                                |
 | status                      | `active` / `paused` (also `draft`)                                                              |
 | message                     | WhatsApp template (`{{code}}`, `{{link}}`, `{{amount}}`)                                        |
@@ -46,7 +48,20 @@ Catalog source:
 
 1. **Tenant link only** — company persisted by `POST /integrations/mm/connect` (tenant-admin API key). See [mm-tenant-integration.md](./mm-tenant-integration.md). Empty when the tenant is not connected.
 
-The page must not fall back to OPIINA `tenant.tradeName` / `tenant.id` or `/units`.
+The **Empresa Muito Mais** picker must not fall back to OPIINA `tenant.tradeName` / `tenant.id` or `/units`.
+
+### Unidade (`unitId` + issuer CNPJ)
+
+**1 reward path → 1 unidade.** The campaign form has a separate `Unidade` field (not the MM company picker):
+
+- Label: `Unidade`
+- Line: `{nome da unidade} · CNPJ {cnpj}`
+- Multi placeholder: `Escolha a unidade antes de gerar`
+- Microcopy: `O voucher vincula no Muito Mais pelo CNPJ desta unidade.`
+
+Multi-unit tenants must choose a unit (`unit_required`). A tenant with exactly one unit auto-selects it and still shows name · CNPJ. Missing/invalid/CPF unit document is `issuer_cnpj_required`. Source is `GET /units` (unit `document` from **Unidades**). Tenant/matriz `Empresa` document is never read and never shown.
+
+`POST /coupon-campaigns` and `PATCH` persist `unitId` + `issuerCnpj` / `issuerLegalName` / `issuerTradeName`. List/get return adhesion-style `cnpj`, `unitId`, `unitName`, `issuer`. Activating a legacy campaign without a unit snapshot resolves the unit the same way (auto-select or `unit_required`).
 
 ## Campaign config (operator)
 
@@ -57,6 +72,7 @@ Extend existing `coupon_campaigns` (additive columns):
 | `surveyId`          | yes                        | Eligible survey for emit                                                                                                                                        |
 | `rewardEnabled`     | yes (`true`)               | Plus survey.`enableCoupon`                                                                                                                                      |
 | `mmCompanyId`       | yes                        | Muito Mais **`Company.id`**. Operator picks the company trade name on `/app/premios` (e.g. Grupo Geppos). Establishments such as PRIMO JARDINS must not appear. |
+| `unitId`            | yes                        | OPIINA unit. Snapshots unit CNPJ (`issuerCnpj`). Required when the tenant has more than one unit. |
 | `rewardAmountCents` | yes                        | Fixed BRL amount in cents                                                                                                                                       |
 | `validityDays`      | optional                   | `expiresAt = issuedAt + validityDays`; else campaign `endsAt`                                                                                                   |
 | `status`            | `active`                   | Also honors `startsAt` / `endsAt`                                                                                                                               |
@@ -87,6 +103,16 @@ Public submit accepts optional `customer.document` (CPF) in addition to name/ema
   "deepLinkPath": "/app?voucher=MMABC12D",
   "amountCents": 1500,
   "mmCompanyId": "mm-co-1",
+  "cnpj": "33000167000101",
+  "legalName": "Centro Alimentos LTDA",
+  "tradeName": "Unidade Centro",
+  "unitId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "unitName": "Unidade Centro",
+  "issuer": {
+    "cnpj": "33000167000101",
+    "legalName": "Centro Alimentos LTDA",
+    "tradeName": "Unidade Centro"
+  },
   "campaignId": "…",
   "customerKey": "phone:5511988887777",
   "expiresAt": "2026-10-01T00:00:00.000Z",
@@ -179,6 +205,16 @@ MM schema (required fields). Extra OPIINA fields are additive and kept for offli
   "code": "MMABC12D",
   "amountCents": 1500,
   "mmCompanyId": "mm-co-1",
+  "cnpj": "33000167000101",
+  "legalName": "Centro Alimentos LTDA",
+  "tradeName": "Unidade Centro",
+  "unitId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "unitName": "Unidade Centro",
+  "issuer": {
+    "cnpj": "33000167000101",
+    "legalName": "Centro Alimentos LTDA",
+    "tradeName": "Unidade Centro"
+  },
   "customerKey": "phone:5511988887777",
   "expiresAt": "2026-10-01T00:00:00.000Z",
   "campaignId": "…",
@@ -197,7 +233,8 @@ MM schema (required fields). Extra OPIINA fields are additive and kept for offli
 
 - `amount` is a decimal string with 2 places (`1500` cents → `"15.00"`).
 - `expiresAt` is ISO-8601 (or `null` when the campaign has no expiry).
-- Body `signature` = hex HMAC-SHA256 of the canonical `signedPayload` JSON (keys in the order above) using `MM_REWARD_HMAC_SECRET`. Separate from the `X-Opiina-Signature` response header.
+- `cnpj` is digits-only (14) and is the **unit CNPJ** snapshotted at emit (same contract as adhesion `resolve`). MM must credit/redeem against the establishment matching this CNPJ — never the OPIINA tenant/matriz document. `unitId` / `issuer` are additive. Legacy codes minted before this lock may return `cnpj: null`.
+- Body `signature` = hex HMAC-SHA256 of the canonical `signedPayload` JSON (keys in the order above) using `MM_REWARD_HMAC_SECRET`. Separate from the `X-Opiina-Signature` response header. **`signedPayload` keys stay unchanged** (no `cnpj` inside the HMAC) so existing MM local verify keeps working. Read unit CNPJ from the top-level / `issuer` fields.
 
 ### Failure body (`valid: false`)
 
@@ -238,6 +275,16 @@ Headers and signing are identical to verify (`X-MM-Timestamp` + `X-MM-Signature:
   "amount": "15.00",
   "amountCents": 1500,
   "mmCompanyId": "mm-company-gepos",
+  "cnpj": "33000167000101",
+  "legalName": "Centro Alimentos LTDA",
+  "tradeName": "Unidade Centro",
+  "unitId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "unitName": "Unidade Centro",
+  "issuer": {
+    "cnpj": "33000167000101",
+    "legalName": "Centro Alimentos LTDA",
+    "tradeName": "Unidade Centro"
+  },
   "customerKey": "phone:5511988887777",
   "campaignId": "…"
 }
@@ -249,7 +296,21 @@ Headers and signing are identical to verify (`X-MM-Timestamp` + `X-MM-Signature:
 { "ok": false, "reason": "not_found" | "expired" | "cancelled" | "redeemed" | "company_mismatch" }
 ```
 
-Already-redeemed codes are not rewritten (`reason: "redeemed"`). MM follow-up PR should call this after a successful local redeem.
+Already-redeemed codes are not rewritten (`reason: "redeemed"`). MM follow-up PR should call this after a successful local redeem. `CouponRedemption.unitId` is set from the coupon snapshot.
+
+## Emit eligibility
+
+A campaign is eligible only when it is `active`, `rewardEnabled`, has `mmCompanyId`, `rewardAmountCents > 0`, **and** a unit CNPJ snapshot (`unitId` + `issuerCnpj`). If the survey response has `unitId`, emit picks the campaign bound to that unit (so two unit-scoped campaigns on the same survey do not cross). Responses without `unitId` use the newest eligible campaign for the survey.
+
+## MM follow-up (muitomais)
+
+This OPIINA PR does **not** change https://github.com/suportemais/muitomais. MM still needs:
+
+1. On `OPIINA_REWARD` verify, read **`cnpj` / `issuer.cnpj`** (unit CNPJ) and bind/credit the establishment that matches that CNPJ — same rule as adhesion resolve. Do not fall back to the network `Company` / tenant/matriz CNPJ.
+2. Keep verifying `signedPayload` HMAC with the existing keys (`amountCents` … `mmCompanyId`). Unit fields are additive on the JSON body, not inside `signedPayload`.
+3. Deep link stays **`/app?voucher=CODE`**. CNPJ is not added to the URL; it comes from verify.
+4. Treat `cnpj: null` as a legacy code minted before the unit lock.
+5. Adhesion `/internal/mm/vouchers/*` is unchanged.
 
 ## Env
 

@@ -6,7 +6,7 @@ This path **does not use a tenant API key**. Integrações + Prêmios (`OPIINA_R
 
 ## Why a new table (not Coupon)
 
-Survey `Coupon` / `CouponCampaign` codes are alphanumeric, unique per tenant, tied to a campaign + `customerKey`, and redeemed as post-survey rewards (`/internal/mm/rewards/*`). Adhesion vouchers are **globally unique 7-digit** codes, attributed by a **unit CNPJ snapshot** (never the tenant/matriz document), one-use, and consumed by MM to bind a user to the matching establishment. Reusing Coupon would overload uniqueness, status, and the POS/reward redeem model. Prêmios campaigns do **not** mint `MmAdhesionVoucher` — they still emit `Coupon` codes.
+Survey `Coupon` / `CouponCampaign` codes are alphanumeric, unique per tenant, tied to a campaign + `customerKey`, and redeemed as post-survey rewards (`/internal/mm/rewards/*`). Adhesion vouchers are **globally unique 7-digit** codes, attributed by a **unit CNPJ snapshot** (never the tenant/matriz document), one-use, and consumed by MM to bind a user to the matching establishment. Reusing Coupon would overload uniqueness, status, and the POS/reward redeem model. Prêmios campaigns do **not** mint `MmAdhesionVoucher` — they still emit `Coupon` codes, which now also snapshot the campaign's unit CNPJ (see [mm-reward-verify.md](./mm-reward-verify.md)).
 
 ## Product rules
 
@@ -255,7 +255,7 @@ This OPIINA PR does **not** change https://github.com/suportemais/muitomais. MM 
 1. Voucher field on **signup** and on a **logged-in** account screen (not signup-only).
 2. Backend resolve → establishment/company-by-**unit** CNPJ (`cnpj` / `issuer.cnpj`) → bind user → wallet/ledger credit → consume. Do not map the code to a tenant/matriz CNPJ.
 3. Reuse the existing HMAC helper (`opiina-reward.hmac.ts`) with `{ voucher }` bodies — do not invent a second secret.
-4. Keep current Integrações API-key + `OPIINA_REWARD` verify/redeemed as-is.
+4. Keep current Integrações API-key + `OPIINA_REWARD` verify/redeemed. Reward verify now also returns the **unit** CNPJ (`cnpj` / `issuer.cnpj`) so prize redeem can bind the same establishment as adhesion.
 
 ## Coexistence
 

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { formatRewardAmountDecimal } from '../domain/rewards/code';
+import {
+  rewardUnitContract,
+  type RewardIssuer,
+} from '../domain/rewards/unit-issuer';
 
 export type RedeemRewardInput = {
   code: string;
@@ -18,6 +22,12 @@ export type RedeemRewardResult =
       mmCompanyId: string;
       customerKey: string;
       campaignId: string;
+      cnpj: string | null;
+      legalName: string | null;
+      tradeName: string | null;
+      unitId: string | null;
+      unitName: string | null;
+      issuer: RewardIssuer | null;
     }
   | {
       ok: false;
@@ -53,6 +63,10 @@ export class RewardRedeemService {
         cancelledAt: true,
         redeemedAt: true,
         expiresAt: true,
+        unitId: true,
+        issuerCnpj: true,
+        issuerLegalName: true,
+        issuerTradeName: true,
       },
     });
 
@@ -113,10 +127,12 @@ export class RewardRedeemService {
           tenantId: coupon.tenantId,
           couponId: coupon.id,
           customerId: coupon.customerId,
+          unitId: coupon.unitId,
           redeemedAt,
           metadata: {
             source: 'mm',
             ...(scopedCompany ? { mmCompanyId: scopedCompany } : {}),
+            ...(coupon.issuerCnpj ? { cnpj: coupon.issuerCnpj } : {}),
           },
         },
       });
@@ -132,6 +148,7 @@ export class RewardRedeemService {
       mmCompanyId: coupon.mmCompanyId,
       customerKey: coupon.customerKey,
       campaignId: coupon.campaignId,
+      ...rewardUnitContract(coupon),
     };
   }
 }

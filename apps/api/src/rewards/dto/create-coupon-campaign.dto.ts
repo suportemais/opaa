@@ -27,6 +27,11 @@ export class CreateCouponCampaignDto {
   @MinLength(1)
   mmCompanyId!: string;
 
+  /** Required when the tenant has more than one unit. Single-unit tenants auto-select. */
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

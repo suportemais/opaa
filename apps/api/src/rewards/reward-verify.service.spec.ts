@@ -16,6 +16,10 @@ function couponRow(overrides: Record<string, unknown> = {}) {
     campaignId: 'camp-1',
     cancelledAt: null,
     redeemedAt: null,
+    unitId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    issuerCnpj: '33000167000101',
+    issuerLegalName: 'Centro Alimentos LTDA',
+    issuerTradeName: 'Unidade Centro',
     ...overrides,
   };
 }
@@ -56,6 +60,14 @@ describe('RewardVerifyService', () => {
     expect(result.signature).toBe(
       signRewardPayload(result.signedPayload!, secret),
     );
+    expect(result.cnpj).toBe('33000167000101');
+    expect(result.unitId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    expect(result.issuer).toEqual({
+      cnpj: '33000167000101',
+      legalName: 'Centro Alimentos LTDA',
+      tradeName: 'Unidade Centro',
+    });
+    expect(result.signedPayload).not.toHaveProperty('cnpj');
   });
 
   it('rejects unknown, expired and redeemed codes', async () => {

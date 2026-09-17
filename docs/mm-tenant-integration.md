@@ -58,7 +58,7 @@ Removes the link for this tenant only. Coupon campaigns and issued codes stay. R
 
 Unchanged auth (`survey:read`). When the tenant is connected, the list is **exactly one** row: `{ id: mmCompanyId, tradeName }`. When not connected, `[]`.
 
-Creating a campaign without a link, or with a different `mmCompanyId`, is rejected (`mm_company_not_linked`). Pause/activate of existing campaigns is unaffected.
+Creating a campaign without a link, or with a different `mmCompanyId`, is rejected (`mm_company_not_linked`). Campaigns also require a **unit CNPJ** snapshot (`unitId` / `issuer_cnpj_required`) — see [mm-reward-verify.md](./mm-reward-verify.md). Pause of existing campaigns is unaffected; activate of a campaign without a unit snapshot resolves the unit first.
 
 ## MM validate-key (S2S)
 
