@@ -156,8 +156,22 @@ export default function App() {
         />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
-        <Route path="whistleblower" element={<DenunciasPage />} />
-        <Route path="whistleblower/:id" element={<DenunciaDetailPage />} />
+        <Route
+          path="whistleblower"
+          element={
+            <RequireTenantAdmin>
+              <DenunciasPage />
+            </RequireTenantAdmin>
+          }
+        />
+        <Route
+          path="whistleblower/:id"
+          element={
+            <RequireTenantAdmin>
+              <DenunciaDetailPage />
+            </RequireTenantAdmin>
+          }
+        />
         <Route path="feedbacks" element={<FeedbacksPage />} />
         <Route path="feedbacks/kanban" element={<KanbanPage />} />
         <Route path="feedbacks/:id" element={<FeedbackDetailPage />} />

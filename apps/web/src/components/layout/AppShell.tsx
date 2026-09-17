@@ -32,7 +32,6 @@ export function AppShell() {
   const canReadUnits = permissionCodes.includes('unit:read') || canManageUnits;
   const canReadEmployees = permissionCodes.includes('employee:read') || permissionCodes.includes('employee:manage');
   const canManageEmployees = permissionCodes.includes('employee:manage') || canManageUnits;
-  const canReadWhistleblower = permissionCodes.includes('whistleblower:read') || permissionCodes.includes('whistleblower:manage');
 
   const location = useLocation();
   const settingsActive = [
@@ -95,7 +94,7 @@ export function AppShell() {
             <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
               Clientes
             </NavLink>
-            {canReadWhistleblower && (
+            {canManageTenant && (
               <NavLink to="/app/whistleblower" className={({ isActive }) => navClass(isActive)}>
                 Denúncias
               </NavLink>

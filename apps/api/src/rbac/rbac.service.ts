@@ -3,6 +3,77 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AllPermissionCodes, PermissionCodes } from './permission-codes';
 import { ensurePlatformAdminRole } from './platform-admin';
 
+/** Default tenant roles. Denúncias (whistleblower) stay exclusive to tenant_admin. */
+export const TENANT_DEFAULT_ROLES = [
+  {
+    code: 'tenant_admin',
+    name: 'Administrador do tenant',
+    permissions: [
+      PermissionCodes.TenantSettingsManage,
+      PermissionCodes.UnitRead,
+      PermissionCodes.UnitManage,
+      PermissionCodes.UserManage,
+      PermissionCodes.SurveyRead,
+      PermissionCodes.SurveyManage,
+      PermissionCodes.ResponseRead,
+      PermissionCodes.FeedbackManage,
+      PermissionCodes.CustomerRead,
+      PermissionCodes.CustomerManage,
+      PermissionCodes.EmployeeRead,
+      PermissionCodes.EmployeeManage,
+      PermissionCodes.WhistleblowerRead,
+      PermissionCodes.WhistleblowerManage,
+      PermissionCodes.ReviewRead,
+      PermissionCodes.ReviewManage,
+    ],
+  },
+  {
+    code: 'regional_manager',
+    name: 'Gestor regional',
+    permissions: [
+      PermissionCodes.UnitRead,
+      PermissionCodes.SurveyRead,
+      PermissionCodes.ResponseRead,
+      PermissionCodes.FeedbackManage,
+      PermissionCodes.CustomerRead,
+      PermissionCodes.EmployeeRead,
+      PermissionCodes.ReviewRead,
+      PermissionCodes.ReviewManage,
+    ],
+  },
+  {
+    code: 'unit_manager',
+    name: 'Gestor de unidade',
+    permissions: [
+      PermissionCodes.UnitRead,
+      PermissionCodes.SurveyRead,
+      PermissionCodes.ResponseRead,
+      PermissionCodes.FeedbackManage,
+      PermissionCodes.CustomerRead,
+      PermissionCodes.EmployeeRead,
+      PermissionCodes.EmployeeManage,
+      PermissionCodes.ReviewRead,
+      PermissionCodes.ReviewManage,
+    ],
+  },
+  {
+    code: 'analyst',
+    name: 'Analista',
+    permissions: [
+      PermissionCodes.UnitRead,
+      PermissionCodes.SurveyRead,
+      PermissionCodes.ResponseRead,
+      PermissionCodes.CustomerRead,
+      PermissionCodes.ReviewRead,
+    ],
+  },
+  {
+    code: 'collaborator',
+    name: 'Colaborador',
+    permissions: [],
+  },
+] as const;
+
 @Injectable()
 export class RbacService {
   constructor(private readonly prisma: PrismaService) {}
@@ -39,82 +110,7 @@ export class RbacService {
   async ensureTenantDefaultRoles(tenantId: string) {
     await this.ensureGlobalPermissions();
 
-    const roles = [
-      {
-        code: 'tenant_admin',
-        name: 'Administrador do tenant',
-        permissions: [
-          PermissionCodes.TenantSettingsManage,
-          PermissionCodes.UnitRead,
-          PermissionCodes.UnitManage,
-          PermissionCodes.UserManage,
-          PermissionCodes.SurveyRead,
-          PermissionCodes.SurveyManage,
-          PermissionCodes.ResponseRead,
-          PermissionCodes.FeedbackManage,
-          PermissionCodes.CustomerRead,
-          PermissionCodes.CustomerManage,
-          PermissionCodes.EmployeeRead,
-          PermissionCodes.EmployeeManage,
-          PermissionCodes.WhistleblowerRead,
-          PermissionCodes.WhistleblowerManage,
-          PermissionCodes.ReviewRead,
-          PermissionCodes.ReviewManage,
-        ],
-      },
-      {
-        code: 'regional_manager',
-        name: 'Gestor regional',
-        permissions: [
-          PermissionCodes.UnitRead,
-          PermissionCodes.SurveyRead,
-          PermissionCodes.ResponseRead,
-          PermissionCodes.FeedbackManage,
-          PermissionCodes.CustomerRead,
-          PermissionCodes.EmployeeRead,
-          PermissionCodes.WhistleblowerRead,
-          PermissionCodes.WhistleblowerManage,
-          PermissionCodes.ReviewRead,
-          PermissionCodes.ReviewManage,
-        ],
-      },
-      {
-        code: 'unit_manager',
-        name: 'Gestor de unidade',
-        permissions: [
-          PermissionCodes.UnitRead,
-          PermissionCodes.SurveyRead,
-          PermissionCodes.ResponseRead,
-          PermissionCodes.FeedbackManage,
-          PermissionCodes.CustomerRead,
-          PermissionCodes.EmployeeRead,
-          PermissionCodes.EmployeeManage,
-          PermissionCodes.WhistleblowerRead,
-          PermissionCodes.WhistleblowerManage,
-          PermissionCodes.ReviewRead,
-          PermissionCodes.ReviewManage,
-        ],
-      },
-      {
-        code: 'analyst',
-        name: 'Analista',
-        permissions: [
-          PermissionCodes.UnitRead,
-          PermissionCodes.SurveyRead,
-          PermissionCodes.ResponseRead,
-          PermissionCodes.CustomerRead,
-          PermissionCodes.WhistleblowerRead,
-          PermissionCodes.ReviewRead,
-        ],
-      },
-      {
-        code: 'collaborator',
-        name: 'Colaborador',
-        permissions: [],
-      },
-    ] as const;
-
-    for (const roleDef of roles) {
+    for (const roleDef of TENANT_DEFAULT_ROLES) {
       const role = await this.prisma.role.upsert({
         where: { tenantId_code: { tenantId, code: roleDef.code } },
         create: { tenantId, code: roleDef.code, name: roleDef.name },
