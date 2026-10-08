@@ -5,6 +5,7 @@ export const CONTACT_IMPORT_HEADERS = [
   'E-mail',
   'Telefone',
   'CPF',
+  'Unidade',
   'Observações',
 ] as const;
 
@@ -16,10 +17,18 @@ export type ContactImportRow = {
   email: string | null;
   phone: string | null;
   document: string | null;
+  unitLabel: string;
   notes: string | null;
 };
 
 export type ContactImportRowError = { row: number; message: string };
+
+export type ImportableUnit = {
+  id: string;
+  name: string;
+  internalCode: string | null;
+  document: string | null;
+};
 
 export function contactImportTemplateCsv() {
   const header = CONTACT_IMPORT_HEADERS.join(',');
@@ -28,6 +37,7 @@ export function contactImportTemplateCsv() {
     'maria@email.com',
     '11999999999',
     '',
+    'Unidade Centro',
     '',
   ].join(',');
   return `\uFEFF${header}\n${example}\n`;
@@ -48,6 +58,34 @@ export function cellByAliases(
 
 function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function foldLabel(value: string) {
+  return value.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+}
+
+function digitsOnly(value: string) {
+  return value.replace(/\D+/g, '');
+}
+
+export function matchImportedUnits(
+  label: string,
+  units: ImportableUnit[],
+): ImportableUnit[] {
+  const folded = foldLabel(label);
+  if (!folded) return [];
+  const digits = digitsOnly(label);
+  return units.filter((unit) => {
+    if (foldLabel(unit.id) === folded) return true;
+    if (foldLabel(unit.name) === folded) return true;
+    if (unit.internalCode && foldLabel(unit.internalCode) === folded) {
+      return true;
+    }
+    if (digits.length >= 8 && unit.document) {
+      return digitsOnly(unit.document) === digits;
+    }
+    return false;
+  });
 }
 
 export function parseContactImportRows(rows: Array<Record<string, string>>): {
@@ -89,6 +127,15 @@ export function parseContactImportRows(rows: Array<Record<string, string>>): {
       'cpf',
       'documento',
     ]);
+    const unitLabel = cellByAliases(raw, [
+      'Unidade',
+      'Unit',
+      'Loja',
+      'Filial',
+      'unidade',
+      'unit',
+      'loja',
+    ]);
     const notes = cellByAliases(raw, [
       'Observações',
       'Observacoes',
@@ -104,6 +151,17 @@ export function parseContactImportRows(rows: Array<Record<string, string>>): {
     }
     if (name.length > 200) {
       errors.push({ row: lineNumber, message: 'Nome excede 200 caracteres' });
+      return;
+    }
+    if (!unitLabel) {
+      errors.push({ row: lineNumber, message: 'Unidade é obrigatória' });
+      return;
+    }
+    if (unitLabel.length > 200) {
+      errors.push({
+        row: lineNumber,
+        message: 'Unidade excede 200 caracteres',
+      });
       return;
     }
     if (email && !looksLikeEmail(email)) {
@@ -140,6 +198,7 @@ export function parseContactImportRows(rows: Array<Record<string, string>>): {
       email: email ?? null,
       phone: phone ?? null,
       document: parsedDocument?.value ?? null,
+      unitLabel,
       notes: notes ?? null,
     });
   });
