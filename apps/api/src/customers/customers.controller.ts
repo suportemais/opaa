@@ -1,4 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { parse } from 'csv-parse/sync';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
@@ -20,6 +35,42 @@ export class CustomersController {
     return this.customers.list(user, q);
   }
 
+  @Post('import')
+  @RequirePermissions(PermissionCodes.CustomerManage)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { files: 1, fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  async import(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      throw new BadRequestException('missing_file');
+    }
+    const rawText = file.buffer.toString('utf-8');
+    if (!rawText.trim()) throw new BadRequestException('empty_file');
+
+    let rows: Array<Record<string, string>>;
+    try {
+      rows = parse(rawText, {
+        columns: (header: Array<string>) =>
+          header.map((h) => (typeof h === 'string' ? h.trim() : h)),
+        skip_empty_lines: true,
+        trim: true,
+        bom: true,
+        delimiter: [',', ';', '\t'],
+        relax_column_count: true,
+      });
+    } catch {
+      throw new BadRequestException('invalid_csv');
+    }
+
+    return this.customers.importFromCsv(user, rows);
+  }
+
   @Get(':id')
   @RequirePermissions(PermissionCodes.CustomerRead)
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
@@ -27,13 +78,19 @@ export class CustomersController {
   }
 
   @Get(':id/responses')
-  @RequirePermissions(PermissionCodes.CustomerRead, PermissionCodes.ResponseRead)
+  @RequirePermissions(
+    PermissionCodes.CustomerRead,
+    PermissionCodes.ResponseRead,
+  )
   responses(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.customers.listResponses(user, id);
   }
 
   @Get(':id/cases')
-  @RequirePermissions(PermissionCodes.CustomerRead, PermissionCodes.ResponseRead)
+  @RequirePermissions(
+    PermissionCodes.CustomerRead,
+    PermissionCodes.ResponseRead,
+  )
   cases(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.customers.listCases(user, id);
   }
@@ -56,7 +113,11 @@ export class CustomersController {
 
   @Patch(':id')
   @RequirePermissions(PermissionCodes.CustomerManage)
-  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateCustomerDto) {
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomerDto,
+  ) {
     return this.customers.update(user, id, dto);
   }
 }

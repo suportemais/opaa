@@ -1,27 +1,146 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionCodes } from '../rbac/permission-codes';
 import { normalizeEmail, normalizePhone } from '../common/normalize';
 import type { UpdateCustomerDto } from './dto/update-customer.dto';
 import type { CreateCustomerInteractionDto } from './dto/create-customer-interaction.dto';
+import {
+  parseContactImportRows,
+  type ContactImportRow,
+} from '../domain/customers/import-contacts';
 
 @Injectable()
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
   private unitScopeWhere(user: AuthUser) {
-    const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
     if (canSeeAllUnits) return {};
     const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
     return { originUnitId: { in: allowed } };
   }
 
   private responseUnitScopeWhere(user: AuthUser) {
-    const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
     if (canSeeAllUnits) return {};
     const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
     return { unitId: { in: allowed } };
+  }
+
+  async importFromCsv(user: AuthUser, rows: Array<Record<string, string>>) {
+    if (!user.permissionCodes.includes(PermissionCodes.CustomerManage)) {
+      throw new ForbiddenException();
+    }
+
+    const parsed = parseContactImportRows(rows);
+    const fatal = parsed.errors.find((e) => e.row === 0);
+    if (fatal) throw new BadRequestException(fatal.message);
+
+    const originUnitId = this.defaultOriginUnitId(user);
+    const persistErrors = [...parsed.errors];
+    let created = 0;
+    let updated = 0;
+
+    for (const row of parsed.rows) {
+      try {
+        const result = await this.upsertImportedContact(
+          user.tenantId,
+          row,
+          originUnitId,
+        );
+        if (result === 'created') created += 1;
+        else updated += 1;
+      } catch {
+        persistErrors.push({
+          row: row.lineNumber,
+          message: 'Falha ao importar contato',
+        });
+      }
+    }
+
+    return {
+      imported: created,
+      created,
+      updated,
+      total: rows.length,
+      errors: persistErrors,
+    };
+  }
+
+  private defaultOriginUnitId(user: AuthUser): string | null {
+    if (user.permissionCodes.includes(PermissionCodes.UnitManage)) return null;
+    return user.unitIds[0] ?? null;
+  }
+
+  private async upsertImportedContact(
+    tenantId: string,
+    row: ContactImportRow,
+    originUnitId: string | null,
+  ): Promise<'created' | 'updated'> {
+    const emailNormalized = row.email ? normalizeEmail(row.email) : null;
+    const phoneNormalized = row.phone ? normalizePhone(row.phone) : null;
+    const documentNormalized = row.document;
+
+    const existing =
+      emailNormalized || phoneNormalized || documentNormalized
+        ? await this.prisma.customer.findFirst({
+            where: {
+              tenantId,
+              OR: [
+                ...(emailNormalized ? [{ emailNormalized }] : []),
+                ...(phoneNormalized ? [{ phoneNormalized }] : []),
+                ...(documentNormalized ? [{ documentNormalized }] : []),
+              ],
+            },
+          })
+        : null;
+
+    const now = new Date();
+    if (existing) {
+      await this.prisma.customer.update({
+        where: { id: existing.id },
+        data: {
+          name: row.name || existing.name,
+          email: row.email ?? existing.email,
+          emailNormalized: emailNormalized ?? existing.emailNormalized,
+          phone: row.phone ?? existing.phone,
+          phoneNormalized: phoneNormalized ?? existing.phoneNormalized,
+          documentNormalized: documentNormalized ?? existing.documentNormalized,
+          notes: row.notes ?? existing.notes,
+          lastInteractionAt: now,
+          originUnitId: existing.originUnitId ?? originUnitId,
+        },
+      });
+      return 'updated';
+    }
+
+    await this.prisma.customer.create({
+      data: {
+        tenantId,
+        name: row.name,
+        email: row.email,
+        emailNormalized: emailNormalized ?? undefined,
+        phone: row.phone,
+        phoneNormalized: phoneNormalized ?? undefined,
+        documentNormalized: documentNormalized ?? undefined,
+        notes: row.notes,
+        originUnitId,
+        firstInteractionAt: now,
+        lastInteractionAt: now,
+        status: 'active',
+      },
+    });
+    return 'created';
   }
 
   async list(user: AuthUser, q?: string) {
@@ -96,7 +215,9 @@ export class CustomersService {
         createdAt: true,
         description: true,
         unit: { select: { id: true, name: true } },
-        surveyResponse: { select: { id: true, npsScore: true, npsClass: true } },
+        surveyResponse: {
+          select: { id: true, npsScore: true, npsClass: true },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: 200,
@@ -126,7 +247,11 @@ export class CustomersService {
     });
   }
 
-  async createInteraction(user: AuthUser, customerId: string, dto: CreateCustomerInteractionDto) {
+  async createInteraction(
+    user: AuthUser,
+    customerId: string,
+    dto: CreateCustomerInteractionDto,
+  ) {
     await this.get(user, customerId);
     if (!user.permissionCodes.includes(PermissionCodes.CustomerManage)) {
       throw new ForbiddenException();
@@ -135,16 +260,27 @@ export class CustomersService {
     const channel = dto.channel.trim();
     if (!channel) throw new BadRequestException('invalid_channel');
 
-    const direction = typeof dto.direction === 'string' && dto.direction.trim() ? dto.direction.trim() : 'outbound';
-    const outcome = typeof dto.outcome === 'string' && dto.outcome.trim() ? dto.outcome.trim() : null;
-    const notes = typeof dto.notes === 'string' && dto.notes.trim() ? dto.notes.trim() : null;
+    const direction =
+      typeof dto.direction === 'string' && dto.direction.trim()
+        ? dto.direction.trim()
+        : 'outbound';
+    const outcome =
+      typeof dto.outcome === 'string' && dto.outcome.trim()
+        ? dto.outcome.trim()
+        : null;
+    const notes =
+      typeof dto.notes === 'string' && dto.notes.trim()
+        ? dto.notes.trim()
+        : null;
 
     const unitId =
       typeof dto.unitId === 'string' && dto.unitId.trim()
         ? dto.unitId.trim()
         : null;
 
-    const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
     if (!canSeeAllUnits && unitId && !user.unitIds.includes(unitId)) {
       throw new ForbiddenException();
     }
@@ -180,19 +316,30 @@ export class CustomersService {
       throw new ForbiddenException();
     }
 
-    const email = typeof dto.email === 'string' && dto.email.trim() ? dto.email.trim() : undefined;
-    const phone = typeof dto.phone === 'string' && dto.phone.trim() ? dto.phone.trim() : undefined;
+    const email =
+      typeof dto.email === 'string' && dto.email.trim()
+        ? dto.email.trim()
+        : undefined;
+    const phone =
+      typeof dto.phone === 'string' && dto.phone.trim()
+        ? dto.phone.trim()
+        : undefined;
     const notes = typeof dto.notes === 'string' ? dto.notes.trim() : undefined;
     const tags =
       Array.isArray(dto.tags) && dto.tags.length
-        ? dto.tags.map((t) => t.trim()).filter((t) => t.length > 0).slice(0, 20)
+        ? dto.tags
+            .map((t) => t.trim())
+            .filter((t) => t.length > 0)
+            .slice(0, 20)
         : dto.tags
           ? []
           : undefined;
 
-    const doNotContact = typeof dto.doNotContact === 'boolean' ? dto.doNotContact : undefined;
+    const doNotContact =
+      typeof dto.doNotContact === 'boolean' ? dto.doNotContact : undefined;
     const doNotContactReason =
-      typeof dto.doNotContactReason === 'string' && dto.doNotContactReason.trim()
+      typeof dto.doNotContactReason === 'string' &&
+      dto.doNotContactReason.trim()
         ? dto.doNotContactReason.trim()
         : dto.doNotContactReason
           ? null
@@ -210,7 +357,8 @@ export class CustomersService {
     return this.prisma.customer.update({
       where: { id: customer.id },
       data: {
-        name: typeof dto.name === 'string' ? dto.name.trim() || null : undefined,
+        name:
+          typeof dto.name === 'string' ? dto.name.trim() || null : undefined,
         email: email ?? null,
         emailNormalized: email ? normalizeEmail(email) : null,
         phone: phone ?? null,
