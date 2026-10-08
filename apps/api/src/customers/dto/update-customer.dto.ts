@@ -1,9 +1,20 @@
-import { IsArray, IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  originUnitId?: string;
 
   @IsOptional()
   @IsEmail()

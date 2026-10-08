@@ -6,7 +6,9 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 
-const CONTACT_IMPORT_HEADERS = ['Nome', 'E-mail', 'Telefone', 'CPF', 'Observações'] as const;
+const CONTACT_IMPORT_HEADERS = ['Nome', 'E-mail', 'Telefone', 'CPF', 'Unidade', 'Observações'] as const;
+
+type Unit = { id: string; name: string };
 
 type ImportResult = {
   imported: number;
@@ -22,6 +24,7 @@ type Customer = {
   email: string | null;
   phone: string | null;
   originUnitId: string | null;
+  originUnit: Unit | null;
   firstInteractionAt: string | null;
   lastInteractionAt: string | null;
   createdAt: string;
@@ -44,7 +47,7 @@ function toCsvRows(rows: Array<Record<string, string>>) {
 
 function downloadContactTemplate() {
   const header = CONTACT_IMPORT_HEADERS.join(',');
-  const example = ['Maria Silva', 'maria@email.com', '11999999999', '', ''].join(',');
+  const example = ['Maria Silva', 'maria@email.com', '11999999999', '', 'Unidade Centro', ''].join(',');
   const csv = `\uFEFF${header}\n${example}\n`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -100,12 +103,12 @@ export function CustomersPage() {
   function exportCsv() {
     if (!customers.data || customers.data.length === 0) return;
     const rows = customers.data.map((c) => ({
-      id: c.id,
-      name: c.name ?? '',
-      email: c.email ?? '',
-      phone: c.phone ?? '',
-      lastInteractionAt: c.lastInteractionAt ?? '',
-      createdAt: c.createdAt ?? '',
+      Nome: c.name ?? '',
+      'E-mail': c.email ?? '',
+      Telefone: c.phone ?? '',
+      Unidade: c.originUnit?.name ?? '',
+      'Última interação': c.lastInteractionAt ?? '',
+      'Criado em': c.createdAt ?? '',
     }));
     const csv = toCsvRows(rows);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -126,6 +129,7 @@ export function CustomersPage() {
           <td>${(c.name ?? '—').replace(/</g, '&lt;')}</td>
           <td>${(c.email ?? '—').replace(/</g, '&lt;')}</td>
           <td>${(c.phone ?? '—').replace(/</g, '&lt;')}</td>
+          <td>${(c.originUnit?.name ?? '—').replace(/</g, '&lt;')}</td>
           <td>${formatDateTime(c.lastInteractionAt).replace(/</g, '&lt;')}</td>
         </tr>`,
       )
@@ -153,6 +157,7 @@ export function CustomersPage() {
         <th>Nome</th>
         <th>E-mail</th>
         <th>Telefone</th>
+        <th>Unidade</th>
         <th>Última interação</th>
       </tr>
     </thead>
@@ -257,6 +262,7 @@ export function CustomersPage() {
                   <th className="py-2 pr-3 font-medium">Nome</th>
                   <th className="py-2 pr-3 font-medium">E-mail</th>
                   <th className="py-2 pr-3 font-medium">Telefone</th>
+                  <th className="py-2 pr-3 font-medium">Unidade</th>
                   <th className="py-2 pr-3 font-medium">Última interação</th>
                 </tr>
               </thead>
@@ -271,6 +277,7 @@ export function CustomersPage() {
                     </td>
                     <td className="py-2 pr-3">{c.email ?? '—'}</td>
                     <td className="py-2 pr-3">{c.phone ?? '—'}</td>
+                    <td className="py-2 pr-3">{c.originUnit?.name ?? '—'}</td>
                     <td className="py-2 pr-3">{formatDateTime(c.lastInteractionAt)}</td>
                   </tr>
                 ))}

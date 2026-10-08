@@ -7,11 +7,15 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 
+type Unit = { id: string; name: string };
+
 type Customer = {
   id: string;
   name: string | null;
   email: string | null;
   phone: string | null;
+  originUnitId: string | null;
+  originUnit: Unit | null;
   firstInteractionAt: string | null;
   lastInteractionAt: string | null;
   doNotContact: boolean;
@@ -95,6 +99,29 @@ export function CustomerDetailPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [originUnitId, setOriginUnitId] = useState('');
+
+  const me = useQuery({
+    queryKey: ['authMe'],
+    queryFn: () =>
+      apiFetch<{ permissionCodes: string[]; unitIds: string[] }>('/auth/me').catch(() => ({
+        permissionCodes: [],
+        unitIds: [],
+      })),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  const canSeeAllUnits = (me.data?.permissionCodes ?? []).includes('unit:manage');
+  const units = useQuery({
+    queryKey: ['units'],
+    queryFn: () => apiFetch<Unit[]>('/units'),
+  });
+  const allowedUnits = useMemo<Unit[]>(() => {
+    if (!units.data) return [];
+    if (canSeeAllUnits) return units.data;
+    const allowed = new Set(me.data?.unitIds ?? []);
+    return units.data.filter((u) => allowed.has(u.id));
+  }, [units.data, canSeeAllUnits, me.data?.unitIds]);
 
   useEffect(() => {
     if (!customer.data) return;
@@ -105,6 +132,7 @@ export function CustomerDetailPage() {
     setName(customer.data.name ?? '');
     setEmail(customer.data.email ?? '');
     setPhone(customer.data.phone ?? '');
+    setOriginUnitId(customer.data.originUnitId ?? customer.data.originUnit?.id ?? '');
   }, [customer.data, tagsFromApi]);
 
   const saveProfile = useMutation({
@@ -115,6 +143,7 @@ export function CustomerDetailPage() {
           name: name.trim() || undefined,
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
+          originUnitId: originUnitId || undefined,
         },
       });
     },
@@ -224,6 +253,24 @@ export function CustomerDetailPage() {
                   <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone (opcional)" />
                 </div>
+                <div className="md:col-span-2">
+                  <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
+                  <select
+                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    value={originUnitId}
+                    onChange={(e) => setOriginUnitId(e.target.value)}
+                  >
+                    <option value="">Selecione a unidade</option>
+                    {allowedUnits.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                    {originUnitId && !allowedUnits.some((u) => u.id === originUnitId) && customer.data.originUnit && (
+                      <option value={originUnitId}>{customer.data.originUnit.name}</option>
+                    )}
+                  </select>
+                </div>
                 <div className="md:col-span-2 flex items-center justify-end gap-2">
                   <Button
                     variant="secondary"
@@ -233,6 +280,7 @@ export function CustomerDetailPage() {
                       setName(customer.data.name ?? '');
                       setEmail(customer.data.email ?? '');
                       setPhone(customer.data.phone ?? '');
+                      setOriginUnitId(customer.data.originUnitId ?? customer.data.originUnit?.id ?? '');
                     }}
                   >
                     Cancelar
@@ -262,6 +310,10 @@ export function CustomerDetailPage() {
                     <div className="text-slate-500">Telefone</div>
                     <div className="text-slate-900">{customer.data.phone ?? '—'}</div>
                   </div>
+                </div>
+                <div className="rounded-md bg-slate-50 p-3">
+                  <div className="text-slate-500">Unidade</div>
+                  <div className="text-slate-900">{customer.data.originUnit?.name ?? '—'}</div>
                 </div>
               </div>
             )}

@@ -11,9 +11,14 @@ import { normalizeEmail, normalizePhone } from '../common/normalize';
 import type { UpdateCustomerDto } from './dto/update-customer.dto';
 import type { CreateCustomerInteractionDto } from './dto/create-customer-interaction.dto';
 import {
+  matchImportedUnits,
   parseContactImportRows,
   type ContactImportRow,
 } from '../domain/customers/import-contacts';
+
+const customerOriginUnitSelect = {
+  originUnit: { select: { id: true, name: true } },
+} as const;
 
 @Injectable()
 export class CustomersService {
@@ -46,17 +51,32 @@ export class CustomersService {
     const fatal = parsed.errors.find((e) => e.row === 0);
     if (fatal) throw new BadRequestException(fatal.message);
 
-    const originUnitId = this.defaultOriginUnitId(user);
+    const units = await this.listImportableUnits(user);
     const persistErrors = [...parsed.errors];
     let created = 0;
     let updated = 0;
 
     for (const row of parsed.rows) {
+      const matches = matchImportedUnits(row.unitLabel, units);
+      if (matches.length === 0) {
+        persistErrors.push({
+          row: row.lineNumber,
+          message: 'Unidade não encontrada',
+        });
+        continue;
+      }
+      if (matches.length > 1) {
+        persistErrors.push({
+          row: row.lineNumber,
+          message: 'Unidade ambígua',
+        });
+        continue;
+      }
       try {
         const result = await this.upsertImportedContact(
           user.tenantId,
           row,
-          originUnitId,
+          matches[0].id,
         );
         if (result === 'created') created += 1;
         else updated += 1;
@@ -77,15 +97,25 @@ export class CustomersService {
     };
   }
 
-  private defaultOriginUnitId(user: AuthUser): string | null {
-    if (user.permissionCodes.includes(PermissionCodes.UnitManage)) return null;
-    return user.unitIds[0] ?? null;
+  private async listImportableUnits(user: AuthUser) {
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
+    const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
+    return this.prisma.unit.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: 'active',
+        ...(canSeeAllUnits ? {} : { id: { in: allowed } }),
+      },
+      select: { id: true, name: true, internalCode: true, document: true },
+    });
   }
 
   private async upsertImportedContact(
     tenantId: string,
     row: ContactImportRow,
-    originUnitId: string | null,
+    originUnitId: string,
   ): Promise<'created' | 'updated'> {
     const emailNormalized = row.email ? normalizeEmail(row.email) : null;
     const phoneNormalized = row.phone ? normalizePhone(row.phone) : null;
@@ -118,7 +148,7 @@ export class CustomersService {
           documentNormalized: documentNormalized ?? existing.documentNormalized,
           notes: row.notes ?? existing.notes,
           lastInteractionAt: now,
-          originUnitId: existing.originUnitId ?? originUnitId,
+          originUnitId,
         },
       });
       return 'updated';
@@ -162,6 +192,7 @@ export class CustomersService {
             }
           : {}),
       },
+      include: customerOriginUnitSelect,
       orderBy: [{ lastInteractionAt: 'desc' }, { createdAt: 'desc' }],
       take: 200,
     });
@@ -170,6 +201,7 @@ export class CustomersService {
   async get(user: AuthUser, id: string) {
     const customer = await this.prisma.customer.findFirst({
       where: { id, tenantId: user.tenantId, ...this.unitScopeWhere(user) },
+      include: customerOriginUnitSelect,
     });
     if (!customer) throw new NotFoundException();
     return customer;
@@ -316,6 +348,8 @@ export class CustomersService {
       throw new ForbiddenException();
     }
 
+    const originUnitId = await this.resolveOriginUnitId(user, dto.originUnitId);
+
     const email =
       typeof dto.email === 'string' && dto.email.trim()
         ? dto.email.trim()
@@ -363,12 +397,38 @@ export class CustomersService {
         emailNormalized: email ? normalizeEmail(email) : null,
         phone: phone ?? null,
         phoneNormalized: phone ? normalizePhone(phone) : null,
+        originUnitId: originUnitId !== undefined ? originUnitId : undefined,
         notes: notes !== undefined ? (notes.length ? notes : null) : undefined,
         tags: tags !== undefined ? (tags as any) : undefined,
         doNotContact,
         doNotContactReason: doNotContact === false ? null : doNotContactReason,
         doNotContactAt,
       },
+      include: customerOriginUnitSelect,
     });
+  }
+
+  private async resolveOriginUnitId(
+    user: AuthUser,
+    raw?: string,
+  ): Promise<string | undefined> {
+    if (typeof raw !== 'string' || !raw.trim()) return undefined;
+    const originUnitId = raw.trim();
+    const canSeeAllUnits = user.permissionCodes.includes(
+      PermissionCodes.UnitManage,
+    );
+    if (!canSeeAllUnits && !user.unitIds.includes(originUnitId)) {
+      throw new ForbiddenException();
+    }
+    const unit = await this.prisma.unit.findFirst({
+      where: {
+        id: originUnitId,
+        tenantId: user.tenantId,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+    if (!unit) throw new BadRequestException('invalid_origin_unit');
+    return unit.id;
   }
 }
