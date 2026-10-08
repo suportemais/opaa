@@ -1,10 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+
+const CONTACT_IMPORT_HEADERS = ['Nome', 'E-mail', 'Telefone', 'CPF', 'Observações'] as const;
+
+type ImportResult = {
+  imported: number;
+  created?: number;
+  updated?: number;
+  total?: number;
+  errors?: Array<{ row: number; message: string }>;
+};
 
 type Customer = {
   id: string;
@@ -32,13 +42,59 @@ function toCsvRows(rows: Array<Record<string, string>>) {
   return out.join('\n');
 }
 
+function downloadContactTemplate() {
+  const header = CONTACT_IMPORT_HEADERS.join(',');
+  const example = ['Maria Silva', 'maria@email.com', '11999999999', '', ''].join(',');
+  const csv = `\uFEFF${header}\n${example}\n`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'modelo-leads.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function CustomersPage() {
+  const qc = useQueryClient();
   const [q, setQ] = useState('');
   const query = useMemo(() => q.trim(), [q]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const me = useQuery({
+    queryKey: ['authMe'],
+    queryFn: () =>
+      apiFetch<{ permissionCodes: string[] }>('/auth/me').catch(() => ({ permissionCodes: [] })),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  const canManageCustomers = (me.data?.permissionCodes ?? []).includes('customer:manage');
 
   const customers = useQuery({
     queryKey: ['customers', query],
     queryFn: () => apiFetch<Customer[]>(`/customers${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  });
+
+  const importContacts = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiFetch<ImportResult>('/customers/import', { method: 'POST', body: form });
+    },
+    onSuccess: async (data) => {
+      setImportResult(data);
+      setImportError(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await qc.invalidateQueries({ queryKey: ['customers'] });
+    },
+    onError: (err) => {
+      const body = err instanceof ApiError ? err.body : null;
+      const payload = body && typeof body === 'object' ? (body as { message?: string; errors?: ImportResult['errors'] }) : null;
+      setImportError(payload?.message === 'missing_file' ? 'Selecione um arquivo CSV.' : payload?.message ?? 'Falha ao importar');
+      setImportResult(payload?.errors ? { imported: 0, errors: payload.errors } : null);
+    },
   });
 
   function exportCsv() {
@@ -129,6 +185,33 @@ export function CustomersPage() {
 
       <Card title="Lista">
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          <Button variant="secondary" onClick={downloadContactTemplate}>
+            Baixar modelo
+          </Button>
+          {canManageCustomers && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setImportResult(null);
+                  setImportError(null);
+                  importContacts.mutate(file);
+                }}
+              />
+              <Button
+                variant="secondary"
+                disabled={importContacts.isPending}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {importContacts.isPending ? 'Importando...' : 'Importar (CSV)'}
+              </Button>
+            </>
+          )}
           <Button variant="secondary" disabled={!customers.data || customers.data.length === 0} onClick={exportCsv}>
             Exportar (CSV)
           </Button>
@@ -136,6 +219,27 @@ export function CustomersPage() {
             Exportar (PDF)
           </Button>
         </div>
+        {(importResult || importError) && (
+          <div className="mb-4 grid gap-2">
+            {importResult && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                {importResult.created ?? importResult.imported} criado(s)
+                {typeof importResult.updated === 'number' ? ` · ${importResult.updated} atualizado(s)` : ''}
+                {typeof importResult.total === 'number' ? ` · ${importResult.total} linha(s)` : ''}.
+                {importResult.errors && importResult.errors.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-emerald-900">
+                    {importResult.errors.map((e, i) => (
+                      <li key={`${e.row}-${i}`}>
+                        Linha {e.row}: {e.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {importError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{importError}</div>}
+          </div>
+        )}
         {customers.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
         {customers.isError && (
           <div className="text-sm text-rose-700">
