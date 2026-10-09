@@ -58,12 +58,15 @@ export const TENANT_DEFAULT_ROLES = [
   },
   {
     code: 'analyst',
-    name: 'Analista',
+    name: 'Marketing',
     permissions: [
       PermissionCodes.UnitRead,
       PermissionCodes.SurveyRead,
+      PermissionCodes.SurveyManage,
       PermissionCodes.ResponseRead,
       PermissionCodes.CustomerRead,
+      PermissionCodes.EmployeeRead,
+      PermissionCodes.EmployeeManage,
       PermissionCodes.ReviewRead,
     ],
   },
