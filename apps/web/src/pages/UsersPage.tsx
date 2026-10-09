@@ -21,7 +21,7 @@ const roleOptions = [
   { code: 'tenant_admin', name: 'Administrador do tenant' },
   { code: 'regional_manager', name: 'Gestor regional' },
   { code: 'unit_manager', name: 'Gestor de unidade' },
-  { code: 'analyst', name: 'Analista' },
+  { code: 'analyst', name: 'Marketing' },
   { code: 'collaborator', name: 'Colaborador' },
 ] as const;
 

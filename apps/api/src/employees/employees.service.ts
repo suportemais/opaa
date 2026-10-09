@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
@@ -10,32 +15,37 @@ import type { UpdateEmployeeDto } from './dto/update-employee.dto';
 export class EmployeesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private canSeeAllUnits(user: AuthUser) {
+    return user.permissionCodes.includes(PermissionCodes.UnitManage);
+  }
+
   private unitWhere(user: AuthUser) {
-    const canSeeAll =
-      user.permissionCodes.includes(PermissionCodes.UnitManage) ||
-      user.permissionCodes.includes(PermissionCodes.EmployeeManage);
-    if (canSeeAll) return {};
+    if (this.canSeeAllUnits(user)) return {};
     const allowed = user.unitIds.length ? user.unitIds : ['__none__'];
     return { unitId: { in: allowed } };
   }
 
   private canAccessUnit(user: AuthUser, unitId: string) {
-    if (
-      user.permissionCodes.includes(PermissionCodes.UnitManage) ||
-      user.permissionCodes.includes(PermissionCodes.EmployeeManage)
-    ) {
-      return true;
-    }
+    if (this.canSeeAllUnits(user)) return true;
     return user.unitIds.includes(unitId);
   }
 
-  async list(user: AuthUser, params: { unitId?: string; q?: string; status?: string }) {
+  async list(
+    user: AuthUser,
+    params: { unitId?: string; q?: string; status?: string },
+  ) {
     if (params.unitId && !this.canAccessUnit(user, params.unitId)) {
       throw new ForbiddenException();
     }
 
-    const q = typeof params.q === 'string' && params.q.trim() ? params.q.trim() : undefined;
-    const status = params.status === 'active' || params.status === 'inactive' ? params.status : undefined;
+    const q =
+      typeof params.q === 'string' && params.q.trim()
+        ? params.q.trim()
+        : undefined;
+    const status =
+      params.status === 'active' || params.status === 'inactive'
+        ? params.status
+        : undefined;
 
     const employees = await this.prisma.employee.findMany({
       where: {
@@ -69,11 +79,15 @@ export class EmployeesService {
   }
 
   async create(user: AuthUser, dto: CreateEmployeeDto) {
-    const unit = await this.prisma.unit.findFirst({ where: { id: dto.unitId, tenantId: user.tenantId }, select: { id: true } });
+    const unit = await this.prisma.unit.findFirst({
+      where: { id: dto.unitId, tenantId: user.tenantId },
+      select: { id: true },
+    });
     if (!unit) throw new NotFoundException('unit_not_found');
     if (!this.canAccessUnit(user, dto.unitId)) throw new ForbiddenException();
 
-    const code = typeof dto.code === 'string' && dto.code.trim() ? dto.code.trim() : null;
+    const code =
+      typeof dto.code === 'string' && dto.code.trim() ? dto.code.trim() : null;
 
     try {
       const created = await this.prisma.employee.create({
@@ -82,14 +96,20 @@ export class EmployeesService {
           unitId: dto.unitId,
           name: dto.name.trim(),
           code,
-          roleTitle: typeof dto.roleTitle === 'string' && dto.roleTitle.trim() ? dto.roleTitle.trim() : null,
+          roleTitle:
+            typeof dto.roleTitle === 'string' && dto.roleTitle.trim()
+              ? dto.roleTitle.trim()
+              : null,
           status: 'active',
         },
         select: { id: true },
       });
       return created;
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
         throw new BadRequestException('employee_code_taken');
       }
       throw e;
@@ -102,19 +122,28 @@ export class EmployeesService {
       select: { id: true, unitId: true },
     });
     if (!current) throw new NotFoundException();
-    if (!this.canAccessUnit(user, current.unitId)) throw new ForbiddenException();
+    if (!this.canAccessUnit(user, current.unitId))
+      throw new ForbiddenException();
 
     if (dto.unitId) {
-      const unit = await this.prisma.unit.findFirst({ where: { id: dto.unitId, tenantId: user.tenantId }, select: { id: true } });
+      const unit = await this.prisma.unit.findFirst({
+        where: { id: dto.unitId, tenantId: user.tenantId },
+        select: { id: true },
+      });
       if (!unit) throw new NotFoundException('unit_not_found');
       if (!this.canAccessUnit(user, dto.unitId)) throw new ForbiddenException();
     }
 
     const name = typeof dto.name === 'string' ? dto.name.trim() : undefined;
-    if (name !== undefined && !name) throw new BadRequestException('invalid_name');
+    if (name !== undefined && !name)
+      throw new BadRequestException('invalid_name');
 
     const code =
-      dto.code === undefined ? undefined : typeof dto.code === 'string' && dto.code.trim() ? dto.code.trim() : null;
+      dto.code === undefined
+        ? undefined
+        : typeof dto.code === 'string' && dto.code.trim()
+          ? dto.code.trim()
+          : null;
 
     const roleTitle =
       dto.roleTitle === undefined
@@ -135,7 +164,10 @@ export class EmployeesService {
         },
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
         throw new BadRequestException('employee_code_taken');
       }
       throw e;
@@ -150,13 +182,20 @@ export class EmployeesService {
       select: { id: true, unitId: true },
     });
     if (!current) throw new NotFoundException();
-    if (!this.canAccessUnit(user, current.unitId)) throw new ForbiddenException();
+    if (!this.canAccessUnit(user, current.unitId))
+      throw new ForbiddenException();
 
-    await this.prisma.employee.update({ where: { id: current.id }, data: { status: 'inactive' } });
+    await this.prisma.employee.update({
+      where: { id: current.id },
+      data: { status: 'inactive' },
+    });
     return { ok: true };
   }
 
-  async importFromCsv(user: AuthUser, params: { unitId: string; rows: Array<Record<string, string>> }) {
+  async importFromCsv(
+    user: AuthUser,
+    params: { unitId: string; rows: Array<Record<string, string>> },
+  ) {
     if (
       !user.permissionCodes.includes(PermissionCodes.EmployeeManage) &&
       !user.permissionCodes.includes(PermissionCodes.UnitManage)
@@ -164,9 +203,13 @@ export class EmployeesService {
       throw new ForbiddenException();
     }
 
-    const unit = await this.prisma.unit.findFirst({ where: { id: params.unitId, tenantId: user.tenantId }, select: { id: true } });
+    const unit = await this.prisma.unit.findFirst({
+      where: { id: params.unitId, tenantId: user.tenantId },
+      select: { id: true },
+    });
     if (!unit) throw new NotFoundException('unit_not_found');
-    if (!this.canAccessUnit(user, params.unitId)) throw new ForbiddenException();
+    if (!this.canAccessUnit(user, params.unitId))
+      throw new ForbiddenException();
 
     type Row = { name: string; code: string | null; roleTitle: string | null };
     const cleanRows: Row[] = [];
@@ -176,7 +219,9 @@ export class EmployeesService {
       const lineNumber = idx + 2;
       const getValue = (keys: string[]): string | null => {
         for (const key of keys) {
-          const found = Object.keys(raw).find((k) => k.trim().toLowerCase() === key.toLowerCase());
+          const found = Object.keys(raw).find(
+            (k) => k.trim().toLowerCase() === key.toLowerCase(),
+          );
           if (found) {
             const value = raw[found];
             if (typeof value === 'string') return value.trim();
@@ -187,7 +232,16 @@ export class EmployeesService {
 
       const name = getValue(['Nome', 'Name', 'name', 'nome']) ?? '';
       const code = getValue(['Código', 'Codigo', 'Code', 'code', 'codigo']);
-      const roleTitle = getValue(['Cargo', 'Role', 'Função', 'Funcao', 'cargo', 'role', 'funcao', 'função']);
+      const roleTitle = getValue([
+        'Cargo',
+        'Role',
+        'Função',
+        'Funcao',
+        'cargo',
+        'role',
+        'funcao',
+        'função',
+      ]);
 
       if (!name) {
         errors.push({ row: lineNumber, message: 'Nome é obrigatório' });
@@ -200,7 +254,10 @@ export class EmployeesService {
       }
 
       if (code && code.length > 40) {
-        errors.push({ row: lineNumber, message: 'Código excede 40 caracteres' });
+        errors.push({
+          row: lineNumber,
+          message: 'Código excede 40 caracteres',
+        });
         return;
       }
 
@@ -209,7 +266,11 @@ export class EmployeesService {
         return;
       }
 
-      cleanRows.push({ name, code: code || null, roleTitle: roleTitle || null });
+      cleanRows.push({
+        name,
+        code: code || null,
+        roleTitle: roleTitle || null,
+      });
     });
 
     if (errors.length > 0) {
@@ -241,15 +302,24 @@ export class EmployeesService {
         });
         createdIds.push(created.id);
       } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002'
+        ) {
           importErrors.push({ row: lineNumber, message: 'Código duplicado' });
           continue;
         }
-        importErrors.push({ row: lineNumber, message: 'Falha ao criar atendente' });
+        importErrors.push({
+          row: lineNumber,
+          message: 'Falha ao criar atendente',
+        });
       }
     }
 
-    if (importErrors.length === cleanRows.length - createdIds.length && importErrors.length === 0) {
+    if (
+      importErrors.length === cleanRows.length - createdIds.length &&
+      importErrors.length === 0
+    ) {
       // all good
     }
 
@@ -260,4 +330,3 @@ export class EmployeesService {
     };
   }
 }
-

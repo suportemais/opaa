@@ -21,4 +21,22 @@ describe('tenant default roles', () => {
       );
     }
   });
+
+  it('lets Marketing create surveys and attendants in assigned units', () => {
+    const marketing = TENANT_DEFAULT_ROLES.find(
+      (role) => role.code === 'analyst',
+    );
+    expect(marketing?.name).toBe('Marketing');
+    expect(marketing?.permissions).toEqual(
+      expect.arrayContaining([
+        PermissionCodes.SurveyRead,
+        PermissionCodes.SurveyManage,
+        PermissionCodes.EmployeeRead,
+        PermissionCodes.EmployeeManage,
+        PermissionCodes.UnitRead,
+      ]),
+    );
+    expect(marketing?.permissions).not.toContain(PermissionCodes.UnitManage);
+    expect(marketing?.permissions).not.toContain(PermissionCodes.UserManage);
+  });
 });
