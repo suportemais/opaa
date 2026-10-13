@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
 import { setAccessToken, setTenantId } from '../lib/auth-store';
 import { isPlatformOperator } from '../lib/billing-access';
+import { CreditoDev, Marca, Selo, SpriteBrilho } from '../components/site/SiteBits';
+import { RecuperarSenhaModal } from '../components/site/RecuperarSenhaModal';
 
 type TenantOption = { tenantId: string; tenantSlug?: string | null; tradeName?: string | null; legalName?: string | null };
 
@@ -23,10 +22,32 @@ export function LoginPage() {
   const [company, setCompany] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tentouEnviar, setTentouEnviar] = useState(false);
+  const [recuperacaoAberta, setRecuperacaoAberta] = useState(false);
+
+  const emailRef = useRef<HTMLInputElement>(null);
+  const senhaRef = useRef<HTMLInputElement>(null);
+  const esqueciRef = useRef<HTMLAnchorElement>(null);
+
+  const emailInvalido = tentouEnviar && !isRootDomain && !/^\S+@\S+\.\S+$/.test(email);
+  const senhaInvalida = tentouEnviar && !isRootDomain && !password;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!isRootDomain) {
+      setTentouEnviar(true);
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        emailRef.current?.focus();
+        return;
+      }
+      if (!password) {
+        senhaRef.current?.focus();
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       if (isRootDomain) {
@@ -69,119 +90,162 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-full overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-sky-50" />
-      <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-sky-200/40 blur-3xl" />
-      <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-indigo-200/30 blur-3xl" />
+    <div className="site pagina-login">
+      <SpriteBrilho />
 
-      <div className="relative mx-auto flex min-h-full w-full max-w-6xl items-center gap-10 p-6">
-        <div className="hidden flex-1 flex-col gap-5 md:flex">
-          <Link to="/" className="inline-flex items-center gap-3">
-            <img
-              src="/logo-opiina.png"
-              alt="Opiina"
-              className="h-28 drop-shadow"
-              onError={(e) => {
-                const el = e.currentTarget;
-                if (el.src.endsWith('/logo.svg')) return;
-                el.src = '/logo.svg';
-              }}
-            />
-          </Link>
+      <div className="login">
+        {/* Painel da marca (desktop) */}
+        <aside className="login__marca" aria-label="Sobre o Opiina">
+          <Marca className="marca--clara" />
 
-          <div className="mt-6 text-3xl font-semibold leading-tight text-slate-900">
-            Transforme feedback em crescimento
-          </div>
-          <div className="text-sm leading-relaxed text-slate-600">
-            Capture NPS, identifique oportunidades e organize o atendimento em um fluxo operacional simples.
+          <div className="login__marca-texto">
+            <Selo claro />
+            <p className="login__frase">
+              O que o cliente sente. <span>O que a casa precisa fazer.</span>
+            </p>
+            <ul className="login__lista">
+              <li>Pesquisa NPS rápida, em mais de um canal</li>
+              <li>Dashboard e métricas por unidade</li>
+              <li>Ocorrências organizadas no Kanban</li>
+            </ul>
           </div>
 
-          <div className="mt-3 grid gap-2 text-sm text-slate-700">
-            <div className="rounded-lg border border-slate-200 bg-white/60 px-4 py-3">Pesquisa rápida (wizard) e multicanal</div>
-            <div className="rounded-lg border border-slate-200 bg-white/60 px-4 py-3">Dashboard e métricas por unidade</div>
-            <div className="rounded-lg border border-slate-200 bg-white/60 px-4 py-3">CRM e gestão de ocorrências (Kanban)</div>
-          </div>
-        </div>
+          <CreditoDev />
+        </aside>
 
-        <div className="w-full max-w-md">
-          <div className="mb-8 flex flex-col items-center text-center">
-            <div className="text-lg font-semibold text-slate-900">Entrar</div>
-            <div className="text-sm text-slate-600">Acesse o painel</div>
-          </div>
+        {/* Formulário */}
+        <main className="login__principal" id="conteudo">
+          <Marca className="login__marca-mobile" />
 
-          <Card>
-            <form className="flex flex-col gap-3" onSubmit={onSubmit}>
-            {isRootDomain ? (
-              <div>
-                <div className="mb-1 text-sm font-medium text-slate-700">Empresa</div>
-                <div className="flex gap-2">
-                  <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="minha-empresa" />
-                  <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">
-                    .{baseDomain}
+          <div className="login__cartao">
+            <h1 className="login__titulo">Entrar</h1>
+            <p className="login__sub">Acesse o painel</p>
+
+            <form className="formulario" noValidate onSubmit={onSubmit}>
+              {isRootDomain ? (
+                <div className="campo">
+                  <label htmlFor="empresa">Empresa</label>
+                  <div className="campo__composto">
+                    <input
+                      id="empresa"
+                      name="empresa"
+                      type="text"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      placeholder="minha-empresa"
+                    />
+                    <span className="campo__sufixo" aria-hidden="true">
+                      .{baseDomain}
+                    </span>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <>
-                {tenantOptions && (
-                  <div>
-                    <div className="mb-1 text-sm font-medium text-slate-700">Empresa</div>
-                    <select
-                      value={selectedTenantId}
-                      onChange={(e) => setSelectedTenantId(e.target.value)}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                    >
-                      {tenantOptions.map((t) => (
-                        <option key={t.tenantId} value={t.tenantId}>
-                          {t.tradeName ?? t.legalName ?? t.tenantId}
-                        </option>
-                      ))}
-                    </select>
+              ) : (
+                <>
+                  {tenantOptions && (
+                    <div className="campo">
+                      <label htmlFor="empresa">Empresa</label>
+                      <select id="empresa" value={selectedTenantId} onChange={(e) => setSelectedTenantId(e.target.value)}>
+                        {tenantOptions.map((t) => (
+                          <option key={t.tenantId} value={t.tenantId}>
+                            {t.tradeName ?? t.legalName ?? t.tenantId}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="campo">
+                    <label htmlFor="email">E-mail</label>
+                    <input
+                      ref={emailRef}
+                      id="email"
+                      name="email"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="username"
+                      placeholder="email@empresa.com"
+                      required
+                      aria-invalid={emailInvalido}
+                      aria-describedby="email-erro"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                    <p className="campo__erro" id="email-erro" hidden={!emailInvalido}>
+                      Informe um e-mail válido.
+                    </p>
                   </div>
-                )}
-                <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@empresa.com" />
-                </div>
-                <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">Senha</div>
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                  />
-                </div>
-              </>
-            )}
 
-            {error && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+                  <div className="campo">
+                    <div className="campo__topo">
+                      <label htmlFor="senha">Senha</label>
+                      <Link
+                        ref={esqueciRef}
+                        className="campo__link"
+                        to="/forgot-password"
+                        aria-haspopup="dialog"
+                        onClick={(e) => {
+                          // Com <dialog> disponível, abre o modal; senão segue para a página /forgot-password.
+                          if (typeof HTMLDialogElement === 'undefined') return;
+                          e.preventDefault();
+                          setRecuperacaoAberta(true);
+                        }}
+                      >
+                        Esqueci minha senha
+                      </Link>
+                    </div>
+                    <input
+                      ref={senhaRef}
+                      id="senha"
+                      name="senha"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                      required
+                      aria-invalid={senhaInvalida}
+                      aria-describedby="senha-erro"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <p className="campo__erro" id="senha-erro" hidden={!senhaInvalida}>
+                      Informe sua senha.
+                    </p>
+                  </div>
+                </>
+              )}
 
-            <Button type="submit" disabled={loading} className="mt-2">
-              {loading ? 'Entrando...' : 'Entrar'}
-            </Button>
+              {error && (
+                <p className="formulario__alerta" role="alert">
+                  {error}
+                </p>
+              )}
 
-            {!isRootDomain && (
-              <div className="text-right text-sm">
-                <Link to="/forgot-password" className="text-sky-700 hover:underline">
-                  Esqueci minha senha
-                </Link>
-              </div>
-            )}
+              <button className="btn btn--solido btn--grande btn--largo" type="submit" disabled={loading}>
+                {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+            </form>
 
-            <div className="pt-1 text-center text-sm text-slate-600">
-              Novo por aqui? <Link to="/onboarding" className="text-sky-700 hover:underline">Criar tenant</Link>
-            </div>
-          </form>
-          </Card>
-          <div className="mt-6 text-center text-xs text-slate-500">
-            Desenvolvido por{' '}
-            <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">
-              Dev+
-            </a>
+            <p className="login__novo">
+              Novo por aqui? <Link to="/onboarding">Criar conta</Link>
+            </p>
           </div>
-        </div>
+
+          <CreditoDev mobile />
+        </main>
       </div>
+
+      {!isRootDomain && (
+        <RecuperarSenhaModal
+          aberto={recuperacaoAberta}
+          emailInicial={/^\S+@\S+\.\S+$/.test(email) ? email : ''}
+          onFechar={() => {
+            setRecuperacaoAberta(false);
+            esqueciRef.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }
