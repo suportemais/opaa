@@ -4,6 +4,7 @@ import { apiFetch } from '../../lib/api';
 
 export type AuthMe = {
   id?: string;
+  userId?: string;
   name: string;
   email?: string;
   roleCodes?: string[];
@@ -87,3 +88,8 @@ export function useTemaPainel() {
   }, []);
   return { escuro, alternar };
 }
+
+export const EVENTO_TOUR = 'opiina:tour';
+
+/** Pede o tour do painel de qualquer tela (ex.: Minha conta). */
+export const abrirTour = () => window.dispatchEvent(new Event(EVENTO_TOUR));

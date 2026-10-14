@@ -1507,6 +1507,43 @@
 /* ==========================================================================
    Adições do app (não vêm do protótipo)
    ========================================================================== */
-.painel .rodape-painel { padding-top: 24px; border-top: 1px solid var(--linha); color: var(--mudo); font-size: 12px; text-align: center; }
-.painel .rodape-painel a { color: var(--link); }
-.painel .rodape-painel a:hover { text-decoration: underline; }
+
+/* Crédito no fim do menu lateral */
+.painel .lateral__credito { margin-top: -8px; padding: 0 8px; color: var(--mudo); font-size: 12px; }
+.painel .lateral__credito a { color: var(--link); font-weight: 600; }
+.painel .lateral__credito a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* "Estamos de cara nova" */
+.painel .novidades { width: min(480px, calc(100% - 32px)); }
+.painel .novidades__lista { display: grid; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; font-size: 15px; }
+.painel .novidades__lista li { position: relative; padding-left: 24px; }
+.painel .novidades__lista li::before { content: ""; position: absolute; left: 4px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--grad); }
+.painel .novidades .confirmar__acoes { margin-top: 24px; }
+
+/* Tour guiado: destaca um item do menu e explica ao lado */
+.painel .tour { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--texto); overflow: hidden; }
+.painel .tour::backdrop { background: transparent; }
+.painel .tour__fundo { position: absolute; inset: 0; background: rgba(10, 26, 51, .55); }
+.painel .tour__foco {
+  position: absolute; border-radius: calc(var(--raio) + 4px);
+  box-shadow: 0 0 0 3px var(--acento), 0 0 0 9999px rgba(10, 26, 51, .55);
+  transition: top .25s var(--suave), left .25s var(--suave), width .25s var(--suave), height .25s var(--suave);
+  pointer-events: none;
+}
+.painel .tour__cartao {
+  position: absolute; width: min(340px, calc(100vw - 32px));
+  padding: 20px 20px 16px;
+  border: 1px solid var(--linha); border-radius: 16px;
+  background: var(--superficie);
+  box-shadow: 0 32px 80px -24px rgba(10, 26, 51, .5);
+  animation: pn-entra .25s var(--suave);
+}
+.painel .tour__cartao:focus { outline: none; }
+.painel .tour__cartao--centro { inset: 0; height: fit-content; margin: auto; width: min(420px, calc(100vw - 32px)); padding: 28px 28px 20px; }
+.painel .tour__passo { color: var(--mudo); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.painel .tour__cartao h2 { margin-top: 4px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.painel .tour__cartao h2 + p { margin-top: 6px; color: var(--mudo); font-size: 15px; }
+.painel .tour__acoes { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 18px; }
+.painel .tour__nav { display: flex; gap: 8px; }
+.painel .tour__acoes .btn--fantasma { margin-left: -12px; color: var(--mudo); }
+@media (prefers-reduced-motion: reduce) { .painel .tour__foco, .painel .tour__cartao { transition: none; animation: none; } }

@@ -10,8 +10,10 @@ import type { TenantBilling } from '../../lib/billing-access';
 import { Icone, type NomeIcone } from '../painel/Icone';
 import { iniciais, nomePerfil, useAuthMe, useTemaPainel } from '../painel/usePainel';
 import { primeiraTelaDeConfiguracoes } from '../painel/configAbas';
+import { BoasVindas } from '../painel/BoasVindas';
 
 type TenantMe = {
+  createdAt?: string | null;
   tradeName?: string | null;
   legalName?: string | null;
   billing?: TenantBilling;
@@ -175,6 +177,7 @@ export function AppShell() {
                     key={item.rotulo}
                     to={item.to}
                     className="nav__item"
+                    data-tour={item.icone}
                     aria-current={ativo(item) ? 'page' : undefined}
                   >
                     <Icone nome={item.icone} />
@@ -193,7 +196,7 @@ export function AppShell() {
             ))}
           </nav>
 
-          <button className="tema" type="button" aria-pressed={escuro} onClick={alternar}>
+          <button className="tema" type="button" data-tour="tema" aria-pressed={escuro} onClick={alternar}>
             <span className="tema__icone" aria-hidden="true">
               <Icone nome={escuro ? 'sol' : 'lua'} />
             </span>
@@ -201,7 +204,7 @@ export function AppShell() {
             <span className="tema__chave" aria-hidden="true" />
           </button>
 
-          <div className="conta">
+          <div className="conta" data-tour="conta">
             <span className="avatar" aria-hidden="true">
               {iniciais(nome)}
             </span>
@@ -213,8 +216,20 @@ export function AppShell() {
               <Icone nome="sair" />
             </button>
           </div>
+          <p className="lateral__credito">
+            Desenvolvido por{' '}
+            <a href="https://devmais.com" target="_blank" rel="noreferrer">
+              Dev+
+            </a>
+          </p>
         </aside>
         <div className="lateral-fundo" onClick={() => setMenuAberto(false)} />
+        <BoasVindas
+          userId={me.data?.userId ?? me.data?.id}
+          contaCriadaEm={tenant.data?.createdAt}
+          pronto={me.isSuccess && tenant.isSuccess && !tenant.data?.billing?.accessBlocked}
+          abrirMenu={setMenuAberto}
+        />
 
         <main className="principal" id="conteudo" inert={menuAberto || undefined}>
           <div className="principal__conteudo">
@@ -229,12 +244,6 @@ export function AppShell() {
             ) : (
               <Outlet />
             )}
-            <footer className="rodape-painel">
-              Desenvolvido por{' '}
-              <a href="https://devmais.com" target="_blank" rel="noreferrer">
-                Dev+
-              </a>
-            </footer>
           </div>
         </main>
       </div>

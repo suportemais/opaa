@@ -8,6 +8,7 @@ import { useAvisar } from '../components/painel/config/hooks';
 import { descr, mensagemDoErro } from '../components/painel/config/erros';
 import { perfilPorCodigo, resumoDoPerfil } from '../components/painel/config/perfis';
 import '../styles/painel-config.css';
+import { abrirTour } from '../components/painel/usePainel';
 
 type Me = { name: string; email?: string; phone?: string | null; roleCodes?: string[]; roleNames?: string[]; unitIds?: string[] };
 
@@ -255,6 +256,20 @@ export function MinhaContaPage() {
             </button>
           </div>
         </form>
+
+        <section className="cartao cfg__cartao" aria-labelledby="t-tour">
+          <div className="cfg__topo">
+            <div>
+              <h2 className="cartao__titulo" id="t-tour">
+                Tour do painel
+              </h2>
+              <p className="cartao__sub">Reveja onde fica cada coisa no menu.</p>
+            </div>
+            <button className="btn btn--secundario" type="button" onClick={abrirTour}>
+              Rever o tour
+            </button>
+          </div>
+        </section>
       </div>
       {aviso}
     </ConfigLayout>
