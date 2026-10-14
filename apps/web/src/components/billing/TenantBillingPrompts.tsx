@@ -36,6 +36,22 @@ export function TenantBillingPrompts(props: {
 
   if (!shouldShowStripePrompts(billing) || billing?.accessBlocked) return noticeBox;
 
+  // Sem chave do Stripe na API: mantém o aviso informativo, sem botão que daria erro
+  if (billing?.stripeEnabled === false) {
+    if (billing.status !== 'trial') return noticeBox;
+    return (
+      <div className="grid gap-3">
+        {noticeBox}
+        <Banner tone="info" testId="stripe-trial-hint">
+          <span>
+            Você está no período de trial. A cobrança self-serve (Stripe) será liberada em breve — nenhum cartão é
+            exigido agora.
+          </span>
+        </Banner>
+      </div>
+    );
+  }
+
   const hasSubscription = Boolean(billing?.subscriptionStatus);
   let body: React.ReactNode = null;
 

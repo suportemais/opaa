@@ -9,6 +9,7 @@ import { normalizeBrDocument } from '../common/br-document';
 import {
   billingBlockReason,
   isBillingEnforcementEnabled,
+  isStripeConfigured,
   shouldShowStripePrompts,
 } from '../billing/billing-access';
 import type { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -66,6 +67,7 @@ export class TenantService {
           billingMode: tenant.billingMode,
           status: tenant.status,
         }),
+        stripeEnabled: isStripeConfigured(),
         subscriptionStatus: tenant.stripeSubscriptionStatus,
         currentPeriodEnd: tenant.stripeCurrentPeriodEnd,
         cancelAtPeriodEnd: tenant.stripeCancelAtPeriodEnd,
@@ -180,6 +182,7 @@ export class TenantService {
           billingMode: updated.billingMode,
           status: updated.status,
         }),
+        stripeEnabled: isStripeConfigured(),
       },
     };
   }

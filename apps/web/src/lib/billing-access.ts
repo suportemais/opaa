@@ -2,6 +2,8 @@ export type TenantBilling = {
   billingMode?: string | null;
   status?: string | null;
   requiresStripeCheckout?: boolean;
+  /** false quando a API não tem chave do Stripe: não oferece "Assinar". */
+  stripeEnabled?: boolean;
   plan?: { id: string; name: string; slug: string } | null;
   trialEndsAt?: string | null;
   subscriptionStatus?: string | null;

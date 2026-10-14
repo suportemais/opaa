@@ -73,3 +73,8 @@ export function isBillingEnforcementEnabled(
 ): boolean {
   return ['1', 'true', 'on', 'yes'].includes((value ?? '').trim().toLowerCase());
 }
+
+/** Stripe só é oferecido (botão "Assinar") quando a chave secreta está configurada. */
+export function isStripeConfigured(value: string | undefined = process.env.STRIPE_SECRET_KEY): boolean {
+  return Boolean((value ?? '').trim());
+}
