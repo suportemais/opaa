@@ -5,6 +5,11 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UsersService } from '../users/users.service';
 import { RbacService } from '../rbac/rbac.service';
 import type { AuthUser } from './auth.types';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  billingBlockReason,
+  isBillingEnforcementEnabled,
+} from '../billing/billing-access';
 
 type JwtPayload = {
   sub: string;
@@ -17,6 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
     private readonly users: UsersService,
     private readonly rbac: RbacService,
+    private readonly prisma: PrismaService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -35,6 +41,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const roleCodes = user.roles.map((userRole) => userRole.role.code);
     const unitIds = user.unitAccess.map((u) => u.unitId);
 
+    let blockReason: string | null = null;
+    if (isBillingEnforcementEnabled()) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { billingMode: true, status: true, trialEndsAt: true, isPlatform: true },
+      });
+      blockReason = billingBlockReason(tenant);
+    }
+
     return {
       userId: user.id,
       tenantId: user.tenantId,
@@ -44,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       permissionCodes,
       roleCodes,
       unitIds,
+      billingBlockReason: blockReason,
     };
   }
 }

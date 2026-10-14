@@ -51,4 +51,10 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   unitTimeZone?: string;
+
+  /** Plano escolhido na tela de cadastro (usado depois no Checkout da Stripe). */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9-]{1,64}$/)
+  planSlug?: string;
 }

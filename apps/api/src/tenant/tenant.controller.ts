@@ -7,6 +7,7 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import { RequirePermissions } from '../rbac/require-permissions.decorator';
 import { TenantService } from './tenant.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { AllowBillingBlocked } from '../billing/allow-billing-blocked.decorator';
 
 @Controller('tenant')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -14,6 +15,7 @@ export class TenantController {
   constructor(private readonly tenants: TenantService) {}
 
   @Get('me')
+  @AllowBillingBlocked()
   @RequirePermissions(PermissionCodes.UnitRead)
   me(@CurrentUser() user: AuthUser) {
     return this.tenants.me(user);

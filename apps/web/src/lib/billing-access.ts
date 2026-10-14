@@ -2,7 +2,22 @@ export type TenantBilling = {
   billingMode?: string | null;
   status?: string | null;
   requiresStripeCheckout?: boolean;
+  plan?: { id: string; name: string; slug: string } | null;
+  trialEndsAt?: string | null;
+  subscriptionStatus?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean;
+  accessBlocked?: boolean;
+  blockReason?: 'trial_expired' | 'subscription_cancelled' | 'subscription_suspended' | null;
 };
+
+/** Dias inteiros restantes até a data (0 se já passou). */
+export function daysUntil(iso?: string | null, now: Date = new Date()): number | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - now.getTime();
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+}
 
 /** Manual (DevMais) customers must never see Stripe / "assine" prompts. */
 export function shouldShowStripePrompts(billing?: TenantBilling | null): boolean {

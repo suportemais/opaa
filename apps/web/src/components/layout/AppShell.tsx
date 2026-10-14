@@ -5,6 +5,8 @@ import { Button } from '../ui/Button';
 import { setAccessToken } from '../../lib/auth-store';
 import { apiFetch } from '../../lib/api';
 import { TenantBillingPrompts } from '../billing/TenantBillingPrompts';
+import { BillingBlockedScreen } from '../billing/BillingBlockedScreen';
+import { useBillingReturn } from '../../lib/billing';
 import type { TenantBilling } from '../../lib/billing-access';
 
 type AuthMe = {
@@ -24,6 +26,8 @@ export function AppShell() {
     queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ billing: undefined })),
     staleTime: 60 * 1000,
   });
+
+  const [billingNotice, dismissBillingNotice] = useBillingReturn();
 
   const permissionCodes = me.data?.permissionCodes ?? [];
   const canManageTenant = permissionCodes.includes('tenant:settings:manage');
@@ -194,8 +198,17 @@ export function AppShell() {
 
       <main className="flex-1 overflow-auto">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-4 md:p-8">
-          <TenantBillingPrompts billing={tenant.data?.billing} />
-          <Outlet />
+          <TenantBillingPrompts
+            billing={tenant.data?.billing}
+            canManage={canManageTenant}
+            notice={billingNotice}
+            onDismissNotice={dismissBillingNotice}
+          />
+          {tenant.data?.billing?.accessBlocked ? (
+            <BillingBlockedScreen billing={tenant.data.billing} canManage={canManageTenant} />
+          ) : (
+            <Outlet />
+          )}
           <footer className="border-t border-slate-200 pt-6 text-center text-xs text-slate-500">
             Desenvolvido por{' '}
             <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">

@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/api';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { SubscriptionCard } from '../components/billing/SubscriptionCard';
 
 type TenantMe = {
   id: string;
@@ -121,6 +122,8 @@ export function CompanyPage() {
         <div className="text-xl font-semibold">Empresa</div>
         <div className="text-sm text-slate-600">Cadastro do tenant, configurações e segurança</div>
       </div>
+
+      <SubscriptionCard />
 
       <Card title="Cadastro do tenant">
         {tenant.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}

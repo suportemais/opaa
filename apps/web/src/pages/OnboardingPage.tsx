@@ -141,6 +141,7 @@ export function OnboardingPage() {
           adminPassword,
           unitName,
           unitTimeZone,
+          planSlug: selectedPlan?.slug,
         },
       });
       setResult(created);

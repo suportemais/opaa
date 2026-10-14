@@ -189,6 +189,9 @@ model Tenant {
   manualAccessReason ManualAccessReason?
   stripeCustomerId String?
   stripeSubscriptionId String?
+  stripeSubscriptionStatus String?
+  stripeCurrentPeriodEnd DateTime?
+  stripeCancelAtPeriodEnd Boolean @default(false)
   isPlatform    Boolean      @default(false)
 
   plan          Plan?        @relation(fields: [planId], references: [id])
@@ -230,6 +233,8 @@ model Tenant {
   @@index([status])
   @@index([billingMode])
   @@index([planId])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
   @@map("tenants")
 }
 
@@ -1174,4 +1179,15 @@ model Plan {
 
   @@index([isPublic, displayOrder])
   @@map("plans")
+}
+
+/// Eventos de webhook da Stripe já processados (idempotência).
+model StripeEvent {
+  id          String   @id
+  type        String
+  tenantId    String?  @db.Uuid
+  processedAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("stripe_events")
 }

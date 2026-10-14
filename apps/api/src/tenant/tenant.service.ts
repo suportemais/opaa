@@ -6,7 +6,11 @@ import {
   withBadScoreThreshold,
 } from '../common/tenant-settings';
 import { normalizeBrDocument } from '../common/br-document';
-import { shouldShowStripePrompts } from '../billing/billing-access';
+import {
+  billingBlockReason,
+  isBillingEnforcementEnabled,
+  shouldShowStripePrompts,
+} from '../billing/billing-access';
 import type { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
@@ -35,12 +39,19 @@ export class TenantService {
         trialEndsAt: true,
         accessValidUntil: true,
         manualAccessReason: true,
+        isPlatform: true,
+        stripeSubscriptionStatus: true,
+        stripeCurrentPeriodEnd: true,
+        stripeCancelAtPeriodEnd: true,
         plan: { select: { id: true, name: true, slug: true } },
       },
     });
 
+    const blockReason = isBillingEnforcementEnabled() ? billingBlockReason(tenant) : null;
+    const { isPlatform: _isPlatform, ...publicTenant } = tenant;
+
     return {
-      ...tenant,
+      ...publicTenant,
       settings: {
         badScoreThreshold: badScoreThresholdFromSettings(tenant.settings),
       },
@@ -55,6 +66,11 @@ export class TenantService {
           billingMode: tenant.billingMode,
           status: tenant.status,
         }),
+        subscriptionStatus: tenant.stripeSubscriptionStatus,
+        currentPeriodEnd: tenant.stripeCurrentPeriodEnd,
+        cancelAtPeriodEnd: tenant.stripeCancelAtPeriodEnd,
+        accessBlocked: Boolean(blockReason),
+        blockReason,
       },
     };
   }

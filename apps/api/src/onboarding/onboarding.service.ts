@@ -36,6 +36,13 @@ export class OnboardingService {
       throw new ConflictException('Documento inválido.');
 
     const baseSlug = slugify(dto.tenantSlug ?? dto.tradeName);
+    const plan = dto.planSlug
+      ? await this.prisma.plan.findFirst({
+          where: { slug: dto.planSlug, isActive: true },
+          select: { id: true, trialDays: true },
+        })
+      : null;
+    const trialDays = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 14;
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const suffix =
@@ -44,7 +51,7 @@ export class OnboardingService {
 
       try {
         const result = await this.prisma.$transaction(async (tx) => {
-          const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+          const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
           const tenant = await tx.tenant.create({
             data: {
               slug,
@@ -59,6 +66,7 @@ export class OnboardingService {
               status: 'trial',
               billingMode: 'stripe',
               trialEndsAt,
+              planId: plan?.id ?? null,
             },
           });
 

@@ -1,4 +1,6 @@
 import {
+  billingBlockReason,
+  isBillingEnforcementEnabled,
   isManualAccessReason,
   shouldShowStripePrompts,
   subscriptionSourceLabel,
@@ -43,5 +45,36 @@ describe('billing-access', () => {
     expect(isManualAccessReason('cortesia')).toBe(true);
     expect(isManualAccessReason('trial_grant')).toBe(true);
     expect(isManualAccessReason('stripe')).toBe(false);
+  });
+});
+
+describe('billingBlockReason', () => {
+  const now = new Date('2026-10-14T12:00:00Z');
+  const past = new Date('2026-10-01T00:00:00Z');
+  const future = new Date('2026-10-30T00:00:00Z');
+
+  it('blocks self-serve tenants whose trial expired', () => {
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'trial', trialEndsAt: past }, now)).toBe('trial_expired');
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'trial', trialEndsAt: future }, now)).toBeNull();
+  });
+
+  it('blocks cancelled and suspended subscriptions but keeps delinquent (past_due) access', () => {
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'cancelled' }, now)).toBe('subscription_cancelled');
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'suspended' }, now)).toBe('subscription_suspended');
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'delinquent' }, now)).toBeNull();
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'active' }, now)).toBeNull();
+  });
+
+  it('never blocks manual (DevMais) or platform tenants', () => {
+    expect(billingBlockReason({ billingMode: 'manual', status: 'cancelled' }, now)).toBeNull();
+    expect(billingBlockReason({ billingMode: 'manual', status: 'trial', trialEndsAt: past }, now)).toBeNull();
+    expect(billingBlockReason({ billingMode: 'stripe', status: 'cancelled', isPlatform: true }, now)).toBeNull();
+  });
+
+  it('reads the enforcement flag', () => {
+    expect(isBillingEnforcementEnabled('true')).toBe(true);
+    expect(isBillingEnforcementEnabled('on')).toBe(true);
+    expect(isBillingEnforcementEnabled('false')).toBe(false);
+    expect(isBillingEnforcementEnabled(undefined)).toBe(false);
   });
 });

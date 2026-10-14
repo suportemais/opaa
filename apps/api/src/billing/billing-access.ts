@@ -28,3 +28,48 @@ export function isManualAccessReason(
 ): value is ManualAccessReasonValue {
   return value === 'manual' || value === 'cortesia' || value === 'trial_grant';
 }
+
+export type TenantAccessSnapshot = {
+  billingMode?: string | null;
+  status?: string | null;
+  trialEndsAt?: Date | null;
+  isPlatform?: boolean | null;
+};
+
+export type BillingBlockReason =
+  | 'trial_expired'
+  | 'subscription_cancelled'
+  | 'subscription_suspended';
+
+/**
+ * Motivo pelo qual um tenant self-serve (Stripe) perdeu acesso ao painel, ou
+ * null se o acesso está liberado. Contas manuais (DevMais) e a conta da
+ * plataforma nunca são bloqueadas aqui — esse controle é feito pelo suporte.
+ * `delinquent` (past_due) continua com acesso enquanto a Stripe tenta cobrar.
+ */
+export function billingBlockReason(
+  tenant: TenantAccessSnapshot | null | undefined,
+  now: Date = new Date(),
+): BillingBlockReason | null {
+  if (!tenant || tenant.isPlatform) return null;
+  if ((tenant.billingMode ?? 'stripe') === 'manual') return null;
+
+  switch (tenant.status) {
+    case 'trial':
+      if (tenant.trialEndsAt && tenant.trialEndsAt.getTime() <= now.getTime())
+        return 'trial_expired';
+      return null;
+    case 'cancelled':
+      return 'subscription_cancelled';
+    case 'suspended':
+      return 'subscription_suspended';
+    default:
+      return null;
+  }
+}
+
+export function isBillingEnforcementEnabled(
+  value: string | undefined = process.env.BILLING_ENFORCEMENT,
+): boolean {
+  return ['1', 'true', 'on', 'yes'].includes((value ?? '').trim().toLowerCase());
+}

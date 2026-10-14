@@ -7,4 +7,6 @@ export type AuthUser = {
   permissionCodes: string[];
   roleCodes: string[];
   unitIds: string[];
+  /** Preenchido só com BILLING_ENFORCEMENT ligado; ver billing-access.ts. */
+  billingBlockReason?: string | null;
 };

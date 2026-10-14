@@ -5,11 +5,13 @@ import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import type { AuthUser } from './auth.types';
+import { AllowBillingBlocked } from '../billing/allow-billing-blocked.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
+@AllowBillingBlocked()
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
