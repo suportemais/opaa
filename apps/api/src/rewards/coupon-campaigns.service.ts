@@ -174,6 +174,23 @@ export class CouponCampaignsService {
     return this.update(user, id, { status: 'paused' });
   }
 
+  /** Encerra a campanha (status `finished`). Nunca remove campanha nem cupons. */
+  async finish(user: AuthUser, id: string) {
+    const existing = await this.prisma.couponCampaign.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundException('campaign_not_found');
+
+    const updated = await this.prisma.couponCampaign.update({
+      where: { id: existing.id },
+      data: { status: 'finished' },
+      include: CAMPAIGN_INCLUDE,
+    });
+    const [mapped] = await this.withKpis(user.tenantId, [updated]);
+    return mapped;
+  }
+
   async activate(user: AuthUser, id: string) {
     return this.update(user, id, { status: 'active' });
   }

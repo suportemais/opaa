@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -18,8 +18,8 @@ export class SurveysController {
 
   @Get()
   @RequirePermissions(PermissionCodes.SurveyRead)
-  list(@CurrentUser() user: AuthUser) {
-    return this.surveys.list(user);
+  list(@CurrentUser() user: AuthUser, @Query('includeArchived') includeArchived?: string) {
+    return this.surveys.list(user, { includeArchived: includeArchived === 'true' || includeArchived === '1' });
   }
 
   @Get(':id')
@@ -56,6 +56,12 @@ export class SurveysController {
   @RequirePermissions(PermissionCodes.SurveyManage)
   publish(@CurrentUser() user: AuthUser, @Param('id') id: string, @Req() req: Request) {
     return this.surveys.publish(user, id, req);
+  }
+
+  @Post(':id/unarchive')
+  @RequirePermissions(PermissionCodes.SurveyManage)
+  unarchive(@CurrentUser() user: AuthUser, @Param('id') id: string, @Req() req: Request) {
+    return this.surveys.unarchive(user, id, req);
   }
 
   @Post(':id/delete')

@@ -61,4 +61,10 @@ export class CouponCampaignsController {
   activate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.campaigns.activate(user, id);
   }
+
+  @Post(':id/finish')
+  @RequirePermissions(PermissionCodes.SurveyManage)
+  finish(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.campaigns.finish(user, id);
+  }
 }

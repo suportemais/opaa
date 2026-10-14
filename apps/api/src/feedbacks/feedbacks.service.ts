@@ -4,6 +4,7 @@ import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
 import type { UpdateCaseDto } from './dto/update-case.dto';
 import type { CreateCaseInteractionDto } from './dto/create-case-interaction.dto';
+import type { CreateCaseNoteDto } from './dto/create-case-note.dto';
 import { WebhookOutboxService } from '../webhook-outbox/webhook-outbox.service';
 import {
   CANONICAL_THEMES,
@@ -64,6 +65,10 @@ export class FeedbacksService {
       from?: string;
       to?: string;
       unitId?: string;
+      /** Busca case-insensitive no comentário principal e no nome do cliente. */
+      q?: string;
+      /** 'true' = apenas com comentário; 'false' = apenas sem comentário. */
+      hasComment?: string;
     },
   ) {
     const take = Math.min(Math.max(params.take ?? 20, 1), 50);
@@ -182,6 +187,24 @@ export class FeedbacksService {
     if (feedbackCaseFilter)
       extraFilters.push({ feedbackCase: feedbackCaseFilter });
 
+    const q = typeof params.q === 'string' ? params.q.trim().slice(0, 200) : '';
+    if (q) {
+      extraFilters.push({
+        OR: [
+          { mainComment: { contains: q, mode: 'insensitive' } },
+          { customer: { is: { name: { contains: q, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+
+    if (params.hasComment === 'true') {
+      extraFilters.push({ mainComment: { not: null } }, { NOT: { mainComment: '' } });
+    } else if (params.hasComment === 'false') {
+      extraFilters.push({ OR: [{ mainComment: null }, { mainComment: '' }] });
+    } else if (params.hasComment && params.hasComment !== 'any') {
+      throw new BadRequestException('invalid_has_comment');
+    }
+
     return this.prisma.surveyResponse.findMany({
       where: {
         tenantId: user.tenantId,
@@ -203,6 +226,11 @@ export class FeedbacksService {
         npsScore: true,
         npsClass: true,
         mainComment: true,
+        sentiment: true,
+        sentimentTheme: true,
+        unit: { select: { id: true, name: true } },
+        employee: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true } },
         feedbackCase: {
           select: {
             id: true,
@@ -603,5 +631,29 @@ export class FeedbacksService {
     });
 
     return interaction;
+  }
+
+  async addCaseNote(user: AuthUser, responseId: string, dto: CreateCaseNoteDto) {
+    const text = typeof dto.text === 'string' ? dto.text.trim() : '';
+    if (!text) throw new BadRequestException('invalid_text');
+    if (text.length > 2000) throw new BadRequestException('text_too_long');
+
+    const response = await this.prisma.surveyResponse.findFirst({
+      where: { id: responseId, tenantId: user.tenantId, ...this.unitWhere(user) },
+      include: { feedbackCase: true },
+    });
+    if (!response) throw new NotFoundException();
+    const current = response.feedbackCase ?? (await this.createCase(user, responseId));
+
+    return this.prisma.feedbackCaseEvent.create({
+      data: {
+        tenantId: user.tenantId,
+        feedbackCaseId: current.id,
+        type: 'case.note',
+        data: { text } as any,
+        createdByUserId: user.userId,
+      },
+      include: { createdBy: { select: { id: true, name: true, email: true } } },
+    });
   }
 }

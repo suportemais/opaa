@@ -311,4 +311,15 @@ describe('CouponCampaignsService', () => {
       }),
     );
   });
+
+  it('finishes a campaign via status change only', async () => {
+    const { service, prisma } = setup();
+    await service.finish(user(), 'camp-1');
+    expect(prisma.couponCampaign.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'camp-1' },
+        data: { status: 'finished' },
+      }),
+    );
+  });
 });

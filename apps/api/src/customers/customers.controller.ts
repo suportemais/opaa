@@ -22,6 +22,7 @@ import { RequirePermissions } from '../rbac/require-permissions.decorator';
 import { PermissionCodes } from '../rbac/permission-codes';
 import { CustomersService } from './customers.service';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateCustomerInteractionDto } from './dto/create-customer-interaction.dto';
 
 @Controller('customers')
@@ -31,8 +32,30 @@ export class CustomersController {
 
   @Get()
   @RequirePermissions(PermissionCodes.CustomerRead)
-  list(@CurrentUser() user: AuthUser, @Query('q') q?: string) {
-    return this.customers.list(user, q);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('q') q?: string,
+    @Query('unitId') unitId?: string,
+    @Query('offers') offers?: string,
+    @Query('birthdayMonth') birthdayMonth?: string,
+    @Query('source') source?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.customers.list(user, q, {
+      unitId,
+      offers,
+      birthdayMonth,
+      source,
+      page,
+      pageSize,
+    });
+  }
+
+  @Post()
+  @RequirePermissions(PermissionCodes.CustomerManage)
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateCustomerDto) {
+    return this.customers.create(user, dto);
   }
 
   @Post('import')

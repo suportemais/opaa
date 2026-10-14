@@ -8,6 +8,7 @@ import { RequirePermissions } from '../rbac/require-permissions.decorator';
 import { FeedbacksService } from './feedbacks.service';
 import { UpdateCaseDto } from './dto/update-case.dto';
 import { CreateCaseInteractionDto } from './dto/create-case-interaction.dto';
+import { CreateCaseNoteDto } from './dto/create-case-note.dto';
 
 @Controller('feedbacks')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -30,6 +31,8 @@ export class FeedbacksController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('unitId') unitId?: string,
+    @Query('q') q?: string,
+    @Query('hasComment') hasComment?: string,
   ) {
     return this.feedbacks.list(user, {
       cursor,
@@ -44,6 +47,8 @@ export class FeedbacksController {
       from,
       to,
       unitId,
+      q,
+      hasComment,
     });
   }
 
@@ -80,6 +85,12 @@ export class FeedbacksController {
   @RequirePermissions(PermissionCodes.FeedbackManage)
   assignMe(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.feedbacks.assignMe(user, id);
+  }
+
+  @Post(':id/case/notes')
+  @RequirePermissions(PermissionCodes.FeedbackManage)
+  addCaseNote(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateCaseNoteDto) {
+    return this.feedbacks.addCaseNote(user, id, dto);
   }
 
   @Get(':id/case/interactions')

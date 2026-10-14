@@ -57,6 +57,15 @@ export class WhistleblowerController {
     });
   }
 
+  @Get('summary')
+  @RequirePermissions(
+    PermissionCodes.WhistleblowerRead,
+    PermissionCodes.TenantSettingsManage,
+  )
+  summary(@CurrentUser() user: AuthUser, @Query('unitId') unitId?: string) {
+    return this.whistleblower.summary(user, { unitId });
+  }
+
   @Get(':id')
   @RequirePermissions(
     PermissionCodes.WhistleblowerRead,

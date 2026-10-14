@@ -6,6 +6,14 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import type { UpdateWhistleblowerDto } from './dto/update-whistleblower.dto';
 import type { CreateWhistleblowerEventDto } from './dto/update-whistleblower.dto';
 
+/** Status considerados "abertos" (não concluídos nem arquivados). */
+export const OPEN_WHISTLEBLOWER_STATUSES: WhistleblowerStatus[] = [
+  'received',
+  'analyzing',
+  'investigating',
+  'awaiting_info',
+];
+
 @Injectable()
 export class WhistleblowerService {
   constructor(private readonly prisma: PrismaService) {}
@@ -59,10 +67,22 @@ export class WhistleblowerService {
     }
 
     const allowedStatus: WhistleblowerStatus[] = ['received', 'analyzing', 'investigating', 'awaiting_info', 'completed', 'archived'];
-    let statusFilter: WhistleblowerStatus | undefined;
+    let statusFilter: WhistleblowerStatus[] | undefined;
     if (params.status && params.status !== 'any') {
-      if (!allowedStatus.includes(params.status as WhistleblowerStatus)) throw new BadRequestException('invalid_status');
-      statusFilter = params.status as WhistleblowerStatus;
+      const parts = params.status
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      const set = new Set<WhistleblowerStatus>();
+      for (const part of parts) {
+        if (part === 'open') {
+          for (const s of OPEN_WHISTLEBLOWER_STATUSES) set.add(s);
+          continue;
+        }
+        if (!allowedStatus.includes(part as WhistleblowerStatus)) throw new BadRequestException('invalid_status');
+        set.add(part as WhistleblowerStatus);
+      }
+      if (set.size) statusFilter = Array.from(set);
     }
 
     const allowedPriority: WhistleblowerPriority[] = ['low', 'medium', 'high', 'critical'];
@@ -106,13 +126,17 @@ export class WhistleblowerService {
       where: {
         tenantId: user.tenantId,
         ...unitWhere,
-        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(statusFilter
+          ? statusFilter.length === 1
+            ? { status: statusFilter[0] }
+            : { status: { in: statusFilter } }
+          : {}),
         ...(priorityFilter ? { priority: priorityFilter } : {}),
         ...(categoryFilter ? { category: categoryFilter } : {}),
         ...(identified === true ? { reporterAnonymous: false } : {}),
         ...(identified === false ? { reporterAnonymous: true } : {}),
         ...(range ? { createdAt: { gte: range.from, lte: range.to } } : {}),
-        ...(searchWhere ?? {}),
+        ...(searchWhere ? { AND: [searchWhere] } : {}),
       },
       take,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -240,5 +264,31 @@ export class WhistleblowerService {
     });
 
     return this.detail(user, existing.id);
+  }
+
+  async summary(user: AuthUser, params: { unitId?: string }) {
+    const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+    if (params.unitId && !canSeeAllUnits && !user.unitIds.includes(params.unitId)) {
+      throw new ForbiddenException();
+    }
+    const unitWhere = params.unitId ? { unitId: params.unitId } : this.unitWhere(user);
+    const base = { tenantId: user.tenantId, ...unitWhere };
+    const since90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+    const [novas, emAndamento, altaCritica, concluidas90d] = await this.prisma.$transaction([
+      this.prisma.whistleblowerReport.count({ where: { ...base, status: 'received' } }),
+      this.prisma.whistleblowerReport.count({
+        where: { ...base, status: { in: ['analyzing', 'investigating', 'awaiting_info'] } },
+      }),
+      this.prisma.whistleblowerReport.count({
+        where: { ...base, status: { in: OPEN_WHISTLEBLOWER_STATUSES }, priority: { in: ['high', 'critical'] } },
+      }),
+      // Não há coluna completedAt: usa updatedAt como aproximação da conclusão.
+      this.prisma.whistleblowerReport.count({
+        where: { ...base, status: 'completed', updatedAt: { gte: since90d } },
+      }),
+    ]);
+
+    return { unitId: params.unitId ?? null, novas, emAndamento, altaCritica, concluidas90d };
   }
 }

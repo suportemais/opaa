@@ -23,6 +23,11 @@ import {
   isCustomerIdentityRequired,
 } from '../domain/surveys/customer-identity';
 import {
+  MARKETING_OFFERS_PURPOSE,
+  marketingOffersConsentData,
+  parseBirthDate,
+} from '../domain/customers/offers';
+import {
   extractScaleScore,
   isOpenExtraQuestionType,
   isPresentAnswerValidForType,
@@ -392,6 +397,16 @@ export class PublicService {
           const documentNormalized =
             parsedDocument?.type === 'cpf' ? parsedDocument.value : null;
 
+          const birthDate =
+            typeof dto.customer.birthDate === 'string'
+              ? parseBirthDate(dto.customer.birthDate)
+              : null;
+          const acceptsOffers =
+            typeof dto.customer.acceptsOffers === 'boolean'
+              ? dto.customer.acceptsOffers
+              : null;
+          const consentAt = new Date();
+
           const existingCustomer =
             emailNormalized || phoneNormalized || documentNormalized
               ? await tx.customer.findFirst({
@@ -436,6 +451,10 @@ export class PublicService {
                   lastInteractionAt: new Date(),
                   originUnitId:
                     existingCustomer.originUnitId ?? distribution.unitId,
+                  ...(birthDate ? { birthDate } : {}),
+                  ...(acceptsOffers !== null
+                    ? { acceptsOffers, acceptsOffersAt: consentAt }
+                    : {}),
                 },
               })
             : await tx.customer.create({
@@ -459,8 +478,25 @@ export class PublicService {
                   originUnitId: distribution.unitId,
                   firstInteractionAt: new Date(),
                   lastInteractionAt: new Date(),
+                  source: 'survey',
+                  ...(birthDate ? { birthDate } : {}),
+                  ...(acceptsOffers !== null
+                    ? { acceptsOffers, acceptsOffersAt: consentAt }
+                    : {}),
                 },
               });
+
+          if (acceptsOffers !== null) {
+            await tx.customerConsent.create({
+              data: marketingOffersConsentData({
+                tenantId: distribution.tenantId,
+                customerId: customer.id,
+                granted: acceptsOffers,
+                source: 'survey',
+                at: consentAt,
+              }),
+            });
+          }
 
           customerId = customer.id;
         }
@@ -483,6 +519,13 @@ export class PublicService {
           npsScore,
           npsClass,
           mainComment,
+          ...(typeof dto.customer?.acceptsOffers === 'boolean'
+            ? {
+                consents: {
+                  [MARKETING_OFFERS_PURPOSE]: dto.customer.acceptsOffers,
+                } as any,
+              }
+            : {}),
           metadata: dto.clientMetadata as any,
           idempotencyKey: dto.idempotencyKey,
         },

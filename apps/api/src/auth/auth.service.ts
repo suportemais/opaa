@@ -1,4 +1,20 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+
+/** Erro claro para login de usuário com convite ainda não aceito. */
+export function invitePendingError() {
+  return new UnauthorizedException({
+    statusCode: 401,
+    code: 'user_invited',
+    message: 'Convite pendente: abra o link enviado por e-mail para criar sua senha e ativar o acesso.',
+  });
+}
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import argon2 from 'argon2';
@@ -11,6 +27,8 @@ import type { Request } from 'express';
 import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { ForgotPasswordDto } from './dto/forgot-password.dto';
 import type { ResetPasswordDto } from './dto/reset-password.dto';
+import type { AcceptInviteDto } from './dto/accept-invite.dto';
+import type { UpdateMeDto } from './dto/update-me.dto';
 import { normalizeEmail } from '../common/normalize';
 import { randomBytes } from 'node:crypto';
 import { MailerService } from '../mailer/mailer.module';
@@ -104,6 +122,7 @@ export class AuthService {
 
     if (params.tenantId) {
       const user = await this.users.findByEmailInTenant(params.tenantId, params.email);
+      if (user && user.status === 'invited') throw invitePendingError();
       if (!user || user.status !== 'active') {
         throw new UnauthorizedException();
       }
@@ -151,6 +170,9 @@ export class AuthService {
     }
 
     if (matches.length === 0) {
+      if (activeCandidates.length === 0 && candidates.some((u) => u.status === 'invited')) {
+        throw invitePendingError();
+      }
       if (activeCandidates.length === 1) {
         const user = activeCandidates[0];
         await this.audit.log({
@@ -447,6 +469,96 @@ export class AuthService {
     });
 
     return { ok: true };
+  }
+
+  async acceptInvite(dto: AcceptInviteDto, req?: Request) {
+    const token = (dto.token ?? '').trim();
+    if (!token) throw new NotFoundException('invite_not_found');
+
+    const row = await this.prisma.userInviteToken.findFirst({
+      where: { tokenHash: sha256(token) },
+      include: { user: { select: { id: true, tenantId: true, status: true, email: true } } },
+    });
+    if (!row || !row.user) throw new NotFoundException('invite_not_found');
+    if (row.usedAt) throw new ForbiddenException('invite_used');
+    if (row.revokedAt) throw new ForbiddenException('invite_revoked');
+    if (row.expiresAt < new Date()) throw new ForbiddenException('invite_expired');
+    if (row.user.status !== 'invited') throw new ForbiddenException('user_not_invited');
+
+    const password = dto.password ?? '';
+    if (password.length < 8) throw new BadRequestException('password_too_short');
+    const passwordHash = await argon2.hash(password);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userInviteToken.update({
+        where: { id: row.id },
+        data: {
+          usedAt: new Date(),
+          ip: this.requestIp(req),
+          userAgent: this.requestUserAgent(req),
+        },
+      });
+      await tx.user.update({
+        where: { id: row.user.id },
+        data: { passwordHash, status: 'active', refreshTokenHash: null },
+      });
+    });
+
+    await this.audit.log({
+      tenantId: row.tenantId,
+      actorType: 'user',
+      actorUserId: row.user.id,
+      action: 'auth.invite_accepted',
+      entity: 'User',
+      entityId: row.user.id,
+      req,
+    });
+
+    return { ok: true, tenantId: row.tenantId, email: row.user.email };
+  }
+
+  async updateMe(user: { userId: string; tenantId: string }, dto: UpdateMeDto) {
+    const data: { name?: string; phone?: string | null } = {};
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (!name) throw new BadRequestException('invalid_name');
+      data.name = name.slice(0, 200);
+    }
+    if (dto.phone !== undefined) {
+      // Mesmo formato do cadastro de usuários: apenas dígitos.
+      data.phone = (dto.phone ?? '').replace(/\D+/g, '').slice(0, 30) || null;
+    }
+
+    const current = await this.prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { id: true, tenantId: true, status: true },
+    });
+    if (!current || current.tenantId !== user.tenantId || current.status !== 'active') {
+      throw new ForbiddenException();
+    }
+
+    const updated = Object.keys(data).length
+      ? await this.prisma.user.update({
+          where: { id: current.id },
+          data,
+          select: { id: true, name: true, email: true, phone: true },
+        })
+      : await this.prisma.user.findUniqueOrThrow({
+          where: { id: current.id },
+          select: { id: true, name: true, email: true, phone: true },
+        });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      actorType: 'user',
+      actorUserId: user.userId,
+      action: 'auth.profile_updated',
+      entity: 'User',
+      entityId: user.userId,
+      summary: { fields: Object.keys(data) },
+    });
+
+    return { id: updated.id, name: updated.name, email: updated.email, phone: updated.phone ?? null };
   }
 }
 

@@ -91,4 +91,10 @@ export class MetricsController {
   rankingMonthly(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
     return this.metrics.rankingMonthly(user, query);
   }
+
+  @Get('ranking/employees')
+  @RequirePermissions(PermissionCodes.ResponseRead)
+  rankingEmployees(@CurrentUser() user: AuthUser, @Query() query: NpsQueryDto) {
+    return this.metrics.rankingEmployees(user, query);
+  }
 }

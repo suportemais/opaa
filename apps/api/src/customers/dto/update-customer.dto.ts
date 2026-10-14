@@ -40,4 +40,14 @@ export class UpdateCustomerDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  /** aaaa-mm-dd ou dd/mm/aaaa; string vazia remove a data. */
+  @IsOptional()
+  @IsString()
+  birthDate?: string;
+
+  /** Registra um novo consentimento de ofertas (source 'manual'). */
+  @IsOptional()
+  @IsBoolean()
+  acceptsOffers?: boolean;
 }

@@ -1,4 +1,5 @@
 import { normalizeBrDocument } from '../../common/br-document';
+import { parseBirthDate, parseYesNo } from './offers';
 
 export const CONTACT_IMPORT_HEADERS = [
   'Nome',
@@ -19,6 +20,10 @@ export type ContactImportRow = {
   document: string | null;
   unitLabel: string;
   notes: string | null;
+  /** Coluna opcional "Nascimento" (dd/mm/aaaa ou aaaa-mm-dd). */
+  birthDate?: Date | null;
+  /** Coluna opcional "Aceita ofertas" (sim/não). null = não informado. */
+  acceptsOffers?: boolean | null;
 };
 
 export type ContactImportRowError = { row: number; message: string };
@@ -145,6 +150,26 @@ export function parseContactImportRows(rows: Array<Record<string, string>>): {
       'notes',
     ]);
 
+    const birthRaw = cellByAliases(raw, [
+      'Nascimento',
+      'Data de nascimento',
+      'Data nascimento',
+      'Aniversário',
+      'Aniversario',
+      'Birthdate',
+      'Birth date',
+      'nascimento',
+    ]);
+    const offersRaw = cellByAliases(raw, [
+      'Aceita ofertas',
+      'Aceita Ofertas',
+      'Ofertas',
+      'Aceita receber ofertas',
+      'Opt-in',
+      'Optin',
+      'aceita ofertas',
+    ]);
+
     if (!name) {
       errors.push({ row: lineNumber, message: 'Nome é obrigatório' });
       return;
@@ -192,8 +217,24 @@ export function parseContactImportRows(rows: Array<Record<string, string>>): {
       return;
     }
 
+    const birthDate = birthRaw ? parseBirthDate(birthRaw) : null;
+    if (birthRaw && !birthDate) {
+      errors.push({ row: lineNumber, message: 'Data de nascimento inválida' });
+      return;
+    }
+    const acceptsOffers = offersRaw ? parseYesNo(offersRaw) : null;
+    if (offersRaw && acceptsOffers === null) {
+      errors.push({
+        row: lineNumber,
+        message: 'Valor inválido em "Aceita ofertas" (use sim ou não)',
+      });
+      return;
+    }
+
     clean.push({
       lineNumber,
+      ...(birthDate ? { birthDate } : {}),
+      ...(acceptsOffers !== null ? { acceptsOffers } : {}),
       name,
       email: email ?? null,
       phone: phone ?? null,

@@ -5,6 +5,7 @@ import {
   buildRankingMonthly,
   buildRankingSnapshot,
 } from '../domain/metrics/ranking';
+import { buildEmployeeRanking } from '../domain/metrics/employee-ranking';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
 import { PrismaService } from '../prisma/prisma.service';
@@ -179,7 +180,30 @@ export class MetricsService {
     const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
     const next7Start = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const baseWhere = { tenantId: user.tenantId, ...unitWhere };
+    const createdAtFilter: { gte?: Date; lte?: Date } = {};
+    if (query.from) {
+      const d = new Date(query.from);
+      if (Number.isNaN(d.getTime())) throw new BadRequestException('invalid_from');
+      createdAtFilter.gte = startOfUtcDay(d);
+    }
+    if (query.to) {
+      const d = new Date(query.to);
+      if (Number.isNaN(d.getTime())) throw new BadRequestException('invalid_to');
+      createdAtFilter.lte = endOfUtcDay(d);
+    }
+    if (
+      createdAtFilter.gte &&
+      createdAtFilter.lte &&
+      createdAtFilter.gte.getTime() > createdAtFilter.lte.getTime()
+    ) {
+      throw new BadRequestException('invalid_range');
+    }
+
+    const baseWhere = {
+      tenantId: user.tenantId,
+      ...unitWhere,
+      ...(createdAtFilter.gte || createdAtFilter.lte ? { createdAt: createdAtFilter } : {}),
+    };
 
     const [
       total,
@@ -628,6 +652,43 @@ export class MetricsService {
       unitId: scope.unitId ?? null,
       months: monthly.months,
       series: monthly.series,
+    };
+  }
+
+  async rankingEmployees(user: AuthUser, query: NpsQueryDto) {
+    const { from, to } = this.resolveRange(query);
+    const scope = await this.resolveUnitScope(user, query.unitId);
+
+    const rows = await this.prisma.surveyResponse.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: 'completed',
+        employeeId: { not: null },
+        completedAt: { gte: from, lte: to },
+        ...this.responseUnitWhere(scope),
+      },
+      select: { employeeId: true, npsScore: true, sentiment: true },
+    });
+
+    const employeeIds = Array.from(
+      new Set(rows.map((r) => r.employeeId).filter((id): id is string => !!id)),
+    );
+    const employees = employeeIds.length
+      ? await this.prisma.employee.findMany({
+          where: {
+            tenantId: user.tenantId,
+            id: { in: employeeIds },
+            ...(scope.canSeeAllUnits ? {} : { unitId: { in: scope.unitIds! } }),
+          },
+          select: { id: true, name: true, unitId: true, unit: { select: { id: true, name: true } } },
+        })
+      : [];
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      unitId: scope.unitId ?? null,
+      employees: buildEmployeeRanking(rows, employees),
     };
   }
 }

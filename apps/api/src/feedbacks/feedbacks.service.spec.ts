@@ -169,3 +169,66 @@ describe('FeedbacksService.list sentiment filters', () => {
     ).toThrow(ForbiddenException);
   });
 });
+
+describe('FeedbacksService.list search filters', () => {
+  it('searches comment and customer name case-insensitively', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const svc = serviceWithFindMany(findMany);
+
+    await svc.list(user(), { q: '  demora ' });
+
+    expect(andFilters(whereOf(findMany))).toEqual(
+      expect.arrayContaining([
+        {
+          OR: [
+            { mainComment: { contains: 'demora', mode: 'insensitive' } },
+            { customer: { is: { name: { contains: 'demora', mode: 'insensitive' } } } },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it('filters by hasComment and rejects invalid values', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const svc = serviceWithFindMany(findMany);
+
+    await svc.list(user(), { hasComment: 'false' });
+    expect(andFilters(whereOf(findMany))).toEqual(
+      expect.arrayContaining([{ OR: [{ mainComment: null }, { mainComment: '' }] }]),
+    );
+
+    expect(() => svc.list(user(), { hasComment: 'talvez' })).toThrow(BadRequestException);
+  });
+});
+
+describe('FeedbacksService.addCaseNote', () => {
+  it('records a case.note event with the actor', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'ev1' });
+    const svc = new FeedbacksService(
+      {
+        surveyResponse: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'r1', feedbackCase: { id: 'c1' } }),
+        },
+        feedbackCaseEvent: { create },
+      } as never,
+      {} as never,
+    );
+
+    await svc.addCaseNote(user(), 'r1', { text: '  Liguei para o cliente ' });
+
+    const arg = (create.mock.calls[0] as Array<{ data: Record<string, unknown> }>)[0];
+    expect(arg.data).toMatchObject({
+      tenantId: 'tenant-a',
+      feedbackCaseId: 'c1',
+      type: 'case.note',
+      data: { text: 'Liguei para o cliente' },
+      createdByUserId: 'u1',
+    });
+  });
+
+  it('rejects blank notes', async () => {
+    const svc = new FeedbacksService({} as never, {} as never);
+    await expect(svc.addCaseNote(user(), 'r1', { text: '   ' })).rejects.toThrow(BadRequestException);
+  });
+});

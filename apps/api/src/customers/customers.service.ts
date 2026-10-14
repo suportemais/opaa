@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,14 @@ import { PermissionCodes } from '../rbac/permission-codes';
 import { normalizeEmail, normalizePhone } from '../common/normalize';
 import type { UpdateCustomerDto } from './dto/update-customer.dto';
 import type { CreateCustomerInteractionDto } from './dto/create-customer-interaction.dto';
+import type { CreateCustomerDto } from './dto/create-customer.dto';
+import { Prisma } from '@prisma/client';
+import {
+  CUSTOMER_SOURCES,
+  marketingOffersConsentData,
+  parseBirthDate,
+  type CustomerSource,
+} from '../domain/customers/offers';
 import {
   matchImportedUnits,
   parseContactImportRows,
@@ -147,15 +156,21 @@ export class CustomersService {
           phoneNormalized: phoneNormalized ?? existing.phoneNormalized,
           documentNormalized: documentNormalized ?? existing.documentNormalized,
           notes: row.notes ?? existing.notes,
+          ...(row.birthDate ? { birthDate: row.birthDate } : {}),
           lastInteractionAt: now,
           originUnitId,
         },
       });
+      if (typeof row.acceptsOffers === 'boolean') {
+        await this.recordOffersConsent(tenantId, existing.id, row.acceptsOffers, 'import');
+      }
       return 'updated';
     }
 
-    await this.prisma.customer.create({
+    const created = await this.prisma.customer.create({
       data: {
+        source: 'import',
+        ...(row.birthDate ? { birthDate: row.birthDate } : {}),
         tenantId,
         name: row.name,
         email: row.email,
@@ -170,32 +185,201 @@ export class CustomersService {
         status: 'active',
       },
     });
+    if (typeof row.acceptsOffers === 'boolean') {
+      await this.recordOffersConsent(tenantId, created.id, row.acceptsOffers, 'import');
+    }
     return 'created';
   }
 
-  async list(user: AuthUser, q?: string) {
+  /**
+   * Registra um novo CustomerConsent (histórico; nunca altera os anteriores) e
+   * espelha o valor em Customer.acceptsOffers para filtros/listagem.
+   */
+  private async recordOffersConsent(
+    tenantId: string,
+    customerId: string,
+    granted: boolean,
+    source: CustomerSource,
+  ) {
+    const at = new Date();
+    await this.prisma.$transaction([
+      this.prisma.customerConsent.create({
+        data: marketingOffersConsentData({ tenantId, customerId, granted, source, at }),
+      }),
+      this.prisma.customer.update({
+        where: { id: customerId },
+        data: { acceptsOffers: granted, acceptsOffersAt: at },
+      }),
+    ]);
+  }
+
+  async list(
+    user: AuthUser,
+    q?: string,
+    filters: {
+      unitId?: string;
+      offers?: string;
+      birthdayMonth?: string;
+      source?: string;
+      page?: string;
+      pageSize?: string;
+    } = {},
+  ) {
     const query = typeof q === 'string' ? q.trim() : '';
     const qEmail = query.includes('@') ? normalizeEmail(query) : null;
     const qPhone = query ? normalizePhone(query) : null;
 
-    return this.prisma.customer.findMany({
-      where: {
+    const and: Prisma.CustomerWhereInput[] = [];
+
+    if (filters.unitId) {
+      const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+      if (!canSeeAllUnits && !user.unitIds.includes(filters.unitId)) {
+        throw new ForbiddenException();
+      }
+      and.push({ originUnitId: filters.unitId });
+    }
+
+    if (filters.offers === 'sim') and.push({ acceptsOffers: true });
+    else if (filters.offers === 'nao') {
+      and.push({ OR: [{ acceptsOffers: false }, { acceptsOffers: null }] });
+    } else if (filters.offers && filters.offers !== 'any') {
+      throw new BadRequestException('invalid_offers');
+    }
+
+    if (filters.source) {
+      if (!(CUSTOMER_SOURCES as readonly string[]).includes(filters.source)) {
+        throw new BadRequestException('invalid_source');
+      }
+      and.push({ source: filters.source });
+    }
+
+    if (filters.birthdayMonth) {
+      const month = Number(filters.birthdayMonth);
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        throw new BadRequestException('invalid_birthday_month');
+      }
+      const ids = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "customers"
+        WHERE "tenantId" = ${user.tenantId}::uuid
+          AND "birthDate" IS NOT NULL
+          AND EXTRACT(MONTH FROM "birthDate") = ${month}
+      `;
+      and.push({ id: { in: ids.map((r) => r.id) } });
+    }
+
+    const where: Prisma.CustomerWhereInput = {
+      tenantId: user.tenantId,
+      ...this.unitScopeWhere(user),
+      ...(query
+        ? {
+            OR: [
+              { name: { contains: query } },
+              ...(qEmail ? [{ emailNormalized: { contains: qEmail } }] : []),
+              ...(qPhone ? [{ phoneNormalized: { contains: qPhone } }] : []),
+            ],
+          }
+        : {}),
+      ...(and.length ? { AND: and } : {}),
+    };
+    const orderBy: Prisma.CustomerOrderByWithRelationInput[] = [
+      { lastInteractionAt: 'desc' },
+      { createdAt: 'desc' },
+    ];
+
+    // Formato antigo (array, até 200) quando `page` não é enviado.
+    if (filters.page === undefined || filters.page === '') {
+      return this.prisma.customer.findMany({
+        where,
+        include: customerOriginUnitSelect,
+        orderBy,
+        take: 200,
+      });
+    }
+
+    const page = Math.max(1, Math.floor(Number(filters.page)) || 1);
+    const pageSize = Math.min(
+      200,
+      Math.max(1, Math.floor(Number(filters.pageSize ?? 50)) || 50),
+    );
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({
+        where,
+        include: customerOriginUnitSelect,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return { items, total, page, pageSize };
+  }
+
+  async create(user: AuthUser, dto: CreateCustomerDto) {
+    if (!user.permissionCodes.includes(PermissionCodes.CustomerManage)) {
+      throw new ForbiddenException();
+    }
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('invalid_name');
+
+    let originUnitId = await this.resolveOriginUnitId(user, dto.originUnitId);
+    if (originUnitId === undefined) {
+      const canSeeAllUnits = user.permissionCodes.includes(PermissionCodes.UnitManage);
+      if (!canSeeAllUnits) {
+        if (user.unitIds.length !== 1) throw new BadRequestException('origin_unit_required');
+        originUnitId = await this.resolveOriginUnitId(user, user.unitIds[0]);
+      }
+    }
+
+    const email = typeof dto.email === 'string' && dto.email.trim() ? dto.email.trim() : null;
+    const phone = typeof dto.phone === 'string' && dto.phone.trim() ? dto.phone.trim() : null;
+    const emailNormalized = email ? normalizeEmail(email) : null;
+    const phoneNormalized = phone ? normalizePhone(phone) : null;
+
+    let birthDate: Date | null = null;
+    if (typeof dto.birthDate === 'string' && dto.birthDate.trim()) {
+      birthDate = parseBirthDate(dto.birthDate);
+      if (!birthDate) throw new BadRequestException('invalid_birth_date');
+    }
+
+    if (emailNormalized || phoneNormalized) {
+      const existing = await this.prisma.customer.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          OR: [
+            ...(emailNormalized ? [{ emailNormalized }] : []),
+            ...(phoneNormalized ? [{ phoneNormalized }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new ConflictException({ code: 'customer_exists', id: existing.id });
+      }
+    }
+
+    const notes = typeof dto.notes === 'string' && dto.notes.trim() ? dto.notes.trim() : null;
+    const created = await this.prisma.customer.create({
+      data: {
         tenantId: user.tenantId,
-        ...this.unitScopeWhere(user),
-        ...(query
-          ? {
-              OR: [
-                { name: { contains: query } },
-                ...(qEmail ? [{ emailNormalized: { contains: qEmail } }] : []),
-                ...(qPhone ? [{ phoneNormalized: { contains: qPhone } }] : []),
-              ],
-            }
-          : {}),
+        name,
+        email,
+        emailNormalized,
+        phone,
+        phoneNormalized,
+        birthDate,
+        notes,
+        originUnitId: originUnitId ?? null,
+        source: 'manual',
+        status: 'active',
       },
-      include: customerOriginUnitSelect,
-      orderBy: [{ lastInteractionAt: 'desc' }, { createdAt: 'desc' }],
-      take: 200,
+      select: { id: true },
     });
+
+    if (typeof dto.acceptsOffers === 'boolean') {
+      await this.recordOffersConsent(user.tenantId, created.id, dto.acceptsOffers, 'manual');
+    }
+
+    return this.get(user, created.id);
   }
 
   async get(user: AuthUser, id: string) {
@@ -388,15 +572,39 @@ export class CustomersService {
           ? null
           : undefined;
 
+    let birthDate: Date | null | undefined;
+    if (typeof dto.birthDate === 'string') {
+      if (!dto.birthDate.trim()) birthDate = null;
+      else {
+        birthDate = parseBirthDate(dto.birthDate);
+        if (!birthDate) throw new BadRequestException('invalid_birth_date');
+      }
+    }
+
+    if (typeof dto.acceptsOffers === 'boolean') {
+      await this.recordOffersConsent(user.tenantId, customer.id, dto.acceptsOffers, 'manual');
+    }
+
     return this.prisma.customer.update({
       where: { id: customer.id },
       data: {
+        birthDate,
         name:
           typeof dto.name === 'string' ? dto.name.trim() || null : undefined,
-        email: email ?? null,
-        emailNormalized: email ? normalizeEmail(email) : null,
-        phone: phone ?? null,
-        phoneNormalized: phone ? normalizePhone(phone) : null,
+        // Só altera e-mail/telefone quando o campo foi enviado (PATCH parcial
+        // não pode apagar dados). Enviar string vazia continua limpando.
+        ...(dto.email !== undefined
+          ? {
+              email: email ?? null,
+              emailNormalized: email ? normalizeEmail(email) : null,
+            }
+          : {}),
+        ...(dto.phone !== undefined
+          ? {
+              phone: phone ?? null,
+              phoneNormalized: phone ? normalizePhone(phone) : null,
+            }
+          : {}),
         originUnitId: originUnitId !== undefined ? originUnitId : undefined,
         notes: notes !== undefined ? (notes.length ? notes : null) : undefined,
         tags: tags !== undefined ? (tags as any) : undefined,

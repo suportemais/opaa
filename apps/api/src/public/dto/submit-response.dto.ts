@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDefined, IsEmail, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsDefined, IsEmail, IsOptional, IsString, IsUUID, Matches, ValidateNested } from 'class-validator';
 
 export class SubmitCustomerDto {
   @IsOptional()
@@ -17,6 +17,17 @@ export class SubmitCustomerDto {
   @IsOptional()
   @IsString()
   document?: string;
+
+  /** Data de nascimento (aaaa-mm-dd). */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate deve estar no formato aaaa-mm-dd' })
+  birthDate?: string;
+
+  /** Opt-in para receber ofertas (gera um CustomerConsent purpose='marketing_offers'). */
+  @IsOptional()
+  @IsBoolean()
+  acceptsOffers?: boolean;
 }
 
 export class SubmitAnswerDto {

@@ -113,7 +113,7 @@ export class SurveysService {
     }
   }
 
-  async list(user: AuthUser) {
+  async list(user: AuthUser, opts: { includeArchived?: boolean } = {}) {
     const canSeeAll = user.permissionCodes.includes(PermissionCodes.UnitManage);
 
     const unitFilter = canSeeAll
@@ -126,14 +126,21 @@ export class SurveysService {
           },
         };
 
-    return this.prisma.survey.findMany({
+    const rows = await this.prisma.survey.findMany({
       where: {
         tenantId: user.tenantId,
-        ...defaultSurveyListWhere(),
+        ...(opts.includeArchived ? { deletedAt: null } : defaultSurveyListWhere()),
         ...unitFilter,
       },
-      include: { units: { include: { unit: true } } },
+      include: {
+        units: { include: { unit: true } },
+        _count: { select: { responses: { where: { status: 'completed' } } } },
+      },
       orderBy: { createdAt: 'desc' },
+    });
+
+    return (rows ?? []).map(({ _count, ...rest }) => {
+      return { ...rest, responsesCount: _count?.responses ?? 0 };
     });
   }
 
@@ -166,6 +173,8 @@ export class SurveysService {
       anonymousAllowed: survey.anonymousAllowed,
       collectEmployee: survey.collectEmployee,
       createdAt: survey.createdAt,
+      publishedAt: survey.publishedAt ?? null,
+      archivedAt: survey.archivedAt ?? null,
       units,
       draftVersion: draft
         ? {
@@ -399,25 +408,15 @@ export class SurveysService {
       data: {
         status: 'published',
         publishedVersionId: published.id,
+        publishedAt: new Date(),
+        archivedAt: null,
       },
     });
 
-    const defaultUnit = await this.prisma.surveyUnit.findFirst({
-      where: { surveyId: survey.id },
-      select: { unitId: true },
-      orderBy: { unitId: 'asc' },
-    });
-
-    const distribution = await this.prisma.surveyDistribution.create({
-      data: {
-        tenantId: user.tenantId,
-        surveyId: survey.id,
-        unitId: defaultUnit?.unitId,
-        channel: 'qrcode',
-        publicToken: randomToken(16),
-        active: true,
-      },
-    });
+    const distribution = await this.ensureUnitDistributions(
+      user.tenantId,
+      survey.id,
+    );
 
     await this.audit.log({
       tenantId: user.tenantId,
@@ -426,7 +425,11 @@ export class SurveysService {
       action: 'survey.published',
       entity: 'Survey',
       entityId: survey.id,
-      summary: { version: published.version, distributionId: distribution.id },
+      summary: {
+        version: published.version,
+        distributionId: distribution.id,
+        createdDistributionIds: distribution.createdIds,
+      },
       req,
     });
 
@@ -456,19 +459,74 @@ export class SurveysService {
     return distribution;
   }
 
+  /**
+   * Garante uma distribuição ativa (sem atendente) por unidade da pesquisa.
+   * Só cria as que faltam; nunca remove nem desativa distribuições existentes.
+   * Retorna a distribuição da unidade padrão (menor unitId) para compatibilidade.
+   */
+  private async ensureUnitDistributions(tenantId: string, surveyId: string) {
+    const units = await this.prisma.surveyUnit.findMany({
+      where: { surveyId },
+      select: { unitId: true },
+      orderBy: { unitId: 'asc' },
+    });
+    const existing = await this.prisma.surveyDistribution.findMany({
+      where: { tenantId, surveyId, active: true, employeeId: null },
+      select: { id: true, unitId: true, publicToken: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const targetUnitIds: Array<string | null> = units.length
+      ? units.map((u) => u.unitId)
+      : [null];
+
+    const createdIds: string[] = [];
+    const byUnit = new Map<string | null, { id: string; publicToken: string }>();
+    for (const d of existing) {
+      if (!byUnit.has(d.unitId)) byUnit.set(d.unitId, d);
+    }
+
+    for (const unitId of targetUnitIds) {
+      if (byUnit.has(unitId)) continue;
+      const created = await this.prisma.surveyDistribution.create({
+        data: {
+          tenantId,
+          surveyId,
+          unitId: unitId ?? undefined,
+          channel: 'qrcode',
+          publicToken: randomToken(16),
+          active: true,
+        },
+        select: { id: true, publicToken: true },
+      });
+      createdIds.push(created.id);
+      byUnit.set(unitId, created);
+    }
+
+    const primary = byUnit.get(targetUnitIds[0])!;
+    return { id: primary.id, publicToken: primary.publicToken, createdIds };
+  }
+
   async archive(user: AuthUser, surveyId: string, req?: Request) {
     const survey = await this.getAccessibleSurvey(user, surveyId);
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.surveyDistribution.updateMany({
-        where: { tenantId: user.tenantId, surveyId: survey.id },
-        data: { active: false },
-      });
-      await tx.survey.update({
-        where: { id: survey.id },
-        data: { status: 'archived' },
-      });
-    });
+    const deactivatedDistributionIds = await this.prisma.$transaction(
+      async (tx) => {
+        const active = await tx.surveyDistribution.findMany({
+          where: { tenantId: user.tenantId, surveyId: survey.id, active: true },
+          select: { id: true },
+        });
+        await tx.surveyDistribution.updateMany({
+          where: { tenantId: user.tenantId, surveyId: survey.id },
+          data: { active: false },
+        });
+        await tx.survey.update({
+          where: { id: survey.id },
+          data: { status: 'archived', archivedAt: new Date() },
+        });
+        return (active ?? []).map((d) => d.id);
+      },
+    );
 
     await this.audit.log({
       tenantId: user.tenantId,
@@ -477,11 +535,90 @@ export class SurveysService {
       action: 'survey.archived',
       entity: 'Survey',
       entityId: survey.id,
-      summary: { name: survey.name },
+      summary: {
+        name: survey.name,
+        previousStatus: survey.status,
+        deactivatedDistributionIds,
+      },
       req,
     });
 
     return { ok: true };
+  }
+
+  /**
+   * Desarquiva: volta para `published` se a pesquisa já foi publicada
+   * (publishedVersionId/publishedAt), senão `draft`. Reativa as distribuições
+   * que o arquivamento desativou (registradas no audit log; em arquivamentos
+   * antigos, sem esse registro, reativa todas — o arquivamento era o único
+   * caminho que desativava distribuições de uma pesquisa não excluída).
+   */
+  async unarchive(user: AuthUser, surveyId: string, req?: Request) {
+    const survey = await this.getAccessibleSurvey(user, surveyId);
+    if (survey.status !== 'archived') {
+      throw new BadRequestException('survey_not_archived');
+    }
+
+    const wasPublished = !!(survey.publishedVersionId || survey.publishedAt);
+    const nextStatus = wasPublished ? 'published' : 'draft';
+
+    const lastArchive = await this.prisma.auditLog.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        action: 'survey.archived',
+        entity: 'Survey',
+        entityId: survey.id,
+      },
+      orderBy: { occurredAt: 'desc' },
+      select: { summary: true },
+    });
+    const summary = (lastArchive?.summary ?? null) as {
+      deactivatedDistributionIds?: unknown;
+    } | null;
+    const recordedIds = Array.isArray(summary?.deactivatedDistributionIds)
+      ? (summary.deactivatedDistributionIds as unknown[]).filter(
+          (id): id is string => typeof id === 'string',
+        )
+      : null;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.survey.update({
+        where: { id: survey.id },
+        data: { status: nextStatus, archivedAt: null },
+      });
+      if (recordedIds === null) {
+        await tx.surveyDistribution.updateMany({
+          where: { tenantId: user.tenantId, surveyId: survey.id },
+          data: { active: true },
+        });
+      } else if (recordedIds.length) {
+        await tx.surveyDistribution.updateMany({
+          where: {
+            tenantId: user.tenantId,
+            surveyId: survey.id,
+            id: { in: recordedIds },
+          },
+          data: { active: true },
+        });
+      }
+    });
+
+    if (nextStatus === 'published') {
+      await this.ensureUnitDistributions(user.tenantId, survey.id);
+    }
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      actorType: 'user',
+      actorUserId: user.userId,
+      action: 'survey.unarchived',
+      entity: 'Survey',
+      entityId: survey.id,
+      summary: { name: survey.name, status: nextStatus },
+      req,
+    });
+
+    return { ok: true, status: nextStatus };
   }
 
   async remove(user: AuthUser, surveyId: string, req?: Request) {

@@ -121,3 +121,41 @@ describe('contact lead import', () => {
     expect(matchImportedUnits('Inexistente', units)).toEqual([]);
   });
 });
+
+describe('parseContactImportRows optional columns', () => {
+  it('parses Nascimento and Aceita ofertas when present', () => {
+    const parsed = parseContactImportRows([
+      {
+        Nome: 'Ana',
+        'E-mail': 'ana@email.com',
+        Unidade: 'Centro',
+        Nascimento: '20/05/1990',
+        'Aceita ofertas': 'Sim',
+      },
+      {
+        Nome: 'Bia',
+        'E-mail': 'bia@email.com',
+        Unidade: 'Centro',
+        Nascimento: '1985-12-01',
+        'Aceita ofertas': 'não',
+      },
+    ]);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows[0].birthDate?.toISOString()).toBe('1990-05-20T00:00:00.000Z');
+    expect(parsed.rows[0].acceptsOffers).toBe(true);
+    expect(parsed.rows[1].birthDate?.toISOString()).toBe('1985-12-01T00:00:00.000Z');
+    expect(parsed.rows[1].acceptsOffers).toBe(false);
+  });
+
+  it('reports invalid optional values', () => {
+    const parsed = parseContactImportRows([
+      { Nome: 'Ana', 'E-mail': 'ana@email.com', Unidade: 'Centro', Nascimento: '99/99/1990' },
+      { Nome: 'Bia', 'E-mail': 'bia@email.com', Unidade: 'Centro', 'Aceita ofertas': 'talvez' },
+    ]);
+    expect(parsed.rows).toEqual([]);
+    expect(parsed.errors.map((e) => e.message)).toEqual([
+      'Data de nascimento inválida',
+      'Valor inválido em "Aceita ofertas" (use sim ou não)',
+    ]);
+  });
+});

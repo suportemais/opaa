@@ -9,6 +9,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SetUserPasswordDto } from './dto/set-user-password.dto';
+import { InviteUserDto } from './dto/invite-user.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -19,6 +20,25 @@ export class UsersController {
   @RequirePermissions(PermissionCodes.UserManage)
   list(@CurrentUser() user: AuthUser) {
     return this.users.listInTenant(user);
+  }
+
+  /** Usuários ativos com `feedback:manage` — para o seletor de responsável dos casos. */
+  @Get('assignable')
+  @RequirePermissions(PermissionCodes.FeedbackManage)
+  assignable(@CurrentUser() user: AuthUser) {
+    return this.users.listAssignable(user);
+  }
+
+  @Post('invite')
+  @RequirePermissions(PermissionCodes.UserManage)
+  invite(@CurrentUser() user: AuthUser, @Body() dto: InviteUserDto) {
+    return this.users.inviteInTenant(user, dto);
+  }
+
+  @Post(':id/resend-invite')
+  @RequirePermissions(PermissionCodes.UserManage)
+  resendInvite(@CurrentUser() user: AuthUser, @Param('id') userId: string) {
+    return this.users.resendInviteInTenant(user, userId);
   }
 
   @Post()

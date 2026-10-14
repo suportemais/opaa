@@ -28,6 +28,7 @@ enum ManualAccessReason {
 enum UserStatus {
   active
   disabled
+  invited
 }
 
 enum SurveyStatus {
@@ -223,6 +224,7 @@ model Tenant {
   auditLogs     AuditLog[]
   webhookOutbox WebhookOutbox[]
   passwordResetTokens PasswordResetToken[]
+  userInviteTokens UserInviteToken[]
   reviewSyncProfiles ReviewSyncProfile[]
   reviews Review[]
   mmIntegration TenantMmIntegration?
@@ -263,6 +265,7 @@ model User {
   customerInteractionsCreated CustomerInteraction[] @relation("CustomerInteractionCreatedBy")
   auditLogs         AuditLog[]
   passwordResetTokens PasswordResetToken[]
+  inviteTokens      UserInviteToken[]
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId])
@@ -410,6 +413,8 @@ model Survey {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?
+  publishedAt  DateTime?
+  archivedAt   DateTime?
 
   tenant       Tenant @relation(fields: [tenantId], references: [id])
   units        SurveyUnit[]
@@ -723,6 +728,11 @@ model Customer {
   tags            Json?
   notes           String?
   documentNormalized String?
+  /// Origem do cadastro: 'survey' | 'import' | 'manual'. NULL para registros anteriores.
+  source          String?
+  /// Opt-in de ofertas (espelho do último CustomerConsent purpose='marketing_offers'). NULL = nunca informado.
+  acceptsOffers   Boolean?
+  acceptsOffersAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -780,6 +790,7 @@ model CustomerConsent {
   customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, customerId])
+  @@index([tenantId, customerId, purpose, grantedAt])
   @@map("customer_consents")
 }
 
@@ -1100,6 +1111,29 @@ model PasswordResetToken {
   @@index([tenantId, createdAt])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+/// Convite de usuário (status `invited`). Espelha PasswordResetToken.
+model UserInviteToken {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @db.Uuid
+  tenantId        String    @db.Uuid
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  revokedAt       DateTime?
+  createdByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  ip              String?
+  userAgent       String?
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([expiresAt])
+  @@map("user_invite_tokens")
 }
 
 model TenantMmIntegration {

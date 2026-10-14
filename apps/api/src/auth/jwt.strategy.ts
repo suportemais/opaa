@@ -39,6 +39,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const permissionCodes = this.rbac.getUserPermissionCodes(user);
     const roleCodes = user.roles.map((userRole) => userRole.role.code);
+    const roleNames = user.roles.map((userRole) => userRole.role.name);
     const unitIds = user.unitAccess.map((u) => u.unitId);
 
     let blockReason: string | null = null;
@@ -58,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       phone: user.phone ?? null,
       permissionCodes,
       roleCodes,
+      roleNames,
       unitIds,
       billingBlockReason: blockReason,
     };
