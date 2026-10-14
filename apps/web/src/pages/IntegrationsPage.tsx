@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../lib/api';
 import { unitCnpjLine } from '../lib/cnpj';
+import { Link } from 'react-router-dom';
+import { ConfigLayout } from '../components/painel/ConfigTabs';
+import { Icone } from '../components/painel/Icone';
+import { Situacao } from '../components/painel/config/ui';
+import { useAvisar, useConfirmar } from '../components/painel/config/hooks';
+import '../styles/painel-config.css';
 
 const COPY = {
   SUB_DISCONNECTED: 'Cole a chave gerada no Muito Mais para vincular as duas contas.',
@@ -26,9 +32,6 @@ const VOUCHER_COPY = {
   AFTER_GENERATE: 'Copie agora. Cada voucher vale uma vez.',
   EMPTY: 'Nenhum voucher ativo.',
 } as const;
-
-const FIELD_CLASS =
-  'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-500';
 
 type MmIntegrationStatus = {
   connected: boolean;
@@ -104,18 +107,6 @@ function companyLabel(tradeName: string | null | undefined) {
   return name ? `${name} — MM` : 'Empresa Muito Mais';
 }
 
-function StatusBadge(props: { connected: boolean }) {
-  return props.connected ? (
-    <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-      Conectado
-    </span>
-  ) : (
-    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-      Desconectado
-    </span>
-  );
-}
-
 export function IntegrationsPage() {
   const qc = useQueryClient();
   const [apiKey, setApiKey] = useState('');
@@ -123,6 +114,8 @@ export function IntegrationsPage() {
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [justGenerated, setJustGenerated] = useState(false);
   const [unitId, setUnitId] = useState('');
+  const [avisar, aviso] = useAvisar();
+  const [confirmar, janelaConfirmar] = useConfirmar();
 
   const units = useQuery({
     queryKey: ['units'],
@@ -148,6 +141,7 @@ export function IntegrationsPage() {
     onSuccess: async () => {
       setVoucherError(null);
       setJustGenerated(true);
+      avisar('Voucher gerado');
       await qc.invalidateQueries({ queryKey: ['mm-vouchers'] });
     },
     onError: (err) => setVoucherError(errorMessage(err)),
@@ -172,6 +166,7 @@ export function IntegrationsPage() {
     onSuccess: async () => {
       setApiKey('');
       setFormError(null);
+      avisar('Muito Mais conectada');
       await qc.invalidateQueries({ queryKey: ['integrations-mm'] });
       await qc.invalidateQueries({ queryKey: ['mm-companies'] });
     },
@@ -183,6 +178,7 @@ export function IntegrationsPage() {
       apiFetch<MmIntegrationStatus>('/integrations/mm', { method: 'DELETE' }),
     onSuccess: async () => {
       setFormError(null);
+      avisar('Muito Mais desconectada');
       await qc.invalidateQueries({ queryKey: ['integrations-mm'] });
       await qc.invalidateQueries({ queryKey: ['mm-companies'] });
     },
@@ -223,202 +219,218 @@ export function IntegrationsPage() {
   }
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <nav className="text-sm text-opiina-muted">
-          <span>Configurações</span>
-          <span className="mx-1.5">›</span>
-          <span className="font-medium text-opiina-navy">Integrações</span>
-        </nav>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-opiina-navy">Integrações</h1>
-        <p className="mt-2 text-sm text-opiina-muted">
-          {connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED}
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
-        <div className="mb-6 flex flex-wrap items-center gap-2.5">
-          <div className="text-lg font-semibold text-opiina-navy">Muito Mais</div>
-          <StatusBadge connected={connected} />
-        </div>
-
-        {status.isLoading && <div className="text-sm text-opiina-muted">Carregando...</div>}
-        {status.isError && (
-          <div className="text-sm text-rose-700">
-            {status.error instanceof ApiError && status.error.status === 403
-              ? 'Você não tem permissão para gerenciar integrações.'
-              : 'Falha ao carregar o status da integração.'}
-          </div>
-        )}
-
-        {status.data && connected && (
-          <div className="grid gap-5">
+    <ConfigLayout>
+      <div className="cfg__pilha">
+        <section className="cartao cfg__cartao" aria-labelledby="t-mm">
+          <div className="cfg__topo">
             <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">{COPY.LABEL_COMPANY}</div>
-              <div className="text-xl font-semibold tracking-tight text-opiina-navy">
-                {companyLabel(row?.tradeName)}
-              </div>
+              <h2 className="cartao__titulo" id="t-mm">
+                Muito Mais{' '}
+                {status.data &&
+                  (connected ? <Situacao tipo="publicada">Conectado</Situacao> : <Situacao tipo="arquivada">Desconectado</Situacao>)}
+              </h2>
+              <p className="cartao__sub">{connected ? COPY.SUB_CONNECTED : COPY.SUB_DISCONNECTED}</p>
             </div>
-            <label>
-              <div className="mb-1.5 text-sm font-medium text-slate-700">{COPY.LABEL_KEY_MASKED}</div>
-              <input
-                className={FIELD_CLASS}
-                value={maskKey(row?.apiKeyLast4)}
-                disabled
-                readOnly
-              />
-              <div className="mt-2 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
-            </label>
-            {formError && <div className="text-sm text-rose-700">{formError}</div>}
-            <div>
+            {status.data && connected && (
               <button
+                className="btn btn--perigo"
                 type="button"
                 disabled={disconnect.isPending}
-                className="inline-flex h-12 w-full items-center justify-center rounded-full border border-rose-500 bg-white text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                onClick={() => {
-                  if (!window.confirm(COPY.CONFIRM_DISCONNECT)) return;
-                  disconnect.mutate();
+                onClick={async () => {
+                  const ok = await confirmar({
+                    titulo: 'Desconectar a Muito Mais?',
+                    texto: COPY.CONFIRM_DISCONNECT,
+                    botao: 'Desconectar',
+                    perigo: true,
+                    icone: 'plug',
+                  });
+                  if (ok) disconnect.mutate();
                 }}
               >
-                {disconnect.isPending ? 'Desconectando...' : COPY.CTA_DISCONNECT}
+                {disconnect.isPending ? 'Desconectando…' : COPY.CTA_DISCONNECT}
               </button>
-              <div className="mt-2 text-xs text-opiina-muted">{COPY.CONFIRM_DISCONNECT}</div>
-            </div>
+            )}
           </div>
-        )}
 
-        {status.data && !connected && (
-          <form
-            className="grid gap-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setFormError(null);
-              if (!apiKey.trim()) {
-                setFormError('Informe a chave de API do Muito Mais.');
-                return;
-              }
-              connect.mutate();
-            }}
-          >
-            <label>
-              <div className="mb-1.5 text-sm font-medium text-slate-700">{COPY.FIELD_LABEL}</div>
-              <input
-                type="password"
-                autoComplete="off"
-                className={FIELD_CLASS}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={COPY.FIELD_LABEL}
-              />
-              <div className="mt-2 text-xs text-opiina-muted">{COPY.CONNECTED_NOTE}</div>
-            </label>
-            {formError && <div className="text-sm text-rose-700">{formError}</div>}
-            <button
-              type="submit"
-              disabled={connect.isPending}
-              className="inline-flex h-12 w-full items-center justify-center rounded-full bg-opiina-cta text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {connect.isPending ? 'Validando...' : COPY.CTA_CONNECT}
-            </button>
-          </form>
-        )}
-      </div>
+          {status.isLoading && <p className="mudo">Carregando…</p>}
+          {status.isError && (
+            <p className="campo__erro" role="alert">
+              {status.error instanceof ApiError && status.error.status === 403
+                ? 'Você não tem permissão para gerenciar integrações.'
+                : 'Falha ao carregar o status da integração.'}
+            </p>
+          )}
 
-      <div className="rounded-2xl border border-opiina-border bg-white p-6 shadow-sm">
-        <div className="mb-2 text-lg font-semibold text-opiina-navy">{VOUCHER_COPY.TITLE}</div>
+          {status.data && connected && (
+            <div className="cfg__grade">
+              <div className="cfg__fixo">
+                <span className="cfg__fixo-rotulo">{COPY.LABEL_COMPANY}</span>
+                <strong>{companyLabel(row?.tradeName)}</strong>
+              </div>
+              <div className="cfg__fixo">
+                <span className="cfg__fixo-rotulo">{COPY.LABEL_KEY_MASKED}</span>
+                <strong className="cfg-id">{maskKey(row?.apiKeyLast4)}</strong>
+                <span className="campo__dica">{COPY.CONNECTED_NOTE}</span>
+              </div>
+            </div>
+          )}
 
-        <label className="mb-4 block">
-          <div className="mb-1.5 text-sm font-medium text-slate-700">{VOUCHER_COPY.LABEL_UNIT}</div>
-          {isMultiUnit ? (
-            <select
-              className={FIELD_CLASS}
-              value={unitId}
-              onChange={(e) => {
-                setUnitId(e.target.value);
-                setVoucherError(null);
+          {status.data && !connected && (
+            <form
+              className="cfg__linha"
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                setFormError(null);
+                if (!apiKey.trim()) {
+                  setFormError('Informe a chave de API do Muito Mais.');
+                  document.getElementById('mm-chave')?.focus();
+                  return;
+                }
+                connect.mutate();
               }}
             >
-              <option value="">{VOUCHER_COPY.MULTI}</option>
-              {(unitRows ?? []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {unitCnpjLine(item.name, item.document)}
-                </option>
-              ))}
-            </select>
-          ) : selectedUnit ? (
-            <div className="text-sm font-medium text-opiina-navy">
-              {unitCnpjLine(selectedUnit.name, selectedUnit.document)}
-            </div>
-          ) : (
-            <div className="text-sm text-opiina-muted">{units.isLoading ? 'Carregando...' : VOUCHER_COPY.MULTI}</div>
+              <div className="campo">
+                <label htmlFor="mm-chave">{COPY.FIELD_LABEL}</label>
+                <input
+                  id="mm-chave"
+                  type="password"
+                  autoComplete="off"
+                  aria-invalid={Boolean(formError) || undefined}
+                  aria-describedby="mm-chave-dica"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                <p className="campo__dica" id="mm-chave-dica">
+                  {COPY.CONNECTED_NOTE}
+                </p>
+              </div>
+              <button className="btn btn--primario" type="submit" disabled={connect.isPending}>
+                {connect.isPending ? 'Validando…' : COPY.CTA_CONNECT}
+              </button>
+            </form>
           )}
-          {isMultiUnit && selectedUnit && (
-            <div className="mt-2 text-sm font-medium text-opiina-navy">
-              {unitCnpjLine(selectedUnit.name, selectedUnit.document)}
-            </div>
+          {formError && (
+            <p className="campo__erro" role="alert">
+              {formError}
+            </p>
           )}
-          <div className="mt-2 text-xs text-opiina-muted">{VOUCHER_COPY.MICRO}</div>
-        </label>
+        </section>
 
-        <button
-          type="button"
-          disabled={mint.isPending || units.isLoading || !selectedUnitId || !selectedHasCnpj}
-          className="inline-flex h-12 items-center justify-center rounded-full bg-opiina-cta px-6 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          onClick={() => requestMint()}
-        >
-          {VOUCHER_COPY.CTA_GENERATE}
-        </button>
-        {justGenerated && (
-          <div className="mt-3 text-sm text-opiina-navy">{VOUCHER_COPY.AFTER_GENERATE}</div>
-        )}
-        {voucherError && <div className="mt-3 text-sm text-rose-700">{voucherError}</div>}
+        <section className="cartao cfg__cartao" aria-labelledby="t-voucher">
+          <div className="cfg__topo">
+            <div>
+              <h2 className="cartao__titulo" id="t-voucher">
+                {VOUCHER_COPY.TITLE}
+              </h2>
+              <p className="cartao__sub">{VOUCHER_COPY.MICRO}</p>
+            </div>
+          </div>
 
-        <div className="mt-6">
-          {vouchers.data && activeVouchers.length === 0 && (
-            <div className="text-sm text-opiina-muted">{VOUCHER_COPY.EMPTY}</div>
-          )}
-          {activeVouchers.length > 0 && (
-            <ul className="grid gap-3">
-              {activeVouchers.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 first:border-t-0 first:pt-0"
+          <div className="cfg__linha">
+            {isMultiUnit ? (
+              <div className="campo">
+                <label htmlFor="mm-unidade">{VOUCHER_COPY.LABEL_UNIT}</label>
+                <select
+                  id="mm-unidade"
+                  value={unitId}
+                  onChange={(e) => {
+                    setUnitId(e.target.value);
+                    setVoucherError(null);
+                  }}
                 >
-                  <div>
-                    <span className="font-mono text-base font-semibold tracking-wider text-opiina-navy">
-                      {item.voucher}
-                    </span>
+                  <option value="">{VOUCHER_COPY.MULTI}</option>
+                  {(unitRows ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {unitCnpjLine(item.name, item.document)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="cfg__fixo">
+                <span className="cfg__fixo-rotulo">{VOUCHER_COPY.LABEL_UNIT}</span>
+                {selectedUnit ? (
+                  <strong>{unitCnpjLine(selectedUnit.name, selectedUnit.document)}</strong>
+                ) : (
+                  <span className="mudo">{units.isLoading ? 'Carregando…' : VOUCHER_COPY.MULTI}</span>
+                )}
+              </div>
+            )}
+            <button
+              className="btn btn--primario"
+              type="button"
+              disabled={mint.isPending || units.isLoading || !selectedUnitId || !selectedHasCnpj}
+              onClick={() => requestMint()}
+            >
+              {mint.isPending ? 'Gerando…' : VOUCHER_COPY.CTA_GENERATE}
+            </button>
+          </div>
+          {selectedUnit && !selectedHasCnpj && (
+            <p className="campo__dica">
+              A unidade {selectedUnit.name} não tem CNPJ. Cadastre em{' '}
+              <Link className="link-texto" to="/app/units">
+                Unidades
+              </Link>{' '}
+              e volte aqui.
+            </p>
+          )}
+          {justGenerated && (
+            <p className="cfg-info" role="status">
+              <Icone nome="alerta" />
+              <span>{VOUCHER_COPY.AFTER_GENERATE}</span>
+            </p>
+          )}
+          {voucherError && (
+            <p className="campo__erro" role="alert">
+              {voucherError}
+            </p>
+          )}
+
+          {vouchers.data && activeVouchers.length === 0 && <p className="mudo">{VOUCHER_COPY.EMPTY}</p>}
+          {activeVouchers.length > 0 && (
+            <ul className="cfg-vouchers">
+              {activeVouchers.map((item) => (
+                <li key={item.id}>
+                  <Icone nome="premios" />
+                  <span className="cfg-voucher__texto">
+                    <strong className="cfg-voucher__codigo">{item.voucher}</strong>
                     {item.issuer && (
-                      <div className="mt-0.5 text-xs text-opiina-muted">
-                        {unitCnpjLine(item.unitName || item.issuer.tradeName, item.issuer.cnpj)}
-                      </div>
+                      <small className="mudo">{unitCnpjLine(item.unitName || item.issuer.tradeName, item.issuer.cnpj)}</small>
                     )}
-                  </div>
-                  <div className="flex gap-2">
+                  </span>
+                  <span className="cfg-voucher__acoes">
                     <button
+                      className="btn btn--fantasma"
                       type="button"
-                      className="rounded-full border border-opiina-border px-3 py-1.5 text-xs font-medium text-opiina-navy hover:bg-slate-50"
                       onClick={() => {
-                        void navigator.clipboard.writeText(item.voucher);
+                        void navigator.clipboard.writeText(item.voucher).then(
+                          () => avisar('Voucher copiado'),
+                          () => avisar('Não foi possível copiar. Selecione o código e copie à mão.'),
+                        );
                       }}
                     >
                       {VOUCHER_COPY.CTA_COPY}
+                      <span className="visualmente-oculto"> o voucher {item.voucher}</span>
                     </button>
                     <button
+                      className="btn btn--perigo"
                       type="button"
                       disabled={cancelVoucher.isPending}
-                      className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                       onClick={() => cancelVoucher.mutate(item.id)}
                     >
                       {VOUCHER_COPY.CTA_CANCEL}
+                      <span className="visualmente-oculto"> o voucher {item.voucher}</span>
                     </button>
-                  </div>
+                  </span>
                 </li>
               ))}
             </ul>
           )}
-        </div>
+        </section>
       </div>
-    </div>
+      {janelaConfirmar}
+      {aviso}
+    </ConfigLayout>
   );
 }

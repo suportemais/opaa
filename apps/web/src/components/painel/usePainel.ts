@@ -26,8 +26,8 @@ export function useAuthMe() {
 
 export function usePode() {
   const me = useAuthMe();
-  const codes = me.data?.permissionCodes ?? [];
-  return useCallback((codigo: string) => codes.includes(codigo), [codes]);
+  const codes = me.data?.permissionCodes;
+  return useCallback((codigo: string) => (codes ?? []).includes(codigo), [codes]);
 }
 
 export function nomePerfil(me?: AuthMe) {

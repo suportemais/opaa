@@ -1,0 +1,66 @@
+/* Dashboard — complementos ao painel.css (tudo sob .painel). */
+.painel { --dash-neutro: #94A3B8; }
+
+/* Legenda da distribuição: cada faixa leva aos feedbacks daquela classe */
+.painel .dash-legenda {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  margin: -4px -6px; padding: 4px 6px; border-radius: 8px;
+  color: inherit;
+}
+.painel .dash-legenda:hover { background: var(--bg-suave); }
+.painel .dash-legenda:focus-visible { outline: 3px solid var(--acento); outline-offset: 1px; }
+
+.painel .dash-link { color: inherit; }
+.painel .dash-link:hover { color: var(--link); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Temas: barra dividida por sentimento, cada pedaço é um link */
+.painel .dash-temas__trilho { display: block; }
+.painel .dash-temas__barra { display: flex; height: 100%; border-radius: 999px; overflow: hidden; transition: width .5s var(--suave); }
+.painel .dash-temas__barra a { display: block; height: 100%; min-width: 3px; }
+.painel .dash-temas__barra a + a { border-left: 2px solid var(--superficie); }
+.painel .dash-temas__barra a:hover { opacity: .8; }
+.painel .dash-temas__barra a:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+
+/* Elogios e reclamações */
+.painel .dash-sent { display: grid; gap: 16px; }
+.painel .dash-sent__numeros { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.painel .dash-sent__num {
+  display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--linha); border-radius: 12px;
+  color: inherit; transition: border-color var(--rapido), box-shadow var(--rapido);
+}
+.painel .dash-sent__num:hover { border-color: rgba(28, 123, 255, .45); box-shadow: 0 10px 24px -16px rgba(28, 123, 255, .6); }
+.painel .dash-sent__num:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
+.painel .dash-sent__rotulo { display: inline-flex; align-items: center; gap: 8px; color: var(--mudo); font-size: 14px; font-weight: 600; }
+.painel .dash-sent__num strong { font-size: 26px; font-weight: 600; letter-spacing: -.03em; line-height: 1.15; }
+.painel .dash-sent__pct { color: var(--mudo); font-size: 13px; }
+.painel .dash-sent__rodape { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-top: 0; }
+
+/* Fila operacional no rodapé de "Precisa de atenção" */
+.painel .dash-fila { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--linha); }
+.painel .dash-fila div { padding: 8px 10px; border-radius: 10px; background: var(--bg-suave); }
+.painel .dash-fila dt { color: var(--mudo); font-size: 12px; font-weight: 600; }
+.painel .dash-fila dd { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.painel .dash-fila dd a { color: var(--link); }
+.painel .dash-fila dd a:hover { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 479px) { .painel .dash-fila { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Tabela por unidade: a linha filtra o dashboard */
+.painel .dash-linha-clicavel { cursor: pointer; }
+.painel .dash-linha-clicavel:hover > * { background: var(--bg-suave); }
+.painel .dash-unidade { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.painel .dash-unidade:hover { color: var(--link); }
+.painel .dash-unidade:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; border-radius: 4px; }
+.painel .tabela .dash-abertas { margin: 0; min-height: 0; }
+
+/* Avaliações externas */
+.painel .dash-av { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.painel .dash-av__item { display: grid; gap: 4px; align-content: start; padding: 14px 16px; border: 1px solid var(--linha); border-radius: 12px; }
+.painel .dash-av__nome { font-size: 15px; font-weight: 600; }
+.painel .dash-av__nota { display: inline-flex; align-items: baseline; gap: 6px; font-size: 28px; font-weight: 600; letter-spacing: -.03em; color: var(--mudo); }
+.painel .dash-av__nota .icone { width: 20px; height: 20px; align-self: center; }
+.painel .dash-av__nota small { color: var(--mudo); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+.painel .dash-av__nota--otima, .painel .dash-av__nota--boa { color: var(--sucesso); }
+.painel .dash-av__nota--media { color: var(--alerta); }
+.painel .dash-av__nota--ruim { color: var(--perigo); }
+.painel .dash-av__meta { color: var(--mudo); font-size: 13px; }
+.painel .dash-av__link { justify-self: start; margin-block: 0; min-height: 32px; }

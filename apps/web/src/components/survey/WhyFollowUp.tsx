@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   WHY_FOLLOWUP_MICROCOPY,
   WHY_FOLLOWUP_PLACEHOLDER,
@@ -10,16 +11,24 @@ type Props = {
 };
 
 export function WhyFollowUp({ value, onChange }: Props) {
+  const id = useId();
   return (
-    <div className="mt-4">
-      <div className="mb-2 text-sm font-medium text-slate-800">{WHY_FOLLOWUP_QUESTION}</div>
+    <div className="pq-porque">
+      <label className="cli__q-titulo" htmlFor={id}>
+        {WHY_FOLLOWUP_QUESTION}
+      </label>
       <textarea
-        className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+        id={id}
+        className="cli__caixa"
+        rows={3}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={WHY_FOLLOWUP_PLACEHOLDER}
+        aria-describedby={`${id}-dica`}
       />
-      <div className="mt-2 text-xs text-slate-500">{WHY_FOLLOWUP_MICROCOPY}</div>
+      <p className="cli-pop__opcional pq-porque__dica" id={`${id}-dica`}>
+        {WHY_FOLLOWUP_MICROCOPY}
+      </p>
     </div>
   );
 }

@@ -1,28 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { apiFetch } from '../lib/api';
 import { randomId } from '../lib/id';
-
-type PublicFormTenant = {
-  id: string;
-  slug: string;
-  tradeName: string;
-  legalName: string;
-};
-
-type PublicFormUnit = {
-  id: string;
-  name: string;
-  internalCode: string | null;
-};
+import { whistleblowerCategoryLabel } from '../lib/labels';
+import { Icone } from '../components/painel/Icone';
+import { CATEGORIAS } from '../components/painel/denuncias/comum';
+import '../styles/painel-denuncias.css';
 
 type PublicFormData = {
-  tenant: PublicFormTenant;
-  units: PublicFormUnit[];
+  tenant: { id: string; slug: string; tradeName: string; legalName: string };
+  units: Array<{ id: string; name: string; internalCode: string | null }>;
 };
 
 type SubmitResult = {
@@ -36,24 +24,47 @@ type SubmitResult = {
   message: string;
 };
 
-const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'moral_harassment', label: 'Assédio moral' },
-  { value: 'sexual_harassment', label: 'Assédio sexual' },
-  { value: 'discrimination', label: 'Discriminação' },
-  { value: 'racism', label: 'Racismo' },
-  { value: 'racial_injury', label: 'Injúria racial' },
-  { value: 'homophobia', label: 'Homofobia' },
-  { value: 'transphobia', label: 'Transfobia' },
-  { value: 'religious_intolerance', label: 'Intolerância religiosa' },
-  { value: 'fraud', label: 'Fraude' },
-  { value: 'corruption', label: 'Corrupção' },
-  { value: 'conflict_of_interest', label: 'Conflito de interesses' },
-  { value: 'policy_violation', label: 'Violação de políticas internas' },
-  { value: 'work_safety', label: 'Segurança do trabalho' },
-  { value: 'lgpd_privacy', label: 'LGPD / privacidade' },
-  { value: 'misconduct', label: 'Conduta inadequada' },
-  { value: 'other', label: 'Outro (descreva)' },
-];
+type Campo =
+  | 'category'
+  | 'customCategory'
+  | 'title'
+  | 'description'
+  | 'occurredAt'
+  | 'reporter'
+  | 'reporterEmail'
+  | 'truthfulness';
+
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const hojeISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+function Marca({ nome }: { nome: string }) {
+  return (
+    <div className="cli__marca">
+      <img src="/icon-opiina.png" alt="" />
+      {nome}
+    </div>
+  );
+}
+
+function Pagina({ children }: { children: ReactNode }) {
+  return (
+    <div className="painel pub">
+      <main className="pub__pagina">
+        <div className="pub__cartao pub__cartao--largo">{children}</div>
+        <p className="pub__rodape">
+          <img src="/icon-opiina.png" alt="" width={16} height={16} />
+          Canal de ética com Opiina · desenvolvido por{' '}
+          <a href="https://devmais.com" target="_blank" rel="noreferrer">
+            Dev+
+          </a>
+        </p>
+      </main>
+    </div>
+  );
+}
 
 export function PublicWhistleblowerPage() {
   const params = useParams();
@@ -66,7 +77,7 @@ export function PublicWhistleblowerPage() {
     retry: false,
   });
 
-  const [category, setCategory] = useState<string>('');
+  const [category, setCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -84,13 +95,20 @@ export function PublicWhistleblowerPage() {
   const [reporterDoc, setReporterDoc] = useState('');
 
   const [truthfulnessAgreement, setTruthfulnessAgreement] = useState(false);
+  const [erros, setErros] = useState<Partial<Record<Campo, boolean>>>({});
+  const [tentouEnviar, setTentouEnviar] = useState(false);
+  const [copiado, setCopiado] = useState<string | null>(null);
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const confirmarRef = useRef<HTMLDialogElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const fimRef = useRef<HTMLHeadingElement>(null);
+  const nomeRef = useRef<HTMLInputElement>(null);
+  const idempotencia = useRef(randomId(24));
 
   const submit = useMutation({
     mutationFn: async () => {
       const dto = {
-        idempotencyKey: randomId(24),
+        idempotencyKey: idempotencia.current,
         category,
         customCategory: category === 'other' ? customCategory.trim() || undefined : undefined,
         title: title.trim(),
@@ -116,349 +134,539 @@ export function PublicWhistleblowerPage() {
     },
   });
 
-  const requiredErrors = useMemo(() => {
-    const errs: string[] = [];
-    if (!category) errs.push('Selecione a categoria.');
-    if (category === 'other' && !customCategory.trim()) errs.push('Descreva a categoria "Outro".');
-    if (!title.trim()) errs.push('Informe o título/assunto.');
-    if (!description.trim()) errs.push('Descreva o ocorrido.');
-    if (occurredAt) {
-      const d = new Date(occurredAt);
-      if (Number.isNaN(d.getTime())) errs.push('Data do ocorrido inválida.');
+  useEffect(() => {
+    if (submit.data) {
+      window.scrollTo(0, 0);
+      fimRef.current?.focus();
     }
-    if (!truthfulnessAgreement) errs.push('Marque a declaração de veracidade das informações.');
-    return errs;
-  }, [category, customCategory, title, description, occurredAt, truthfulnessAgreement]);
+  }, [submit.data]);
+
+  function validar() {
+    const e: Partial<Record<Campo, boolean>> = {
+      category: !category,
+      customCategory: category === 'other' && !customCategory.trim(),
+      title: !title.trim(),
+      description: !description.trim(),
+      occurredAt: Boolean(occurredAt) && Number.isNaN(new Date(occurredAt).getTime()),
+      reporter:
+        !anonymous && !reporterName.trim() && !reporterEmail.trim() && !reporterPhone.trim() && !reporterDoc.trim(),
+      reporterEmail: !anonymous && Boolean(reporterEmail.trim()) && !EMAIL_OK.test(reporterEmail.trim()),
+      truthfulness: !truthfulnessAgreement,
+    };
+    return e;
+  }
+
+  // Depois da primeira tentativa, os destaques acompanham o que a pessoa corrige
+  useEffect(() => {
+    if (tentouEnviar) setErros(validar());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    tentouEnviar,
+    category,
+    customCategory,
+    title,
+    description,
+    occurredAt,
+    anonymous,
+    reporterName,
+    reporterEmail,
+    reporterPhone,
+    reporterDoc,
+    truthfulnessAgreement,
+  ]);
+
+  function aoEnviar(ev: FormEvent) {
+    ev.preventDefault();
+    const e = validar();
+    setErros(e);
+    setTentouEnviar(true);
+    if (Object.values(e).some(Boolean)) {
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      return;
+    }
+    confirmarRef.current?.showModal();
+  }
+
+  const qtdErros = Object.values(erros).filter(Boolean).length;
+  const inv = (c: Campo) => (erros[c] ? true : undefined);
 
   if (form.isLoading) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-slate-50 p-6 text-sm text-slate-600">
-        Carregando...
-      </div>
+      <Pagina>
+        <div className="canal">
+          <p className="cli__desc">Carregando…</p>
+        </div>
+      </Pagina>
     );
   }
 
   if (form.isError || !form.data) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-slate-50 p-6 text-sm text-rose-700">
-        Canal de denúncias não encontrado ou indisponível.
-      </div>
+      <Pagina>
+        <div className="canal">
+          <Marca nome="Opiina" />
+          <h1 className="cli__titulo">Canal de denúncias indisponível</h1>
+          <p className="cli__desc">Canal de denúncias não encontrado ou indisponível. Confira o link recebido.</p>
+        </div>
+      </Pagina>
     );
   }
+
+  const empresa = form.data.tenant.tradeName;
 
   if (submit.data) {
     const r = submit.data;
     return (
-      <div className="min-h-full bg-slate-50 p-4 md:p-10">
-        <div className="mx-auto flex w-full max-w-xl flex-col gap-6 pb-44">
-          <div className="text-center">
-            <img
-              src="/logo-opiina.png"
-              alt="Opiina"
-              className="mx-auto mb-4 h-20 drop-shadow-sm md:h-28"
-              onError={(e) => {
-                const el = e.currentTarget;
-                if (el.src.endsWith('/logo.svg')) return;
-                el.src = '/logo.svg';
-              }}
-            />
-            <div className="text-xl font-semibold text-slate-900">Canal de denúncias — {form.data.tenant.tradeName}</div>
-            <div className="text-sm text-slate-600">Obrigado por contribuir com a integridade e segurança da empresa.</div>
-          </div>
-
-          <Card title="Denúncia recebida" description={r.message}>
-            <div className="grid gap-3 text-sm">
-              <div>
-                <div className="mb-1 text-xs font-medium text-slate-600">Protocolo</div>
-                <div className="font-mono text-lg font-semibold text-slate-900">{r.protocol}</div>
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-medium text-slate-600">Identificação</div>
-                <div className="text-slate-800">{r.anonymous ? 'Anônimo' : 'Identificado voluntariamente'}</div>
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-medium text-slate-600">Recebida em</div>
-                <div className="text-slate-800">{new Date(r.createdAt).toLocaleString()}</div>
-              </div>
-              <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
-                Guarde este número de protocolo em local seguro. Ele serve para consultas futuras e acompanhamento junto ao comitê de ética.
-              </div>
+      <Pagina>
+        <div className="canal">
+          <Marca nome={empresa} />
+          <div className="cli__fim canal__fim">
+            <span className="cli__fim-icone" aria-hidden="true">
+              <Icone nome="ok" />
+            </span>
+            <h1 className="cli__titulo" tabIndex={-1} ref={fimRef}>
+              Denúncia enviada
+            </h1>
+            <p className="cli__desc">
+              {r.anonymous ? (
+                <>
+                  Ela foi enviada <strong>sem seu nome e sem contato</strong>.
+                </>
+              ) : (
+                'O time responsável pode falar com você pelo contato que deixou.'
+              )}
+            </p>
+            {r.message && <p className="cli__desc">{r.message}</p>}
+            <div className="canal__protocolo">
+              <span>Protocolo</span>
+              <strong id="canal-protocolo">{r.protocol}</strong>
+              <span className="den-recebida">Recebida em {new Date(r.createdAt).toLocaleString('pt-BR')}</span>
+              <button
+                className="btn btn--secundario"
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(r.protocol);
+                    setCopiado('Protocolo copiado');
+                  } catch {
+                    const el = document.getElementById('canal-protocolo');
+                    if (el) window.getSelection()?.selectAllChildren(el);
+                    setCopiado('Selecionado: copie com Ctrl+C');
+                  }
+                }}
+              >
+                <Icone nome="link" />
+                {copiado ?? 'Copiar protocolo'}
+              </button>
             </div>
-          </Card>
+            <p className="cli__desc">
+              Guarde este número em local seguro: ele identifica sua denúncia em consultas e no acompanhamento junto ao comitê de
+              ética.
+            </p>
+            <p className="cli__desc">Obrigado por contribuir com a integridade e segurança da empresa. Pode fechar esta página.</p>
+          </div>
         </div>
-      </div>
+      </Pagina>
     );
   }
 
-  const requiredMissing = requiredErrors.length > 0;
-
   return (
-    <div className="min-h-full bg-slate-50 p-4 md:p-10">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-6 pb-44">
-        <div className="text-center">
-          <img
-            src="/logo-opiina.png"
-            alt="Opiina"
-            className="mx-auto mb-4 h-20 drop-shadow-sm md:h-28"
-            onError={(e) => {
-              const el = e.currentTarget;
-              if (el.src.endsWith('/logo.svg')) return;
-              el.src = '/logo.svg';
-            }}
-          />
-          <div className="text-xl font-semibold text-slate-900">Canal de denúncias — {form.data.tenant.tradeName}</div>
-          <div className="text-sm text-slate-600">
-            Preencha os campos abaixo. Sua denúncia é confidencial e tratada pelo comitê de ética.
-          </div>
+    <Pagina>
+      <div className="canal">
+        <Marca nome={empresa} />
+
+        <div className="canal__topo">
+          <h1 className="cli__titulo">Canal de denúncias</h1>
+          <p className="cli__desc">
+            Para a equipe relatar assédio, discriminação, fraude, risco à segurança ou outra conduta errada no trabalho. O relato vai
+            para o time responsável pelo canal de ética.
+          </p>
         </div>
 
-        <Card title="Aviso de confidencialidade e conformidade LGPD" description="Leia atentamente antes de enviar sua denúncia">
-          <div className="grid gap-3 text-sm leading-relaxed text-slate-700">
+        <ul className="canal__garantias">
+          <li>
+            <Icone nome="cadeado" />
+            <span>
+              <strong>Você pode ficar anônimo.</strong> Sem nome e sem contato, ninguém sabe quem enviou.
+            </span>
+          </li>
+          <li>
+            <Icone nome="ok" />
+            <span>
+              <strong>Sem login.</strong> Não precisa de cadastro nem de senha.
+            </span>
+          </li>
+          <li>
+            <Icone nome="lista" />
+            <span>
+              <strong>Você recebe um protocolo</strong> ao enviar.
+            </span>
+          </li>
+        </ul>
+
+        <p className="canal__urgente" role="note">
+          <Icone nome="alerta" />
+          <span>
+            Se alguém está em perigo agora, ligue <strong>190</strong> (Polícia) ou <strong>192</strong> (SAMU). Este canal não é
+            atendido em tempo real.
+          </span>
+        </p>
+
+        <details className="den-lgpd">
+          <summary>Aviso de confidencialidade e LGPD</summary>
+          <div>
             <p>
-              Este canal destina-se ao recebimento de denúncias relacionadas a racismo, injúria racial, homofobia, transfobia, intolerância religiosa, assédio de qualquer natureza, violência e demais formas de discriminação ou condutas inadequadas ocorridas no ambiente de trabalho.
+              Este canal destina-se ao recebimento de denúncias relacionadas a racismo, injúria racial, homofobia, transfobia,
+              intolerância religiosa, assédio de qualquer natureza, violência e demais formas de discriminação ou condutas inadequadas
+              ocorridas no ambiente de trabalho.
             </p>
             <p>
-              As informações fornecidas serão tratadas com confidencialidade e utilizadas exclusivamente para a apuração dos fatos relatados, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD). O acesso aos dados será restrito às pessoas autorizadas e, quando necessário, as informações poderão ser compartilhadas para fins de investigação e cumprimento de obrigações legais e regulatórias.
+              As informações fornecidas serão tratadas com confidencialidade e utilizadas exclusivamente para a apuração dos fatos
+              relatados, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD). O acesso aos dados
+              será restrito às pessoas autorizadas e, quando necessário, as informações poderão ser compartilhadas para fins de
+              investigação e cumprimento de obrigações legais e regulatórias.
             </p>
             <p>
-              O denunciante poderá optar por permanecer anônimo, sendo asseguradas a confidencialidade das informações e a não retaliação contra pessoas que apresentem denúncias fundamentadas.
+              O denunciante poderá optar por permanecer anônimo, sendo asseguradas a confidencialidade das informações e a não
+              retaliação contra pessoas que apresentem denúncias fundamentadas.
             </p>
           </div>
-        </Card>
+        </details>
 
-        {!anonymous && (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-            Você optou por se identificar voluntariamente. Seus dados serão utilizados apenas para contato sobre esta denúncia.
+        <form className="canal__form" noValidate onSubmit={aoEnviar} ref={formRef}>
+          <div className="campo">
+            <label htmlFor="d-categoria">
+              Sobre o que é a denúncia? <span className="obrigatorio" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="d-categoria"
+              required
+              aria-invalid={inv('category')}
+              aria-describedby="d-categoria-erro"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">Escolha uma categoria</option>
+              {CATEGORIAS.map((c) => (
+                <option key={c} value={c}>
+                  {c === 'other' ? 'Outro (descreva)' : whistleblowerCategoryLabel(c)}
+                </option>
+              ))}
+            </select>
+            <p className="campo__erro" id="d-categoria-erro" hidden={!erros.category}>
+              Escolha a categoria. Se nenhuma servir, escolha "Outro".
+            </p>
           </div>
-        )}
 
-        <Card>
-          <div className="grid gap-5">
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-800">Categoria da denúncia *</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">Selecione...</option>
-                {CATEGORY_OPTIONS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
+          {category === 'other' && (
+            <div className="campo">
+              <label htmlFor="d-outra">
+                Qual categoria? <span className="obrigatorio" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="d-outra"
+                required
+                maxLength={120}
+                autoComplete="off"
+                placeholder="Ex.: assédio moral virtual"
+                aria-invalid={inv('customCategory')}
+                aria-describedby="d-outra-erro"
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+              />
+              <p className="campo__erro" id="d-outra-erro" hidden={!erros.customCategory}>
+                Descreva a categoria "Outro".
+              </p>
+            </div>
+          )}
+
+          <div className="campos-2">
+            <div className="campo">
+              <label htmlFor="d-unidade">Onde aconteceu?</label>
+              <select id="d-unidade" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                <option value="">Prefiro não dizer</option>
+                {form.data.units.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                    {u.internalCode ? ` (${u.internalCode})` : ''}
                   </option>
                 ))}
               </select>
-              {category === 'other' && (
-                <div className="mt-2">
-                  <Input
-                    placeholder="Descreva a categoria (ex: assédio moral virtual etc.)"
-                    value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
-                  />
-                </div>
-              )}
             </div>
-
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-800">Título / Assunto *</div>
-              <Input placeholder="Resuma o ocorrido em poucas palavras" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <div className="campo">
+              <label htmlFor="d-quando">
+                Quando aconteceu? <span className="opcional">(opcional)</span>
+              </label>
+              <input
+                id="d-quando"
+                type="date"
+                max={hojeISO()}
+                aria-invalid={inv('occurredAt')}
+                aria-describedby="d-quando-erro"
+                value={occurredAt}
+                onChange={(e) => setOccurredAt(e.target.value)}
+              />
+              <p className="campo__erro" id="d-quando-erro" hidden={!erros.occurredAt}>
+                Data inválida.
+              </p>
             </div>
+          </div>
 
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-800">Descrição detalhada do ocorrido *</div>
+          <div className="campo">
+            <label htmlFor="d-local">
+              Local ou endereço <span className="opcional">(opcional)</span>
+            </label>
+            <input
+              id="d-local"
+              maxLength={200}
+              placeholder="Se preferir, descreva o local em texto livre"
+              value={locationText}
+              onChange={(e) => setLocationText(e.target.value)}
+            />
+          </div>
+
+          <div className="campo">
+            <label htmlFor="d-resumo">
+              Resumo em uma frase <span className="obrigatorio" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="d-resumo"
+              required
+              maxLength={200}
+              autoComplete="off"
+              placeholder="Ex.: Gerente grita com a equipe na frente dos clientes"
+              aria-invalid={inv('title')}
+              aria-describedby="d-resumo-erro"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <p className="campo__erro" id="d-resumo-erro" hidden={!erros.title}>
+              Escreva um resumo curto.
+            </p>
+          </div>
+
+          <div className="campo">
+            <label htmlFor="d-relato">
+              O que aconteceu? <span className="obrigatorio" aria-hidden="true">*</span>
+            </label>
+            <textarea
+              id="d-relato"
+              rows={6}
+              required
+              maxLength={20000}
+              aria-invalid={inv('description')}
+              aria-describedby="d-relato-dica d-relato-erro"
+              placeholder="Conte o que aconteceu, com datas, locais e contexto. Quanto mais detalhes, mais fácil apurar."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <p className="campo__dica" id="d-relato-dica">
+              Se quiser ficar anônimo, não escreva seu nome nem detalhes que identifiquem você.
+            </p>
+            <p className="campo__erro" id="d-relato-erro" hidden={!erros.description}>
+              Conte o que aconteceu.
+            </p>
+          </div>
+
+          <fieldset className="den-mais">
+            <legend className="campo__rotulo">
+              Detalhes que ajudam a apurar <span className="opcional">(opcional)</span>
+            </legend>
+            <div className="campo">
+              <label htmlFor="d-envolvidos">Pessoas envolvidas</label>
               <textarea
-                className="min-h-40 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                placeholder="Conte de forma clara e objetiva o que aconteceu, com datas, locais e contexto que você considera importantes."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                id="d-envolvidos"
+                maxLength={2000}
+                placeholder="Nomes, cargos, vínculos ou qualquer informação relevante das pessoas diretamente envolvidas."
+                value={involvedPeople}
+                onChange={(e) => setInvolvedPeople(e.target.value)}
               />
             </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <div className="mb-1 text-sm font-medium text-slate-800">Data aproximada do ocorrido</div>
-                <Input type="date" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
-              </div>
-              <div>
-                <div className="mb-1 text-sm font-medium text-slate-800">Unidade (opcional)</div>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                  value={unitId}
-                  onChange={(e) => setUnitId(e.target.value)}
-                >
-                  <option value="">Selecione (opcional)</option>
-                  {form.data.units.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                      {u.internalCode ? ` (${u.internalCode})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <div className="mb-1 text-sm font-medium text-slate-800">Local / Endereço (opcional)</div>
-                <Input placeholder="Se preferir, descreva o local em texto livre" value={locationText} onChange={(e) => setLocationText(e.target.value)} />
-              </div>
-              <div className="md:col-span-2">
-                <div className="mb-1 text-sm font-medium text-slate-800">Pessoas envolvidas (opcional)</div>
-                <textarea
-                  className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                  placeholder="Nomes, cargos, vínculos ou qualquer informação relevante das pessoas diretamente envolvidas."
-                  value={involvedPeople}
-                  onChange={(e) => setInvolvedPeople(e.target.value)}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <div className="mb-1 text-sm font-medium text-slate-800">Testemunhas (opcional)</div>
-                <textarea
-                  className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                  placeholder="Se houver, liste ou descreva testemunhas e seus contatos se você tiver."
-                  value={witnesses}
-                  onChange={(e) => setWitnesses(e.target.value)}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <div className="mb-1 text-sm font-medium text-slate-800">Informações adicionais (opcional)</div>
-                <textarea
-                  className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                  placeholder="Qualquer outro contexto, prova, links, ou observações úteis para a apuração."
-                  value={additionalInfo}
-                  onChange={(e) => setAdditionalInfo(e.target.value)}
-                />
-              </div>
+            <div className="campo">
+              <label htmlFor="d-testemunhas">Testemunhas</label>
+              <textarea
+                id="d-testemunhas"
+                maxLength={2000}
+                placeholder="Se houver, liste ou descreva testemunhas e seus contatos, se você tiver."
+                value={witnesses}
+                onChange={(e) => setWitnesses(e.target.value)}
+              />
             </div>
+            <div className="campo">
+              <label htmlFor="d-adicionais">Informações adicionais</label>
+              <textarea
+                id="d-adicionais"
+                maxLength={2000}
+                placeholder="Qualquer outro contexto, prova, links ou observações úteis para a apuração."
+                value={additionalInfo}
+                onChange={(e) => setAdditionalInfo(e.target.value)}
+              />
+            </div>
+          </fieldset>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-slate-900">Identificação (opcional)</div>
-                <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+          <fieldset className="canal__ident">
+            <legend className="campo__rotulo">Como você quer enviar?</legend>
+            <label className="cl-opcao">
+              <input type="radio" name="ident" value="anonima" checked={anonymous} onChange={() => setAnonymous(true)} />
+              <span>
+                <strong>Anônimo</strong>Sem nome e sem contato. Não dá para falarem com você.
+              </span>
+            </label>
+            <label className="cl-opcao">
+              <input
+                type="radio"
+                name="ident"
+                value="identificada"
+                checked={!anonymous}
+                onChange={() => {
+                  setAnonymous(false);
+                  requestAnimationFrame(() => nomeRef.current?.focus());
+                }}
+              />
+              <span>
+                <strong>Com meu nome</strong>O time responsável pode falar com você para entender melhor.
+              </span>
+            </label>
+          </fieldset>
+
+          {!anonymous && (
+            <div className="den-identificacao">
+              <p className="campo__dica" id="d-ident-dica">
+                Nunca pediremos login ou senha. Preencha ao menos um dos campos; seus dados serão usados apenas para contato sobre esta
+                denúncia.
+              </p>
+              <div className="campos-2">
+                <div className="campo">
+                  <label htmlFor="d-nome">Seu nome</label>
                   <input
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={anonymous}
-                    onChange={(e) => setAnonymous(e.target.checked)}
-                  />
-                  <span>Quero permanecer anônimo</span>
-                </label>
-              </div>
-              <div className="mb-2 text-xs text-slate-600">
-                Nunca pediremos login/senha para enviar denúncia. Se você optar por se identificar voluntariamente, preencha ao menos um dos campos abaixo.
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-600">Nome</div>
-                  <Input
-                    disabled={anonymous}
-                    placeholder="Nome completo"
+                    id="d-nome"
+                    ref={nomeRef}
+                    autoComplete="name"
+                    maxLength={200}
+                    aria-invalid={inv('reporter')}
+                    aria-describedby="d-ident-dica d-ident-erro"
                     value={reporterName}
                     onChange={(e) => setReporterName(e.target.value)}
                   />
                 </div>
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-600">E-mail</div>
-                  <Input
-                    disabled={anonymous}
+                <div className="campo">
+                  <label htmlFor="d-email">E-mail</label>
+                  <input
+                    id="d-email"
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    maxLength={200}
                     placeholder="voce@email.com"
+                    aria-invalid={inv('reporterEmail')}
+                    aria-describedby="d-email-erro"
                     value={reporterEmail}
                     onChange={(e) => setReporterEmail(e.target.value)}
                   />
+                  <p className="campo__erro" id="d-email-erro" hidden={!erros.reporterEmail}>
+                    Confira o e-mail (ex.: voce@email.com).
+                  </p>
                 </div>
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-600">Telefone</div>
-                  <Input
-                    disabled={anonymous}
+                <div className="campo">
+                  <label htmlFor="d-telefone">WhatsApp ou telefone</label>
+                  <input
+                    id="d-telefone"
+                    type="tel"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    maxLength={50}
                     placeholder="(11) 90000-0000"
                     value={reporterPhone}
                     onChange={(e) => setReporterPhone(e.target.value)}
                   />
                 </div>
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-600">Documento (CPF / matrícula etc.)</div>
-                  <Input
-                    disabled={anonymous}
-                    placeholder="Opcional"
+                <div className="campo">
+                  <label htmlFor="d-doc">
+                    Documento <span className="opcional">(CPF, matrícula etc.)</span>
+                  </label>
+                  <input
+                    id="d-doc"
+                    maxLength={50}
+                    autoComplete="off"
                     value={reporterDoc}
                     onChange={(e) => setReporterDoc(e.target.value)}
                   />
                 </div>
               </div>
+              <p className="campo__erro" id="d-ident-erro" hidden={!erros.reporter}>
+                Preencha ao menos um campo ou escolha "Anônimo".
+              </p>
             </div>
+          )}
 
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-5 w-5 shrink-0"
-                  checked={truthfulnessAgreement}
-                  onChange={(e) => setTruthfulnessAgreement(e.target.checked)}
-                />
-                <span className="text-sm leading-relaxed text-slate-800">
-                  Declaro, sob minha responsabilidade, que as informações prestadas são verdadeiras, conforme meu conhecimento, e foram fornecidas de boa-fé e de forma legítima.
-                </span>
-              </label>
-            </div>
-
-            {requiredMissing && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-                <div className="mb-1 text-sm font-semibold">Antes de enviar, por favor:</div>
-                <ul className="list-disc pl-5 text-sm">
-                  {requiredErrors.map((m) => (
-                    <li key={m}>{m}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setConfirmOpen(true)}
-                disabled={requiredMissing || submit.isPending}
-              >
-                {submit.isPending ? 'Enviando...' : 'Enviar denúncia'}
-              </Button>
-            </div>
+          <div className="campo">
+            <label className="cli__aceite den-aceite" htmlFor="d-veracidade">
+              <input
+                id="d-veracidade"
+                type="checkbox"
+                required
+                aria-invalid={inv('truthfulness')}
+                aria-describedby="d-veracidade-erro"
+                checked={truthfulnessAgreement}
+                onChange={(e) => setTruthfulnessAgreement(e.target.checked)}
+              />
+              <span>
+                Declaro, sob minha responsabilidade, que as informações prestadas são verdadeiras, conforme meu conhecimento, e foram
+                fornecidas de boa-fé e de forma legítima. <span className="obrigatorio" aria-hidden="true">*</span>
+              </span>
+            </label>
+            <p className="campo__erro" id="d-veracidade-erro" hidden={!erros.truthfulness}>
+              Marque a declaração de veracidade para enviar.
+            </p>
           </div>
-        </Card>
 
-        <div className="text-center text-xs text-slate-500">
-          Desenvolvido por{' '}
-          <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">
-            Dev+
-          </a>
-        </div>
+          {qtdErros > 0 && (
+            <p className="cli__erro cli__erro--geral" role="alert">
+              Confira {qtdErros === 1 ? 'o campo destacado' : `os ${qtdErros} campos destacados`}.
+            </p>
+          )}
+          {submit.isError && (
+            <p className="cli__erro cli__erro--geral" role="alert">
+              Falha ao enviar a denúncia. Confira os campos obrigatórios e tente novamente.
+            </p>
+          )}
 
-        {confirmOpen && (
-          <div className="fixed inset-0 z-20 flex items-end justify-center bg-slate-900/40 p-4 md:items-center">
-            <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl">
-              <div className="text-lg font-semibold text-slate-900">Confirmar envio?</div>
-              <div className="mt-1 text-sm text-slate-600">
-                Após enviar, você receberá um número de protocolo para acompanhamento.
-              </div>
-              <div className="mt-5 flex justify-end gap-2">
-                <Button variant="secondary" onClick={() => setConfirmOpen(false)} disabled={submit.isPending}>
-                  Voltar
-                </Button>
-                <Button
-                  onClick={() => {
-                    setConfirmOpen(false);
-                    submit.mutate();
-                  }}
-                  disabled={submit.isPending}
-                >
-                  {submit.isPending ? 'Enviando...' : 'Sim, enviar agora'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {submit.isError && (
-          <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            Falha ao enviar denúncia. Confira os campos obrigatórios e tente novamente.
-          </div>
-        )}
+          <button className="cli__enviar" type="submit" disabled={submit.isPending}>
+            {submit.isPending ? 'Enviando…' : 'Enviar denúncia'}
+          </button>
+        </form>
       </div>
-    </div>
+
+      <dialog ref={confirmarRef} className="confirmar" aria-labelledby="canal-confirmar-titulo">
+        <span className="confirmar__icone" aria-hidden="true">
+          <Icone nome="alerta" />
+        </span>
+        <h2 id="canal-confirmar-titulo">Confirmar envio?</h2>
+        <p>
+          {anonymous ? (
+            <>
+              Ela vai <strong>sem seu nome e sem contato</strong>.{' '}
+            </>
+          ) : null}
+          Após enviar, você receberá um número de protocolo para acompanhamento.
+        </p>
+        <div className="confirmar__acoes">
+          <button className="btn btn--secundario" type="button" onClick={() => confirmarRef.current?.close()}>
+            Voltar
+          </button>
+          <button
+            className="btn btn--primario"
+            type="button"
+            disabled={submit.isPending}
+            onClick={() => {
+              confirmarRef.current?.close();
+              submit.mutate();
+            }}
+          >
+            Sim, enviar agora
+          </button>
+        </div>
+      </dialog>
+    </Pagina>
   );
 }

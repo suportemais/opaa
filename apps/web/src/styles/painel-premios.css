@@ -1,0 +1,6 @@
+/* Prêmios: complementos ao painel.css. Tudo sob .painel. */
+.painel .pq-cartao .cartao__sub { margin-top: 4px; }
+.painel .pq-lista > li { display: grid; }
+.painel .pq-cartao__acoes .btn:disabled { opacity: .5; cursor: progress; }
+.painel .campo input[readonly] { background: var(--bg-suave); color: var(--texto); cursor: default; }
+.painel .pr-aviso strong { font-weight: 600; }

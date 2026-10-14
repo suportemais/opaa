@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { WhistleblowerCategory, WhistleblowerPriority, WhistleblowerStatus } from '@prisma/client';
+import { WhistleblowerCategory } from '@prisma/client';
+import type { WhistleblowerPriority, WhistleblowerStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth.types';
 import { PermissionCodes } from '../rbac/permission-codes';
@@ -92,10 +93,7 @@ export class WhistleblowerService {
       priorityFilter = params.priority as WhistleblowerPriority;
     }
 
-    const allowedCategory: WhistleblowerCategory[] = [
-      'moral_harassment', 'sexual_harassment', 'discrimination', 'racism', 'fraud', 'corruption',
-      'conflict_of_interest', 'policy_violation', 'work_safety', 'lgpd_privacy', 'misconduct', 'other',
-    ];
+    const allowedCategory = Object.values(WhistleblowerCategory);
     let categoryFilter: WhistleblowerCategory | undefined;
     if (params.category && params.category !== 'any') {
       if (!allowedCategory.includes(params.category as WhistleblowerCategory)) throw new BadRequestException('invalid_category');

@@ -1,362 +1,579 @@
+import '../styles/painel-feedbacks.css';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
-import { feedbackCaseEventLabel, feedbackCasePriorityLabel, feedbackCaseStatusLabel, interactionChannelLabel, npsClassLabel } from '../lib/labels';
+import { interactionChannelLabel, sentimentLabel, sentimentThemeLabel } from '../lib/labels';
 import { formatAnswerDisplay } from '../lib/question-types';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
+import { Icone } from '../components/painel/Icone';
+import { useAuthMe, usePode } from '../components/painel/usePainel';
+import {
+  classeEtapa,
+  classeNota,
+  dataCompleta,
+  dataHora,
+  deInputData,
+  ETAPAS,
+  etapaRotulo,
+  paraInputData,
+  prazoInfo,
+  PRIORIDADES,
+  prioridadeRotulo,
+  quando,
+  rotuloClasseNps,
+  type CaseInteraction,
+  type FeedbackDetalhe,
+} from '../components/painel/feedbacks/comum';
+import { HistoricoCaso, Responsavel } from '../components/painel/feedbacks/partes';
+import {
+  useDetalheFeedback,
+  useResponsaveis,
+  useTratamento,
+  type MudancasCaso,
+} from '../components/painel/feedbacks/useTratamento';
 
-type Detail = {
-  id: string;
-  npsScore: number | null;
-  npsClass: string | null;
-  mainComment: string | null;
-  customerId: string | null;
-  customer: null | {
-    id: string;
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-  };
-  answers: Array<{ id: string; question: { title: string; type: string }; value: unknown }>;
-  feedbackCase: null | {
-    id: string;
-    status: string;
-    priority: string;
-    dueAt: string | null;
-    assigneeUserId: string | null;
-    events: Array<{ id: string; type: string; createdAt: string; createdBy?: { id: string; name: string; email: string } | null }>;
-  };
-};
-
-type CaseInteraction = {
-  id: string;
-  channel: string;
-  direction: string;
-  outcome: string | null;
-  notes: string | null;
-  createdAt: string;
-  createdByUser: { id: string; name: string; email: string } | null;
-};
-
+/** /app/feedbacks/:id — página completa do feedback e do seu tratamento (ocorrência). */
 export function FeedbackDetailPage() {
   const params = useParams();
   const id = params.id ?? '';
+  const pode = usePode();
+  const podeTratar = pode('feedback:manage');
+  const detalhe = useDetalheFeedback(id || null);
+  const { criarOcorrencia } = useTratamento(id);
+
+  const [toast, setToast] = useState('');
+  const toastTempo = useRef<number | undefined>(undefined);
+  const avisar = useCallback((texto: string) => {
+    setToast(texto);
+    window.clearTimeout(toastTempo.current);
+    toastTempo.current = window.setTimeout(() => setToast(''), 3200);
+  }, []);
+  useEffect(() => () => window.clearTimeout(toastTempo.current), []);
+
+  const d = detalhe.data;
+
+  return (
+    <>
+      <div className="cabeca">
+        <div>
+          <Link className="btn btn--fantasma fbx-voltar" to="/app/feedbacks">
+            <Icone nome="seta" className="fbx-seta-volta" />
+            Feedbacks
+          </Link>
+          <h1 className="cabeca__titulo">Feedback {id ? `#${id.slice(0, 8)}` : ''}</h1>
+          {d && (
+            <p className="cabeca__desc">
+              Recebido em {dataCompleta(d.completedAt)}
+              {d.survey?.name ? ` · ${d.survey.name}` : ''}
+            </p>
+          )}
+        </div>
+        {d && !d.feedbackCase && podeTratar && (
+          <div className="cabeca__acoes">
+            <button
+              className="btn btn--primario"
+              type="button"
+              disabled={criarOcorrencia.isPending}
+              onClick={() => criarOcorrencia.mutate(undefined, { onSuccess: () => avisar('Ocorrência criada') })}
+            >
+              <Icone nome="mais" />
+              {criarOcorrencia.isPending ? 'Criando…' : 'Criar ocorrência'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {detalhe.isLoading && <p className="fbx-mudo">Carregando…</p>}
+      {detalhe.isError && (
+        <div className="cartao vazio" role="alert">
+          <strong>Falha ao carregar</strong>O feedback não foi encontrado ou você não tem acesso a ele.
+        </div>
+      )}
+      {criarOcorrencia.isError && (
+        <p className="fbx-erro" role="alert">
+          Falha ao criar ocorrência.
+        </p>
+      )}
+
+      {d && (
+        <div className="fbx-detalhe">
+          <div className="fbx-detalhe__principal">
+            <Resumo d={d} />
+            {d.feedbackCase ? (
+              <Tratamento key={`${d.feedbackCase.id}-${d.feedbackCase.events.length}`} d={d} podeTratar={podeTratar} avisar={avisar} />
+            ) : (
+              <section className="cartao" aria-labelledby="fd-sem-caso">
+                <h2 className="cartao__titulo" id="fd-sem-caso">
+                  <Icone nome="ocorrencias" />
+                  Tratamento
+                </h2>
+                <p className="fbx-mudo">
+                  Sem ocorrência gerada.
+                  {podeTratar ? ' Use "Criar ocorrência" para dar responsável, prazo e acompanhar o tratamento.' : ''}
+                </p>
+              </section>
+            )}
+            <Respostas d={d} />
+          </div>
+          <div className="fbx-detalhe__lateral">
+            <Cliente d={d} />
+            {d.feedbackCase && <Contatos id={d.id} podeRegistrar={podeTratar && Boolean(d.customerId)} temCliente={Boolean(d.customerId)} avisar={avisar} />}
+          </div>
+        </div>
+      )}
+
+      <p className="toast" role="status" aria-live="polite" data-oculto={toast ? undefined : ''}>
+        {toast}
+      </p>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function Resumo({ d }: { d: FeedbackDetalhe }) {
+  return (
+    <section className="cartao fbx-resumo" aria-labelledby="fd-comentario">
+      <div className="gaveta__titulo">
+        <span className={classeNota(d.npsClass)} aria-label={d.npsScore != null ? `Nota ${d.npsScore} de 1 a 10` : 'Sem nota'}>
+          {d.npsScore ?? '—'}
+        </span>
+        <h2 id="fd-comentario">{d.mainComment?.trim() ? `“${d.mainComment.trim()}”` : 'Sem comentário: só a nota.'}</h2>
+      </div>
+      <div className="fb-item__tags">
+        {d.npsClass && <span className="fb-tag">{rotuloClasseNps(d.npsClass)}</span>}
+        {d.sentiment && <span className={`fb-tag fb-tag--${d.sentiment}`}>{sentimentLabel(d.sentiment)}</span>}
+        {d.sentimentTheme && <span className="fb-tag">{sentimentThemeLabel(d.sentimentTheme)}</span>}
+      </div>
+      {d.sentimentSummary && (
+        <p className="fbx-resumo-ia">
+          <span className="selo-ia">
+            <Icone nome="ia" />
+            IA
+          </span>{' '}
+          {d.sentimentSummary}
+        </p>
+      )}
+      <dl className="dados">
+        <div>
+          <dt>Unidade</dt>
+          <dd>{d.unit?.name ?? '—'}</dd>
+        </div>
+        <div>
+          <dt>Atendente</dt>
+          <dd>{d.employee?.name ?? 'Não informado'}</dd>
+        </div>
+        <div>
+          <dt>Recebido</dt>
+          <dd>
+            {dataHora(d.completedAt)} {d.completedAt ? `(${quando(d.completedAt)})` : ''}
+          </dd>
+        </div>
+        <div>
+          <dt>Pesquisa</dt>
+          <dd>{d.survey?.name ?? '—'}</dd>
+        </div>
+      </dl>
+      <p className="fbx-id">{d.id}</p>
+    </section>
+  );
+}
+
+function Respostas({ d }: { d: FeedbackDetalhe }) {
+  return (
+    <section className="cartao" aria-labelledby="fd-respostas">
+      <h2 className="cartao__titulo" id="fd-respostas">
+        <Icone nome="pesquisas" />
+        Respostas da pesquisa
+      </h2>
+      {d.answers.length === 0 ? (
+        <p className="fbx-mudo">Sem respostas registradas.</p>
+      ) : (
+        <dl className="fbx-respostas">
+          {d.answers.map((a) => (
+            <div key={a.id}>
+              <dt>{a.question.title}</dt>
+              <dd>{formatAnswerDisplay(a.question.type, a.value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
+  );
+}
+
+function Cliente({ d }: { d: FeedbackDetalhe }) {
+  const c = d.customer;
+  const nome = c?.name?.trim() || 'Cliente';
+  const email = c?.email?.trim() ?? '';
+  const telefone = c?.phone?.trim() ?? '';
+  const digitos = telefone.replace(/\D+/g, '');
+  return (
+    <section className="cartao" aria-labelledby="fd-cliente">
+      <h2 className="cartao__titulo" id="fd-cliente">
+        <Icone nome="clientes" />
+        Cliente
+      </h2>
+      {!d.customerId || !c ? (
+        <p className="fbx-mudo">Resposta sem identificação.</p>
+      ) : (
+        <div className="fbx-cliente">
+          <p className="fbx-cliente__nome">{nome}</p>
+          {c.doNotContact && <span className="fb-tag fb-tag--reclamacao">Não contatar</span>}
+          <dl className="fbx-cliente__dados">
+            <div>
+              <dt>E-mail</dt>
+              <dd>{email ? <a href={`mailto:${email}`}>{email}</a> : '—'}</dd>
+            </div>
+            <div>
+              <dt>Telefone</dt>
+              <dd>
+                {telefone ? (
+                  <>
+                    <a href={`tel:${digitos || telefone}`}>{telefone}</a>
+                    {digitos && (
+                      <>
+                        {' · '}
+                        <a href={`https://wa.me/${digitos}`} target="_blank" rel="noreferrer">
+                          WhatsApp
+                        </a>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  '—'
+                )}
+              </dd>
+            </div>
+          </dl>
+          <Link className="btn btn--fantasma fbx-cliente__link" to={`/app/customers/${c.id}`}>
+            Ver cadastro do cliente
+            <Icone nome="seta" />
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function Tratamento({ d, podeTratar, avisar }: { d: FeedbackDetalhe; podeTratar: boolean; avisar: (t: string) => void }) {
+  const caso = d.feedbackCase!;
+  const me = useAuthMe();
+  const responsaveis = useResponsaveis(podeTratar);
+  const { salvar, atribuirAMim } = useTratamento(d.id);
+
+  const [etapa, setEtapa] = useState(caso.status);
+  const [responsavel, setResponsavel] = useState(caso.assigneeUserId ?? '');
+  const [prioridade, setPrioridade] = useState(caso.priority);
+  const [prazo, setPrazo] = useState(paraInputData(caso.dueAt));
+  const [causa, setCausa] = useState(caso.rootCause ?? '');
+  const [acao, setAcao] = useState(caso.correctiveAction ?? '');
+  const [resolucao, setResolucao] = useState(caso.resolution ?? '');
+  const [anotacao, setAnotacao] = useState('');
+
+  const opcoes = [...(responsaveis.data ?? [])];
+  if (caso.assignee && !opcoes.some((u) => u.id === caso.assignee!.id)) {
+    opcoes.push({ id: caso.assignee.id, name: caso.assignee.name });
+  }
+  const nomeUsuario = (uid: string) => opcoes.find((u) => u.id === uid)?.name ?? (uid === me.data?.id ? me.data?.name : undefined);
+  const p = prazoInfo(caso.status, caso.dueAt);
+
+  function enviar(e: FormEvent) {
+    e.preventDefault();
+    const m: MudancasCaso = {};
+    if (etapa !== caso.status) m.status = etapa;
+    if ((responsavel || null) !== caso.assigneeUserId) m.assigneeUserId = responsavel || null;
+    if (prioridade !== caso.priority) m.priority = prioridade;
+    if (prazo !== paraInputData(caso.dueAt)) m.dueAt = deInputData(prazo);
+    if (causa.trim() !== (caso.rootCause ?? '')) m.rootCause = causa;
+    if (acao.trim() !== (caso.correctiveAction ?? '')) m.correctiveAction = acao;
+    if (resolucao.trim() !== (caso.resolution ?? '')) m.resolution = resolucao;
+    if (!Object.keys(m).length && !anotacao.trim()) {
+      avisar('Nada para salvar');
+      return;
+    }
+    salvar.mutate(
+      { mudancas: m, anotacao },
+      {
+        onSuccess: () => {
+          setAnotacao('');
+          avisar('Tratamento salvo');
+        },
+      },
+    );
+  }
+
+  return (
+    <section className="cartao fbx-tratamento" aria-labelledby="fd-tratamento">
+      <div className="cartao__topo">
+        <h2 className="cartao__titulo" id="fd-tratamento">
+          <Icone nome="ocorrencias" />
+          Tratamento
+        </h2>
+        <span className={classeEtapa(caso.status)}>{etapaRotulo(caso.status)}</span>
+      </div>
+
+      <dl className="dados">
+        <div>
+          <dt>Responsável</dt>
+          <dd>
+            <Responsavel nome={caso.assignee?.name} eu={Boolean(me.data?.id) && caso.assigneeUserId === me.data?.id} />
+          </dd>
+        </div>
+        <div>
+          <dt>Prazo</dt>
+          <dd>
+            <span className={p.classe || 'prazo'}>
+              <Icone nome="relogio" />
+              {p.texto}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>Prioridade</dt>
+          <dd>{prioridadeRotulo(caso.priority)}</dd>
+        </div>
+        <div>
+          <dt>Aberta</dt>
+          <dd>{caso.createdAt ? dataHora(caso.createdAt) : '—'}</dd>
+        </div>
+      </dl>
+
+      {podeTratar ? (
+        <form className="gaveta__form" onSubmit={enviar}>
+          <div className="campos-2">
+            <div className="campo">
+              <label htmlFor="fd-etapa">Etapa</label>
+              <select id="fd-etapa" value={etapa} onChange={(e) => setEtapa(e.target.value)}>
+                {ETAPAS.map((s) => (
+                  <option key={s} value={s}>
+                    {etapaRotulo(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="campo">
+              <label htmlFor="fd-responsavel">Responsável</label>
+              <select id="fd-responsavel" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
+                <option value="">Sem responsável</option>
+                {opcoes.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.id === me.data?.id ? `${u.name} (você)` : u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="campo">
+              <label htmlFor="fd-prioridade">Prioridade</label>
+              <select id="fd-prioridade" value={prioridade} onChange={(e) => setPrioridade(e.target.value)}>
+                {PRIORIDADES.map((s) => (
+                  <option key={s} value={s}>
+                    {prioridadeRotulo(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="campo">
+              <label htmlFor="fd-prazo">Prazo (vencimento)</label>
+              <input id="fd-prazo" type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
+            </div>
+          </div>
+          <div className="campo">
+            <label htmlFor="fd-causa">Causa raiz</label>
+            <textarea id="fd-causa" value={causa} onChange={(e) => setCausa(e.target.value)} placeholder="O que provocou o problema?" />
+          </div>
+          <div className="campo">
+            <label htmlFor="fd-acao">Ação corretiva</label>
+            <textarea id="fd-acao" value={acao} onChange={(e) => setAcao(e.target.value)} placeholder="O que foi feito para não acontecer de novo?" />
+          </div>
+          <div className="campo">
+            <label htmlFor="fd-resolucao">Resolução</label>
+            <textarea id="fd-resolucao" value={resolucao} onChange={(e) => setResolucao(e.target.value)} placeholder="Como o caso foi resolvido com o cliente?" />
+          </div>
+          <div className="campo">
+            <label htmlFor="fd-anotacao">
+              Anotação interna <span className="fbx-opcional">(opcional)</span>
+            </label>
+            <textarea
+              id="fd-anotacao"
+              maxLength={2000}
+              value={anotacao}
+              onChange={(e) => setAnotacao(e.target.value)}
+              placeholder="Ex.: Liguei para o cliente e ofereci uma cortesia."
+            />
+          </div>
+          {(salvar.isError || atribuirAMim.isError) && (
+            <p className="fbx-erro" role="alert">
+              Não foi possível salvar. Tente de novo.
+            </p>
+          )}
+          <div className="gaveta__acoes fbx-gaveta-acoes">
+            <button
+              className="btn btn--fantasma fbx-atribuir"
+              type="button"
+              disabled={atribuirAMim.isPending || caso.assigneeUserId === me.data?.id}
+              onClick={() => atribuirAMim.mutate(undefined, { onSuccess: () => avisar('Atribuído a você') })}
+            >
+              <Icone nome="pessoa" />
+              {atribuirAMim.isPending ? 'Atribuindo…' : 'Atribuir a mim'}
+            </button>
+            <button className="btn btn--primario" type="submit" disabled={salvar.isPending}>
+              {salvar.isPending ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        (caso.rootCause || caso.correctiveAction || caso.resolution) && (
+          <dl className="fbx-respostas">
+            {caso.rootCause && (
+              <div>
+                <dt>Causa raiz</dt>
+                <dd>{caso.rootCause}</dd>
+              </div>
+            )}
+            {caso.correctiveAction && (
+              <div>
+                <dt>Ação corretiva</dt>
+                <dd>{caso.correctiveAction}</dd>
+              </div>
+            )}
+            {caso.resolution && (
+              <div>
+                <dt>Resolução</dt>
+                <dd>{caso.resolution}</dd>
+              </div>
+            )}
+          </dl>
+        )
+      )}
+
+      <HistoricoCaso eventos={caso.events} nomeUsuario={nomeUsuario} tituloId="fd-historico" />
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function Contatos({
+  id,
+  podeRegistrar,
+  temCliente,
+  avisar,
+}: {
+  id: string;
+  podeRegistrar: boolean;
+  temCliente: boolean;
+  avisar: (t: string) => void;
+}) {
   const qc = useQueryClient();
-
-  const detail = useQuery({
-    queryKey: ['feedback', id],
-    queryFn: () => apiFetch<Detail>(`/feedbacks/${id}`),
-    enabled: Boolean(id),
-  });
-
-  const interactions = useQuery({
+  const pode = usePode();
+  const interacoes = useQuery({
     queryKey: ['feedback', id, 'caseInteractions'],
     queryFn: () => apiFetch<CaseInteraction[]>(`/feedbacks/${id}/case/interactions`),
-    enabled: Boolean(id),
   });
+  const [canal, setCanal] = useState('whatsapp');
+  const [resultado, setResultado] = useState('');
+  const [notas, setNotas] = useState('');
 
-  const [status, setStatus] = useState('new');
-  const [dueAt, setDueAt] = useState('');
-  const [channel, setChannel] = useState('whatsapp');
-  const [outcome, setOutcome] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const canLogInteraction = useMemo(() => Boolean(detail.data?.customerId), [detail.data?.customerId]);
-  const customer = detail.data?.customer ?? null;
-  const customerName = customer?.name?.trim() ? customer.name.trim() : 'Cliente';
-  const customerEmail = customer?.email?.trim() ? customer.email.trim() : '';
-  const customerPhone = customer?.phone?.trim() ? customer.phone.trim() : '';
-  const customerPhoneDigits = customerPhone.replace(/\D+/g, '');
-  const hasCustomer = Boolean(detail.data?.customerId && customer);
-
-  const initialCaseState = useMemo(() => {
-    const c = detail.data?.feedbackCase;
-    return {
-      status: c?.status ?? 'new',
-      dueAt: c?.dueAt ? c.dueAt.slice(0, 10) : '',
-    };
-  }, [detail.data?.feedbackCase]);
-
-  useEffect(() => {
-    if (!detail.data?.feedbackCase) return;
-    setStatus(initialCaseState.status);
-    setDueAt(initialCaseState.dueAt);
-  }, [detail.data?.feedbackCase?.id, initialCaseState.status, initialCaseState.dueAt]);
-
-  const createCase = useMutation({
-    mutationFn: async () => apiFetch(`/feedbacks/${id}/case`, { method: 'POST' }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['feedback', id] });
-      await qc.invalidateQueries({ queryKey: ['feedback', id, 'caseInteractions'] });
-    },
-  });
-
-  const assignMe = useMutation({
-    mutationFn: async () => apiFetch(`/feedbacks/${id}/case/assign-me`, { method: 'POST' }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['feedback', id] });
-    },
-  });
-
-  const saveCase = useMutation({
-    mutationFn: async () =>
-      apiFetch(`/feedbacks/${id}/case`, {
-        method: 'PATCH',
-        json: {
-          status,
-          dueAt: dueAt.trim() ? dueAt.trim() : undefined,
-        },
-      }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['feedback', id] });
-    },
-  });
-
-  const createInteraction = useMutation({
-    mutationFn: async () =>
+  const registrar = useMutation({
+    mutationFn: () =>
       apiFetch(`/feedbacks/${id}/case/interactions`, {
         method: 'POST',
-        json: { channel, direction: 'outbound', outcome: outcome.trim() || undefined, notes: notes.trim() || undefined },
+        json: { channel: canal, direction: 'outbound', outcome: resultado.trim() || undefined, notes: notas.trim() || undefined },
       }),
     onSuccess: async () => {
-      setOutcome('');
-      setNotes('');
-      await qc.invalidateQueries({ queryKey: ['feedback', id, 'caseInteractions'] });
-      await qc.invalidateQueries({ queryKey: ['feedback', id] });
+      setResultado('');
+      setNotas('');
+      avisar('Contato registrado');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['feedback', id, 'caseInteractions'] }),
+        qc.invalidateQueries({ queryKey: ['feedback', id] }),
+      ]);
     },
   });
 
   return (
-    <div className="grid gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-xl font-semibold">Feedback</div>
-          <div className="text-sm text-slate-600">Detalhes da resposta</div>
-        </div>
-        <Link to="/app/feedbacks" className="text-sm text-slate-600 hover:underline">
-          Voltar
-        </Link>
-      </div>
+    <section className="cartao fbx-contatos" aria-labelledby="fd-contatos">
+      <h2 className="cartao__titulo" id="fd-contatos">
+        <Icone nome="celular" />
+        Contato com o cliente
+      </h2>
 
-      {detail.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-      {detail.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-
-      {detail.data && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card title="Resumo">
-            <div className="grid gap-2 text-sm">
-              <div className="flex items-center justify-between">
-                <div className="text-slate-600">NPS</div>
-                <div className="font-medium text-slate-900">
-                  {detail.data.npsScore ?? '—'} ({npsClassLabel(detail.data.npsClass)})
-                </div>
-              </div>
-              <div className="rounded-md bg-slate-50 p-3 text-slate-700">
-                {detail.data.mainComment ? detail.data.mainComment : 'Sem comentário'}
-              </div>
-              <div className="font-mono text-xs text-slate-400">{detail.data.id}</div>
+      {pode('feedback:manage') && (
+        <>
+          {!temCliente && (
+            <p className="fbx-aviso">
+              Cliente não identificado. Para registrar contato, é necessário que o cliente se identifique na pesquisa.
+            </p>
+          )}
+          <form
+            className="gaveta__form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (podeRegistrar) registrar.mutate();
+            }}
+          >
+            <div className="campo">
+              <label htmlFor="fd-canal">Canal</label>
+              <select id="fd-canal" value={canal} onChange={(e) => setCanal(e.target.value)} disabled={!podeRegistrar}>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="phone">Telefone</option>
+                <option value="email">E-mail</option>
+                <option value="sms">SMS</option>
+                <option value="in_person">Presencial</option>
+              </select>
             </div>
-          </Card>
-
-          <Card title="Ocorrência">
-            {detail.data.feedbackCase ? (
-              <div className="grid gap-2 text-sm">
-                <div className="rounded-md border border-slate-200 bg-white p-3">
-                  <div className="mb-2 text-xs font-medium text-slate-600">Cliente</div>
-                  {!hasCustomer && <div className="text-sm text-slate-700">Resposta sem identificação.</div>}
-                  {hasCustomer && (
-                    <div className="grid gap-1 text-sm">
-                      <div className="font-medium text-slate-900">{customerName}</div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-700">
-                        <div>
-                          <span className="text-slate-500">E-mail: </span>
-                          {customerEmail ? (
-                            <a className="text-sky-700 hover:underline" href={`mailto:${customerEmail}`}>
-                              {customerEmail}
-                            </a>
-                          ) : (
-                            '—'
-                          )}
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Telefone: </span>
-                          {customerPhone ? (
-                            <span className="inline-flex flex-wrap gap-2">
-                              <a className="text-sky-700 hover:underline" href={`tel:${customerPhoneDigits || customerPhone}`}>
-                                {customerPhone}
-                              </a>
-                              {customerPhoneDigits ? (
-                                <a
-                                  className="text-sky-700 hover:underline"
-                                  href={`https://wa.me/${customerPhoneDigits}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  WhatsApp
-                                </a>
-                              ) : null}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="text-slate-600">Status</div>
-                  <div className="font-medium">{feedbackCaseStatusLabel(detail.data.feedbackCase.status)}</div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-slate-600">Prioridade</div>
-                  <div className="font-medium">{feedbackCasePriorityLabel(detail.data.feedbackCase.priority)}</div>
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-slate-600">Atualizar status</div>
-                    <select
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
-                    >
-                      <option value="new">Nova</option>
-                      <option value="viewed">Visualizada</option>
-                      <option value="in_progress">Em andamento</option>
-                      <option value="waiting_customer">Aguardando cliente</option>
-                      <option value="resolved">Resolvida</option>
-                      <option value="closed">Encerrada</option>
-                      <option value="dismissed">Descartada</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-slate-600">Vencimento</div>
-                    <Input
-                      value={dueAt}
-                      onChange={(e) => setDueAt(e.target.value)}
-                      placeholder="YYYY-MM-DD"
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Button variant="secondary" disabled={assignMe.isPending} onClick={() => assignMe.mutate()}>
-                    {assignMe.isPending ? 'Atribuindo...' : 'Atribuir para mim'}
-                  </Button>
-                  <Button disabled={saveCase.isPending} onClick={() => saveCase.mutate()}>
-                    {saveCase.isPending ? 'Salvando...' : 'Salvar'}
-                  </Button>
-                </div>
-
-                <div className="text-slate-600 pt-2">Contato</div>
-                {!canLogInteraction && (
-                  <div className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                    Cliente não identificado. Para registrar contato, é necessário que o cliente se identifique na pesquisa.
-                  </div>
-                )}
-                <div className="grid gap-2">
-                  <div className="grid gap-2 md:grid-cols-[160px_1fr]">
-                    <div>
-                      <select
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-400"
-                        value={channel}
-                        onChange={(e) => setChannel(e.target.value)}
-                        disabled={!canLogInteraction}
-                      >
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="phone">Telefone</option>
-                        <option value="email">E-mail</option>
-                        <option value="sms">SMS</option>
-                        <option value="in_person">Presencial</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Input
-                        value={outcome}
-                        onChange={(e) => setOutcome(e.target.value)}
-                        placeholder="Resultado (opcional)"
-                        disabled={!canLogInteraction}
-                      />
-                    </div>
-                  </div>
-                  <textarea
-                    className="min-h-20 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 disabled:bg-slate-50 disabled:text-slate-400"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Notas do contato (opcional)"
-                    disabled={!canLogInteraction}
-                  />
-                  <div className="flex items-center justify-end">
-                    <Button disabled={createInteraction.isPending || !canLogInteraction} onClick={() => createInteraction.mutate()}>
-                      {createInteraction.isPending ? 'Registrando...' : 'Registrar contato'}
-                    </Button>
-                  </div>
-                  {createInteraction.isError && (
-                    <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao registrar contato</div>
-                  )}
-                </div>
-
-                <div className="text-slate-600">Eventos</div>
-                <div className="divide-y divide-slate-200 rounded-md border border-slate-200">
-                  {detail.data.feedbackCase.events.map((e) => (
-                    <div key={e.id} className="flex items-center justify-between px-3 py-2">
-                      <div className="text-xs text-slate-700">{feedbackCaseEventLabel(e.type)}</div>
-                      <div className="text-xs text-slate-400">{new Date(e.createdAt).toLocaleString()}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="text-slate-600 pt-2">Histórico de contatos</div>
-                {interactions.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-                {interactions.isError && <div className="text-sm text-rose-700">Falha ao carregar contatos</div>}
-                {interactions.data && interactions.data.length === 0 && <div className="text-sm text-slate-600">Nenhum contato</div>}
-                {interactions.data && interactions.data.length > 0 && (
-                  <div className="divide-y divide-slate-200 rounded-md border border-slate-200">
-                    {interactions.data.map((i) => (
-                      <div key={i.id} className="grid gap-1 px-3 py-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <div className="text-slate-700">{interactionChannelLabel(i.channel)}</div>
-                          <div className="text-slate-400">{new Date(i.createdAt).toLocaleString()}</div>
-                        </div>
-                        <div className="text-slate-600">{i.outcome ?? '—'}</div>
-                        {i.notes && <div className="text-slate-700">{i.notes}</div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-3 text-sm">
-                <div className="text-slate-600">Sem ocorrência gerada.</div>
-                <div className="flex items-center justify-end">
-                  <Button disabled={createCase.isPending} onClick={() => createCase.mutate()}>
-                    {createCase.isPending ? 'Criando...' : 'Criar ocorrência'}
-                  </Button>
-                </div>
-                {createCase.isError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao criar ocorrência</div>}
-              </div>
+            <div className="campo">
+              <label htmlFor="fd-resultado">
+                Resultado <span className="fbx-opcional">(opcional)</span>
+              </label>
+              <input id="fd-resultado" value={resultado} onChange={(e) => setResultado(e.target.value)} disabled={!podeRegistrar} />
+            </div>
+            <div className="campo">
+              <label htmlFor="fd-notas">
+                Notas do contato <span className="fbx-opcional">(opcional)</span>
+              </label>
+              <textarea id="fd-notas" value={notas} onChange={(e) => setNotas(e.target.value)} disabled={!podeRegistrar} />
+            </div>
+            {registrar.isError && (
+              <p className="fbx-erro" role="alert">
+                Falha ao registrar contato.
+              </p>
             )}
-          </Card>
-
-          <div className="md:col-span-2">
-            <Card title="Respostas">
-              <div className="divide-y divide-slate-200">
-                {detail.data.answers.map((a) => (
-                  <div key={a.id} className="py-3">
-                    <div className="text-sm font-medium text-slate-900">{a.question.title}</div>
-                    <div className="whitespace-pre-line text-sm text-slate-700">
-                      {formatAnswerDisplay(a.question.type, a.value)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        </div>
+            <div className="gaveta__acoes">
+              <button className="btn btn--secundario" type="submit" disabled={!podeRegistrar || registrar.isPending}>
+                {registrar.isPending ? 'Registrando…' : 'Registrar contato'}
+              </button>
+            </div>
+          </form>
+        </>
       )}
-    </div>
+
+      <section className="historico" aria-labelledby="fd-hist-contatos">
+        <h3 className="historico__titulo" id="fd-hist-contatos">
+          Histórico de contatos
+        </h3>
+        {interacoes.isLoading && <p className="fbx-mudo">Carregando…</p>}
+        {interacoes.isError && <p className="fbx-erro">Falha ao carregar contatos.</p>}
+        {interacoes.data && interacoes.data.length === 0 && <p className="fbx-mudo">Nenhum contato registrado.</p>}
+        {interacoes.data && interacoes.data.length > 0 && (
+          <ul>
+            {[...interacoes.data].reverse().map((i) => (
+              <li key={i.id}>
+                <strong>{interactionChannelLabel(i.channel)}</strong>
+                {i.outcome ? ` · ${i.outcome}` : ''}
+                {i.notes && <span className="fbx-contato-notas">{i.notes}</span>}
+                <span className="historico__quando">
+                  <time dateTime={i.createdAt}>{dataCompleta(i.createdAt)}</time>
+                  {i.createdByUser?.name ? ` · ${i.createdByUser.name}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </section>
   );
 }

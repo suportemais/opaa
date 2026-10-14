@@ -2,8 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
 import { daysUntil } from '../../lib/billing-access';
 import { useBillingRedirect } from '../../lib/billing';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
 
 type BillingSummary = {
   stripeEnabled: boolean;
@@ -46,57 +44,82 @@ export function SubscriptionCard() {
 
   if (data.billingMode === 'manual') {
     return (
-      <Card title="Assinatura" description="Cobrança gerenciada pela equipe Dev+">
-        <div className="text-sm text-slate-700">
-          Plano: <strong>{data.plan?.name ?? '—'}</strong>. Para mudanças de plano ou cobrança, fale com o seu contato na Dev+.
+      <section className="cartao cfg__cartao" aria-labelledby="t-assinatura">
+        <div className="cfg__topo">
+          <div>
+            <h2 className="cartao__titulo" id="t-assinatura">
+              Assinatura
+            </h2>
+            <p className="cartao__sub">Cobrança gerenciada pela equipe Dev+</p>
+          </div>
         </div>
-      </Card>
+        <p>
+          Plano: <strong>{data.plan?.name ?? '—'}</strong>. Para mudanças de plano ou cobrança, fale com o seu contato na Dev+.
+        </p>
+      </section>
     );
   }
 
   const trialDays = data.status === 'trial' ? daysUntil(data.trialEndsAt) : null;
 
   return (
-    <Card title="Assinatura" description="Plano, cobrança e forma de pagamento">
-      <dl className="grid gap-3 text-sm sm:grid-cols-3">
+    <section className="cartao cfg__cartao" aria-labelledby="t-assinatura">
+      <div className="cfg__topo">
         <div>
-          <dt className="text-slate-500">Plano</dt>
-          <dd className="font-medium text-slate-900">{data.plan?.name ?? 'Nenhum'}</dd>
+          <h2 className="cartao__titulo" id="t-assinatura">
+            Assinatura
+          </h2>
+          <p className="cartao__sub">Plano, cobrança e forma de pagamento</p>
+        </div>
+        {canManage && data.stripeEnabled && (
+          <div className="cfg__botoes">
+            {!data.hasLiveSubscription && (
+              <button
+                className="btn btn--primario"
+                type="button"
+                onClick={() => redirect.startCheckout()}
+                disabled={redirect.pending || !data.plan?.billable}
+              >
+                Assinar {data.plan?.name ?? ''}
+              </button>
+            )}
+            {data.hasStripeCustomer && (
+              <button className="btn btn--secundario" type="button" onClick={() => redirect.openPortal()} disabled={redirect.pending}>
+                Gerenciar assinatura
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <dl className="cfg-assinatura">
+        <div>
+          <dt>Plano</dt>
+          <dd>{data.plan?.name ?? 'Nenhum'}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Situação</dt>
-          <dd className="font-medium text-slate-900">
+          <dt>Situação</dt>
+          <dd>
             {STATUS_LABELS[data.status] ?? data.status}
             {data.cancelAtPeriodEnd && ' · cancelamento agendado'}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">{data.status === 'trial' ? 'Teste até' : 'Próxima renovação'}</dt>
-          <dd className="font-medium text-slate-900">
+          <dt>{data.status === 'trial' ? 'Teste até' : 'Próxima renovação'}</dt>
+          <dd>
             {data.status === 'trial' ? fmt(data.trialEndsAt) : fmt(data.currentPeriodEnd)}
-            {trialDays !== null && <span className="text-slate-500"> ({trialDays} {trialDays === 1 ? 'dia' : 'dias'})</span>}
+            {trialDays !== null && <span className="mudo"> ({trialDays} {trialDays === 1 ? 'dia' : 'dias'})</span>}
           </dd>
         </div>
       </dl>
 
-      {canManage && data.stripeEnabled && (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {!data.hasLiveSubscription && (
-            <Button onClick={() => redirect.startCheckout()} disabled={redirect.pending || !data.plan?.billable}>
-              Assinar {data.plan?.name ?? ''}
-            </Button>
-          )}
-          {data.hasStripeCustomer && (
-            <Button variant="secondary" onClick={() => redirect.openPortal()} disabled={redirect.pending}>
-              Gerenciar assinatura
-            </Button>
-          )}
-          {data.plan && !data.plan.billable && !data.hasLiveSubscription && (
-            <span className="text-sm text-slate-500">Este plano ainda não está liberado para assinatura online.</span>
-          )}
-        </div>
+      {canManage && data.stripeEnabled && data.plan && !data.plan.billable && !data.hasLiveSubscription && (
+        <p className="campo__dica">Este plano ainda não está liberado para assinatura online.</p>
       )}
-      {redirect.error && <div className="mt-2 text-sm text-rose-700">{redirect.error}</div>}
-    </Card>
+      {redirect.error && (
+        <p className="campo__erro" role="alert">
+          {redirect.error}
+        </p>
+      )}
+    </section>
   );
 }

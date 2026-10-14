@@ -1,0 +1,67 @@
+/* Ranking — complementos ao painel.css (tudo sob .painel). */
+.painel { --rk-cinza: #94A3B8; }
+
+/* Filtros: com "Personalizado" entram as datas */
+.painel .rk-filtros .campo { width: 190px; }
+.painel .rk-filtros .rk-filtros__data { width: 160px; }
+@media (max-width: 559px) { .painel .rk-filtros .campo, .painel .rk-filtros .rk-filtros__data { flex: 1 1 140px; width: auto; } }
+
+.painel .rk-mudo { color: var(--mudo); }
+.painel .rk-link { color: inherit; }
+.painel .rk-link:hover { color: var(--link); text-decoration: underline; text-underline-offset: 3px; }
+.painel .rk-linha-clicavel { cursor: pointer; }
+.painel .rk-linha-clicavel:hover > * { background: var(--bg-suave); }
+.painel .rk-tabela .prazo { margin: 0; }
+
+/* Barras de 3 partes por unidade (tratamento, sentimento) */
+.painel .rk-bloco { display: grid; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--linha); }
+.painel .rk-bloco__titulo { font-size: 15px; font-weight: 600; }
+.painel .rk-barras { display: grid; gap: 10px; }
+.painel .rk-barras li { display: grid; grid-template-columns: minmax(110px, 200px) minmax(0, 1fr) 56px; align-items: center; gap: 12px; font-size: 14px; }
+.painel .rk-barras__nome { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.painel .rk-barras__total { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 559px) {
+  .painel .rk-barras li { grid-template-columns: 1fr auto; gap: 4px 12px; }
+  .painel .rk-barras .rk-mix { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Evolução */
+.painel .rk-evolucao__controles { display: flex; flex-wrap: wrap; gap: 8px; }
+.painel .rk-cel--vazia { background: transparent; color: var(--mudo); font-weight: 500; }
+.painel .rk-series { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.painel .rk-serie {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--linha-forte); border-radius: 999px; background: var(--superficie);
+  color: var(--mudo); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.painel .rk-serie[aria-pressed="true"] { color: var(--texto); border-color: var(--acento); background: var(--selecionado); }
+.painel .rk-serie:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
+.painel .rk-serie__cor { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--linha-forte); }
+.painel .rk-grafico { display: grid; gap: 12px; }
+.painel .rk-grafico .rk-legenda strong { color: var(--texto); }
+.painel .rk-colunas { display: flex; align-items: flex-end; gap: 6px; height: 220px; }
+.painel .rk-colunas__mes { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; gap: 4px; min-width: 0; height: 100%; }
+.painel .rk-colunas__total { color: var(--mudo); font-size: 12px; font-weight: 600; }
+.painel .rk-colunas__pilha { display: flex; flex: 1; flex-direction: column-reverse; width: 100%; max-width: 44px; border-radius: 6px 6px 0 0; overflow: hidden; background: var(--bg-suave); }
+.painel .rk-colunas__pilha span { display: block; width: 100%; }
+.painel .rk-colunas__rotulo { color: var(--mudo); font-size: 12px; white-space: nowrap; }
+
+/* Tabela detalhada (recolhível) */
+.painel .rk-detalhada > summary { list-style: none; cursor: pointer; }
+.painel .rk-detalhada > summary::-webkit-details-marker { display: none; }
+.painel .rk-detalhada__resumo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.painel .rk-detalhada__resumo > span { display: grid; gap: 2px; }
+.painel .rk-detalhada__resumo::after {
+  content: ""; flex: none; width: 10px; height: 10px; margin-right: 6px;
+  border-right: 2px solid var(--mudo); border-bottom: 2px solid var(--mudo);
+  transform: rotate(45deg); transition: transform var(--rapido);
+}
+.painel .rk-detalhada[open] .rk-detalhada__resumo::after { transform: rotate(-135deg); }
+.painel .rk-detalhada[open] > summary { margin-bottom: 16px; }
+.painel .rk-detalhada > summary:focus-visible { outline: 3px solid var(--acento); outline-offset: 4px; border-radius: 6px; }
+.painel .rk-tabela-completa { min-width: 1100px; }
+
+/* Gaveta */
+.painel .rk-detalhe__acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.painel .rk-detalhe__acoes .nav__selo { margin-left: 4px; }
+.painel .rk-temas li > a::before { content: counter(tema) ". "; color: var(--mudo); }

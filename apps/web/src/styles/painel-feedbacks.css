@@ -1,0 +1,75 @@
+/* Feedbacks (lista/Kanban), gaveta de tratamento e detalhe — complementos de painel.css. Tudo sob .painel. */
+
+.painel .fbx { display: grid; gap: 20px; }
+.painel .fbx-lista-area { display: grid; gap: 10px; }
+.painel .fbx-mudo { color: var(--mudo); font-size: 14px; }
+.painel .fbx-erro { padding: 10px 12px; border-radius: 10px; background: var(--perigo-fundo); color: var(--perigo); font-size: 14px; font-weight: 500; }
+.painel .fbx-aviso { padding: 10px 12px; border-radius: 10px; background: var(--bg-suave); color: var(--mudo); font-size: 14px; }
+.painel .fbx-opcional { font-weight: 500; color: var(--mudo); }
+
+/* Etapas que o protótipo não tem (o app tem 7) */
+.painel .etapa--encerrada { background: var(--neutro-fundo); color: var(--texto); }
+.painel .etapa--descartada { background: var(--neutro-fundo); color: var(--mudo); text-decoration: line-through; text-decoration-thickness: 1px; }
+
+/* Prioridade */
+.painel .fbx-prio--high { background: var(--alerta-fundo); color: var(--alerta); }
+.painel .fbx-prio--urgent { background: var(--perigo-fundo); color: var(--perigo); }
+.painel .fbx-prio--low { background: var(--bg-suave); color: var(--mudo); }
+
+/* Lista */
+.painel .fbx-trat-acoes { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.painel .fbx-trat-acoes .btn--fantasma { min-height: 40px; }
+.painel .fbx-trat-acoes .fb-trat__abrir { margin-left: 0; }
+@media (max-width: 559px) {
+  .painel .fbx-trat-acoes { margin-left: 0; flex-basis: 100%; }
+  .painel .fbx-trat-acoes > * { flex: 1 1 auto; }
+}
+.painel .fbx-detalhes { margin-left: auto; }
+
+/* Filtros: caixa "Mostrar encerradas" alinhada aos selects */
+.painel .fbx-campo-marcar { align-self: end; }
+.painel .fbx-campo-marcar .marcar { min-height: 48px; font-size: 14px; font-weight: 500; }
+
+/* Kanban */
+.painel .fbx-arrastavel { cursor: grab; }
+.painel .fbx-arrastavel:active { cursor: grabbing; }
+.painel .coluna.fbx-coluna--alvo { outline: 2px dashed var(--acento); outline-offset: -2px; }
+.painel a.oc-cartao { color: inherit; text-decoration: none; }
+.painel .oc-cartao .fb-tag { font-size: 11px; }
+.painel .oc-cartao .prazo { font-size: 13px; }
+
+/* Gaveta */
+.painel .fbx-topo-acoes { display: flex; align-items: center; gap: 4px; }
+.painel .fbx-topo-acoes .btn--fantasma { min-height: 40px; font-size: 14px; }
+.painel .fbx-topo-acoes .btn--fantasma .icone { width: 16px; height: 16px; }
+.painel .fbx-gaveta-acoes { flex-wrap: wrap; }
+.painel .fbx-atribuir { margin-right: auto; }
+.painel .fbx-atribuir:disabled { opacity: .5; cursor: default; }
+.painel .fbx-sem-caso { display: grid; gap: 12px; justify-items: start; color: var(--mudo); font-size: 14px; }
+
+/* Detalhe */
+.painel .fbx-voltar { margin: 0 0 6px -12px; min-height: 36px; font-size: 14px; }
+.painel .fbx-seta-volta { transform: rotate(180deg); width: 16px; height: 16px; }
+.painel .fbx-detalhe { display: grid; gap: 20px; align-items: start; }
+@media (min-width: 1000px) { .painel .fbx-detalhe { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); } }
+.painel .fbx-detalhe__principal, .painel .fbx-detalhe__lateral { display: grid; gap: 20px; min-width: 0; }
+.painel .fbx-resumo, .painel .fbx-tratamento, .painel .fbx-contatos { display: grid; gap: 16px; }
+.painel .fbx-resumo .gaveta__titulo h2 { overflow-wrap: anywhere; }
+.painel .fbx-resumo-ia { color: var(--texto); font-size: 14px; line-height: 1.5; }
+.painel .fbx-id { color: var(--mudo); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.painel .fbx-tratamento .cartao__topo { margin-bottom: 0; }
+.painel .fbx-respostas { display: grid; gap: 0; margin-top: 8px; }
+.painel .fbx-respostas > div { padding: 12px 0; border-top: 1px solid var(--linha); }
+.painel .fbx-respostas > div:first-child { border-top: 0; padding-top: 4px; }
+.painel .fbx-respostas dt { font-size: 14px; font-weight: 600; }
+.painel .fbx-respostas dd { margin-top: 2px; color: var(--texto); font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
+.painel .fbx-cliente { display: grid; gap: 10px; justify-items: start; margin-top: 8px; }
+.painel .fbx-cliente__nome { font-size: 16px; font-weight: 600; }
+.painel .fbx-cliente__dados { display: grid; gap: 8px; width: 100%; }
+.painel .fbx-cliente__dados dt { color: var(--mudo); font-size: 13px; font-weight: 600; }
+.painel .fbx-cliente__dados dd { font-size: 14px; overflow-wrap: anywhere; }
+.painel .fbx-cliente__dados a { color: var(--link); }
+.painel .fbx-cliente__dados a:hover { text-decoration: underline; }
+.painel .fbx-cliente__link { margin-left: -12px; font-size: 14px; }
+.painel .fbx-cliente__link .icone { width: 16px; height: 16px; }
+.painel .fbx-contato-notas { display: block; margin-top: 2px; white-space: pre-line; }

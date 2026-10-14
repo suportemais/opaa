@@ -82,6 +82,10 @@ export function LoginPage() {
           setError('Selecione a empresa para continuar.');
           return;
         }
+        if (err.status === 401 && (message?.code === 'user_invited' || body?.code === 'user_invited')) {
+          setError('Seu convite ainda não foi aceito. Abra o link enviado por e-mail para criar sua senha.');
+          return;
+        }
       }
       setError('Não foi possível autenticar. Verifique e-mail e senha.');
     } finally {

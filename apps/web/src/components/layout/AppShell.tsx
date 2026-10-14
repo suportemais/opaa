@@ -9,7 +9,7 @@ import { useBillingReturn } from '../../lib/billing';
 import type { TenantBilling } from '../../lib/billing-access';
 import { Icone, type NomeIcone } from '../painel/Icone';
 import { iniciais, nomePerfil, useAuthMe, useTemaPainel } from '../painel/usePainel';
-import { primeiraTelaDeConfiguracoes } from '../painel/ConfigTabs';
+import { primeiraTelaDeConfiguracoes } from '../painel/configAbas';
 
 type TenantMe = {
   tradeName?: string | null;

@@ -1,0 +1,62 @@
+/* Pesquisas (lista, editor, links) e pesquisa pública: complementos ao painel.css.
+   Tudo sob .painel. */
+
+/* ---------- Confirmação ---------- */
+.painel .pq-confirmar__texto > p:first-child { margin-top: 8px; }
+
+/* ---------- Pop-up de links ---------- */
+.painel .qr-janela.pq-links { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; }
+.painel .pq-links__aviso { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--alerta-fundo); color: var(--alerta); font-size: 14px; font-weight: 500; }
+.painel .pq-links__aviso .icone { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+.painel .qr-janela .pq-links__aviso { color: var(--alerta); }
+.painel .pq-links__estado { margin-top: 12px; color: var(--mudo); font-size: 14px; }
+.painel .pq-links__qual { margin-top: 14px; }
+.painel .pq-links__qr-vazio { aspect-ratio: 1; border-radius: 8px; background: var(--neutro-fundo); }
+.painel .pq-links__secao { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--linha); }
+.painel .pq-links__secao > summary { display: flex; align-items: center; min-height: 40px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.painel .pq-links__secao > summary:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; border-radius: 6px; }
+.painel .pq-links__secao[open] > summary { margin-bottom: 6px; }
+.painel .pq-links__secao .campo__dica { margin-bottom: 10px; }
+.painel .pq-links__form { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.painel .pq-links__campanha { grid-column: 1 / -1; }
+@media (max-width: 479px) { .painel .pq-links__form { grid-template-columns: 1fr; } }
+.painel .pq-links__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.painel .qr-janela p.campo__erro { color: var(--perigo); }
+
+/* ---------- Editor ---------- */
+.painel .pq-tipo-mantido strong { color: var(--texto); }
+.painel .pq-opcao { flex-wrap: wrap; }
+.painel .pq-opcao > input[type="text"] { flex: 1 1 180px; min-width: 0; }
+.painel .pq-opcao__negativa { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px; color: var(--mudo); font-size: 13px; font-weight: 600; cursor: pointer; }
+.painel .pq-opcao__negativa input { width: 18px; height: 18px; margin: 0; accent-color: var(--perigo); cursor: pointer; }
+.painel .pq-opcao__negativa:has(input:checked) { color: var(--perigo); }
+.painel .pq-opcao .botao-icone { width: 40px; height: 40px; color: var(--mudo); }
+.painel .pq-opcao .botao-icone:disabled { opacity: .35; cursor: default; }
+.painel .pq-opcao__adicionar { justify-self: start; }
+
+/* ---------- Formulário do cliente (pública e prévia) ---------- */
+.painel .pq-porque { display: grid; gap: 6px; margin-top: 4px; }
+.painel .pq-porque__dica { font-size: 12px; }
+.painel .cli__escala-legenda + .pq-porque { margin-top: 6px; }
+
+.painel .pq-atendente { position: relative; }
+.painel .pq-atendente__lista {
+  position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px);
+  display: grid; max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--linha-forte); border-radius: 10px; background: #fff;
+  box-shadow: 0 16px 32px -16px rgba(10, 26, 51, .35);
+}
+.painel .pq-atendente__estado { padding: 10px 12px; color: var(--mudo); font-size: 13px; }
+.painel .pq-atendente__item { display: grid; gap: 2px; min-height: 44px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--linha); background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.painel .pq-atendente__item:last-child { border-bottom: 0; }
+.painel .pq-atendente__item:hover, .painel .pq-atendente__item:focus-visible { background: var(--selecionado); outline: none; }
+.painel .pq-atendente__item[aria-pressed="true"] { background: var(--selecionado); color: var(--link); }
+.painel .pq-atendente__item span { color: var(--mudo); font-size: 12px; }
+.painel .pq-atendente__item--limpar { color: var(--link); font-size: 13px; font-weight: 600; }
+
+.painel .cli__enviar:disabled { opacity: .6; cursor: wait; }
+.painel .pq-google { display: grid; gap: 8px; padding: 16px; border-radius: 14px; border: 1px solid #BBE5C8; background: var(--sucesso-fundo); text-align: center; }
+.painel .pq-google__titulo { color: var(--sucesso); font-weight: 700; }
+.painel .pq-google .cli__enviar { text-decoration: none; }
+.painel .pub__rodape a { color: var(--link); font-weight: 600; }
+.painel .pub__rodape a:hover { text-decoration: underline; }

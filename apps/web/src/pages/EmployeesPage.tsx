@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { useMemo, useRef, useState } from 'react';
+import { ApiError, apiFetch } from '../lib/api';
+import { ConfigLayout } from '../components/painel/ConfigTabs';
+import { Icone } from '../components/painel/Icone';
+import { useAuthMe } from '../components/painel/usePainel';
+import { Gaveta, Situacao } from '../components/painel/config/ui';
+import { useAvisar, useConfirmar } from '../components/painel/config/hooks';
+import { descr, mensagemDoErro } from '../components/painel/config/erros';
+import '../styles/painel-config.css';
 
 type Unit = { id: string; name: string };
 type Employee = {
@@ -16,36 +20,29 @@ type Employee = {
   createdAt: string;
   unit: Unit;
 };
+type ImportResult = { imported: number; total?: number; errors?: Array<{ row: number; message: string }> };
 
-function usePermissionCodes() {
-  const { data } = useQuery({
-    queryKey: ['authMe'],
-    queryFn: () => apiFetch<{ permissionCodes: string[]; unitIds: string[] }>('/auth/me').catch(() => ({ permissionCodes: [], unitIds: [] })),
-    staleTime: 60 * 1000,
-    retry: false,
-  });
-  return {
-    permissionCodes: data?.permissionCodes ?? [],
-    unitIds: data?.unitIds ?? [],
-  };
-}
+type FormAtendente = { unitId: string; name: string; code: string; roleTitle: string; status: 'active' | 'inactive' };
 
 export function EmployeesPage() {
   const qc = useQueryClient();
-  const { permissionCodes, unitIds } = usePermissionCodes();
-  const canManageEmployees =
-    permissionCodes.includes('employee:manage') || permissionCodes.includes('unit:manage');
+  const me = useAuthMe();
+  const [avisar, aviso] = useAvisar();
+  const [confirmar, janelaConfirmar] = useConfirmar();
+  const permissionCodes = me.data?.permissionCodes ?? [];
+  const unitIds = (me.data as { unitIds?: string[] } | undefined)?.unitIds;
+  const canManageEmployees = permissionCodes.includes('employee:manage') || permissionCodes.includes('unit:manage');
   const canSeeAllUnits = permissionCodes.includes('unit:manage');
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
 
   const allowedUnits = useMemo<Unit[]>(() => {
     if (!units.data) return [];
     if (canSeeAllUnits) return units.data;
-    const allowed = new Set(unitIds);
+    const allowed = new Set(unitIds ?? []);
     return units.data.filter((u) => allowed.has(u.id));
   }, [units.data, canSeeAllUnits, unitIds]);
 
-  const defaultUnitId = useMemo(() => allowedUnits[0]?.id ?? '', [allowedUnits]);
+  const defaultUnitId = allowedUnits[0]?.id ?? '';
   const [filterUnitId, setFilterUnitId] = useState('');
   const [search, setSearch] = useState('');
 
@@ -60,309 +57,214 @@ export function EmployeesPage() {
     },
   });
 
-  const [unitId, setUnitId] = useState('');
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [roleTitle, setRoleTitle] = useState('');
+  // ----- Gaveta de criar/editar -----
+  const [gaveta, setGaveta] = useState<{ modo: 'novo' } | { modo: 'editar'; atendente: Employee } | null>(null);
+  const [form, setForm] = useState<FormAtendente>({ unitId: '', name: '', code: '', roleTitle: '', status: 'active' });
+  const [tentou, setTentou] = useState(false);
+  const [erroGaveta, setErroGaveta] = useState<string | null>(null);
+  const nomeRef = useRef<HTMLInputElement>(null);
+  const mudar = <K extends keyof FormAtendente>(campo: K, valor: FormAtendente[K]) => setForm((f) => ({ ...f, [campo]: valor }));
 
-  const [editingId, setEditingId] = useState('');
-  const [editUnitId, setEditUnitId] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editCode, setEditCode] = useState('');
-  const [editRoleTitle, setEditRoleTitle] = useState('');
-  const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
+  function abrirNovo() {
+    setForm({ unitId: filterUnitId || defaultUnitId, name: '', code: '', roleTitle: '', status: 'active' });
+    setTentou(false);
+    setErroGaveta(null);
+    setGaveta({ modo: 'novo' });
+  }
+  function abrirEdicao(e: Employee) {
+    setForm({
+      unitId: e.unitId,
+      name: e.name,
+      code: e.code ?? '',
+      roleTitle: e.roleTitle ?? '',
+      status: e.status === 'inactive' ? 'inactive' : 'active',
+    });
+    setTentou(false);
+    setErroGaveta(null);
+    setGaveta({ modo: 'editar', atendente: e });
+  }
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (f: FormAtendente) =>
       apiFetch<{ id: string }>('/employees', {
         method: 'POST',
         json: {
-          unitId: unitId || defaultUnitId,
-          name,
-          code: code.trim() || undefined,
-          roleTitle: roleTitle.trim() || undefined,
+          unitId: f.unitId || defaultUnitId,
+          name: f.name.trim(),
+          code: f.code.trim() || undefined,
+          roleTitle: f.roleTitle.trim() || undefined,
         },
       }),
-    onSuccess: async () => {
-      setName('');
-      setCode('');
-      setRoleTitle('');
+    onSuccess: async (_, f) => {
+      setGaveta(null);
+      const unidade = allowedUnits.find((u) => u.id === (f.unitId || defaultUnitId))?.name;
+      avisar(unidade ? `${f.name.trim()} adicionado(a) em ${unidade}` : `${f.name.trim()} adicionado(a)`);
       await qc.invalidateQueries({ queryKey: ['employees'] });
     },
+    onError: (err) => setErroGaveta(mensagemDoErro(err, {}, 'Não foi possível adicionar o atendente.')),
   });
 
   const update = useMutation({
-    mutationFn: () =>
-      apiFetch<{ ok: boolean }>(`/employees/${encodeURIComponent(editingId)}`, {
+    mutationFn: (vars: { id: string; f: FormAtendente }) =>
+      apiFetch<{ ok: boolean }>(`/employees/${encodeURIComponent(vars.id)}`, {
         method: 'PATCH',
         json: {
-          unitId: editUnitId || undefined,
-          name: editName.trim() || undefined,
-          code: editCode.trim() || undefined,
-          roleTitle: editRoleTitle.trim() || undefined,
-          status: editStatus,
+          unitId: vars.f.unitId || undefined,
+          name: vars.f.name.trim() || undefined,
+          code: vars.f.code.trim() || undefined,
+          roleTitle: vars.f.roleTitle.trim() || undefined,
+          status: vars.f.status,
         },
       }),
-    onSuccess: async () => {
-      setEditingId('');
+    onSuccess: async (_, vars) => {
+      setGaveta(null);
+      avisar(`${vars.f.name.trim()} atualizado(a)`);
       await qc.invalidateQueries({ queryKey: ['employees'] });
     },
+    onError: (err) => setErroGaveta(mensagemDoErro(err, {}, 'Não foi possível salvar o atendente.')),
   });
 
+  // Desativar: mesma chamada da tela anterior
   const disable = useMutation({
-    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/employees/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-    onSuccess: async () => {
+    mutationFn: (e: Employee) => apiFetch<{ ok: boolean }>(`/employees/${encodeURIComponent(e.id)}`, { method: 'DELETE' }),
+    onSuccess: async (_, e) => {
+      avisar(`${e.name} não aparece mais na pesquisa`);
       await qc.invalidateQueries({ queryKey: ['employees'] });
     },
+    onError: () => avisar('Não foi possível desativar o atendente.'),
   });
 
+  // Reativar: PATCH status=active (o mesmo da edição)
+  const reativar = useMutation({
+    mutationFn: (e: Employee) =>
+      apiFetch<{ ok: boolean }>(`/employees/${encodeURIComponent(e.id)}`, { method: 'PATCH', json: { status: 'active' } }),
+    onSuccess: async (_, e) => {
+      avisar(`${e.name} voltou a aparecer na pesquisa`);
+      await qc.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: () => avisar('Não foi possível reativar o atendente.'),
+  });
+
+  function salvarAtendente() {
+    setTentou(true);
+    setErroGaveta(null);
+    if (!form.name.trim()) return nomeRef.current?.focus();
+    if (gaveta?.modo === 'editar') update.mutate({ id: gaveta.atendente.id, f: form });
+    else create.mutate(form);
+  }
+
+  // ----- Importação CSV -----
+  const [importAberto, setImportAberto] = useState(false);
   const [importUnitId, setImportUnitId] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importResult, setImportResult] = useState<{ imported: number; total?: number; errors?: Array<{ row: number; message: string }> } | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importErrors, setImportErrors] = useState<Array<{ row: number; message: string }>>([]);
+  const [importTentou, setImportTentou] = useState(false);
+  const arquivoRef = useRef<HTMLInputElement>(null);
+
+  function limparImportacao() {
+    setImportFile(null);
+    setImportResult(null);
+    setImportError(null);
+    setImportErrors([]);
+    setImportTentou(false);
+    if (arquivoRef.current) arquivoRef.current.value = '';
+  }
 
   const importEmployees = useMutation({
     mutationFn: async () => {
       if (!importFile) throw new Error('missing_file');
-      const form = new FormData();
-      form.append('unitId', importUnitId || defaultUnitId);
-      form.append('file', importFile);
-      return apiFetch<{ imported: number; total?: number; errors?: Array<{ row: number; message: string }> }>('/employees/import', {
-        method: 'POST',
-        body: form,
-      });
+      const body = new FormData();
+      body.append('unitId', importUnitId || defaultUnitId);
+      body.append('file', importFile);
+      return apiFetch<ImportResult>('/employees/import', { method: 'POST', body });
     },
     onSuccess: async (data) => {
       setImportResult(data);
       setImportError(null);
+      setImportErrors([]);
       setImportFile(null);
-      const input = document.getElementById('employee-import-file') as HTMLInputElement | null;
-      if (input) input.value = '';
+      if (arquivoRef.current) arquivoRef.current.value = '';
+      avisar(`${data.imported} atendente(s) importado(s)`);
       await qc.invalidateQueries({ queryKey: ['employees'] });
     },
-    onError: (err: any) => {
-      const body = (err as any)?.responseJson as any;
-      const message =
+    onError: (err: unknown) => {
+      const body = err instanceof ApiError ? (err.body as { errors?: unknown; message?: unknown } | null) : null;
+      const erros = Array.isArray(body?.errors) ? (body!.errors as Array<{ row: number; message: string }>) : [];
+      setImportErrors(erros);
+      setImportError(
         typeof err === 'string'
           ? err
-          : Array.isArray(body?.errors)
+          : erros.length
             ? 'Verifique os erros abaixo.'
-            : (body?.message ?? 'Falha ao importar');
-      setImportError(message);
+            : typeof body?.message === 'string'
+              ? body.message
+              : 'Falha ao importar',
+      );
       setImportResult(null);
     },
   });
 
+  const lista = employees.data ?? [];
+  const nomeUnidadeFiltro = allowedUnits.find((u) => u.id === filterUnitId)?.name;
+
   return (
-    <div className="grid gap-6">
-      <div>
-        <div className="text-xl font-semibold">Atendentes</div>
-        <div className="text-sm text-slate-600">Cadastro de atendentes por unidade para seleção na pesquisa</div>
-      </div>
-
-      {editingId && canManageEmployees && (
-        <Card title="Editar atendente">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={editUnitId}
-                onChange={(e) => setEditUnitId(e.target.value)}
-              >
-                {allowedUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nome do atendente" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Código</div>
-              <Input value={editCode} onChange={(e) => setEditCode(e.target.value)} placeholder="Opcional" />
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Cargo</div>
-              <Input value={editRoleTitle} onChange={(e) => setEditRoleTitle(e.target.value)} placeholder="Opcional" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Status</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value as any)}
-              >
-                <option value="active">Ativo</option>
-                <option value="inactive">Inativo</option>
-              </select>
-            </div>
-            <div className="md:col-span-3 flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditingId('')} disabled={update.isPending}>
-                Cancelar
-              </Button>
-              <Button disabled={update.isPending} onClick={() => update.mutate()}>
-                {update.isPending ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </div>
-            {update.isError && (
-              <div className="md:col-span-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao salvar</div>
-            )}
-          </div>
-        </Card>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        {canManageEmployees && (
-          <Card title="Criar atendente">
-            <div className="grid gap-3 md:grid-cols-3">
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={unitId || defaultUnitId}
-                onChange={(e) => setUnitId(e.target.value)}
-                disabled={units.isLoading}
-              >
-                {allowedUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do atendente" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Código</div>
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Opcional" />
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Cargo</div>
-              <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Opcional" />
-            </div>
-            <div className="md:col-span-3">
-              <Button disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
-                {create.isPending ? 'Criando...' : 'Criar'}
-              </Button>
-            </div>
-            {create.isError && (
-              <div className="md:col-span-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao criar</div>
-            )}
-          </div>
-        </Card>
-        )}
-
-        {canManageEmployees && (
-        <Card
-          title="Importar CSV"
-          description="Colunas: Nome (obrigatório), Código (opcional), Cargo (opcional). Limite 2MB."
-        >
-          <div className="grid gap-3">
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={importUnitId || defaultUnitId}
-                onChange={(e) => setImportUnitId(e.target.value)}
-                disabled={units.isLoading || importEmployees.isPending}
-              >
-                {allowedUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Arquivo CSV</div>
-              <input
-                id="employee-import-file"
-                type="file"
-                accept=".csv,text/csv"
-                disabled={importEmployees.isPending}
-                className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-sky-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-sky-700"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  setImportFile(f);
-                  setImportResult(null);
-                  setImportError(null);
-                }}
-              />
-              <div className="mt-1 text-xs text-slate-500">
-                Exemplo de cabeçalho: <span className="font-mono text-slate-700">Nome,Código,Cargo</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                variant="secondary"
-                disabled={importEmployees.isPending || !importFile}
-                onClick={() => {
-                  setImportFile(null);
-                  setImportResult(null);
-                  setImportError(null);
-                  const input = document.getElementById('employee-import-file') as HTMLInputElement | null;
-                  if (input) input.value = '';
-                }}
-              >
-                Limpar
-              </Button>
-              <Button disabled={!importFile || importEmployees.isPending} onClick={() => importEmployees.mutate()}>
-                {importEmployees.isPending ? 'Importando...' : 'Importar'}
-              </Button>
-            </div>
-            {importResult && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                {importResult.imported} de {importResult.total ?? importResult.imported} atendente(s) importado(s) com sucesso.
-                {importResult.errors && importResult.errors.length > 0 && (
-                  <div className="mt-2 text-emerald-900">
-                    <div className="mb-1 font-medium">Observações:</div>
-                    <ul className="list-disc space-y-0.5 pl-5">
-                      {importResult.errors.map((e, i) => (
-                        <li key={i}>
-                          Linha {e.row}: {e.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-            {importError && (
-              <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {importError}
-                {Array.isArray((importEmployees.error as any)?.responseJson?.errors) && (
-                  <ul className="mt-2 list-disc space-y-0.5 pl-5">
-                    {((importEmployees.error as any)?.responseJson?.errors ?? []).map((e: any, i: number) => (
-                      <li key={i}>
-                        Linha {e.row}: {e.message}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        </Card>
-        )}
-      </div>
-
-      <Card title="Lista">
-        <div className="mb-4 grid gap-3 md:grid-cols-3">
+    <ConfigLayout>
+      <section className="cartao cfg__cartao" aria-labelledby="t-atendentes">
+        <div className="cfg__topo">
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Unidade</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={filterUnitId}
-              onChange={(e) => setFilterUnitId(e.target.value)}
-              disabled={units.isLoading}
-            >
-              <option value="">Todas</option>
+            <h2 className="cartao__titulo" id="t-atendentes">
+              Atendentes
+            </h2>
+            <p className="cartao__sub">Aparecem na pergunta “Quem te atendeu?” da pesquisa da unidade.</p>
+            {!canSeeAllUnits && allowedUnits.length > 0 && (
+              <p className="cfg-escopo">
+                <Icone nome="cadeado" />
+                <span>
+                  Você vê e edita só os atendentes de <strong>{allowedUnits.map((u) => u.name).join(', ')}</strong>, as
+                  unidades do seu acesso.
+                </span>
+              </p>
+            )}
+          </div>
+          {canManageEmployees && (
+            <div className="cfg__botoes">
+              <button
+                className="btn btn--secundario"
+                type="button"
+                onClick={() => {
+                  limparImportacao();
+                  setImportUnitId(filterUnitId || defaultUnitId);
+                  setImportAberto(true);
+                }}
+              >
+                Importar planilha
+              </button>
+              <button className="btn btn--primario" type="button" onClick={abrirNovo} disabled={!allowedUnits.length}>
+                <Icone nome="mais" />
+                Novo atendente
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="cfg__filtros">
+          <div className="campo campo--busca">
+            <label htmlFor="a-busca">Buscar</label>
+            <input
+              id="a-busca"
+              type="search"
+              placeholder="Nome ou código"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Icone nome="busca" />
+          </div>
+          <div className="campo">
+            <label htmlFor="a-unidade">Unidade</label>
+            <select id="a-unidade" value={filterUnitId} onChange={(e) => setFilterUnitId(e.target.value)} disabled={units.isLoading}>
+              <option value="">{canSeeAllUnits ? 'Todas as unidades' : 'Minhas unidades'}</option>
               {allowedUnits.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -370,58 +272,280 @@ export function EmployeesPage() {
               ))}
             </select>
           </div>
-          <div className="md:col-span-2">
-            <div className="mb-1 text-xs font-medium text-slate-600">Buscar</div>
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nome ou código" />
-          </div>
         </div>
 
-        {employees.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {employees.isError && <div className="text-sm text-rose-700">Falha ao carregar atendentes</div>}
-        {employees.data && employees.data.length === 0 && <div className="text-sm text-slate-600">Nenhum atendente</div>}
-        {employees.data && employees.data.length > 0 && (
-          <div className="divide-y divide-slate-200">
-            {employees.data.map((e) => (
-              <div key={e.id} className="flex items-center justify-between gap-3 py-3">
-                <div>
-                  <div className="text-sm font-medium text-slate-900">
-                    {e.name} {e.status !== 'active' && <span className="text-xs text-slate-500">(inativo)</span>}
-                  </div>
-                  <div className="text-xs text-slate-500">{e.unit?.name ?? '—'}</div>
-                  <div className="text-xs text-slate-500">{[e.roleTitle, e.code].filter(Boolean).join(' • ') || '—'}</div>
-                </div>
-                <div className="flex items-center gap-2">
+        {employees.data && (
+          <p className="filtros__contagem" role="status">
+            <strong>{lista.length}</strong> {lista.length === 1 ? 'atendente' : 'atendentes'}
+            {nomeUnidadeFiltro ? ` em ${nomeUnidadeFiltro}` : ''}
+          </p>
+        )}
+        {employees.isLoading && <p className="mudo">Carregando atendentes…</p>}
+        {employees.isError && (
+          <p className="campo__erro" role="alert">
+            Não foi possível carregar os atendentes.
+          </p>
+        )}
+
+        {employees.data && (
+          <div className="tabela-rolagem">
+            <table className="tabela cfg-tabela">
+              <thead>
+                <tr>
+                  <th scope="col">Nome</th>
+                  <th scope="col">Unidade</th>
+                  <th scope="col">Cargo</th>
+                  <th scope="col">Situação</th>
                   {canManageEmployees && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingId(e.id);
-                          setEditUnitId(e.unitId);
-                          setEditName(e.name);
-                          setEditCode(e.code ?? '');
-                          setEditRoleTitle(e.roleTitle ?? '');
-                          setEditStatus((e.status as any) ?? 'active');
-                        }}
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={disable.isPending || e.status !== 'active'}
-                        onClick={() => disable.mutate(e.id)}
-                      >
-                        Desativar
-                      </Button>
-                    </>
+                    <th scope="col">
+                      <span className="visualmente-oculto">Ações</span>
+                    </th>
                   )}
-                </div>
-              </div>
-            ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lista.length === 0 && (
+                  <tr>
+                    <td colSpan={canManageEmployees ? 5 : 4} className="vazio">
+                      <strong>Nenhum atendente aqui</strong>
+                      <br />
+                      {search || filterUnitId ? 'Mude a busca ou a unidade.' : 'Cadastre ou importe os atendentes.'}
+                    </td>
+                  </tr>
+                )}
+                {lista.map((e) => {
+                  const ativo = e.status === 'active';
+                  return (
+                    <tr key={e.id} className={ativo ? undefined : 'cfg-tabela__inativo'}>
+                      <th scope="row">
+                        <span className="cfg-celula">
+                          <span>{e.name}</span>
+                          {e.code && <small className="mudo">Código {e.code}</small>}
+                        </span>
+                      </th>
+                      <td>{e.unit?.name ?? '—'}</td>
+                      <td>{e.roleTitle ? e.roleTitle : <span className="mudo">—</span>}</td>
+                      <td>{ativo ? <Situacao tipo="publicada">Ativo</Situacao> : <Situacao tipo="arquivada">Desativado</Situacao>}</td>
+                      {canManageEmployees && (
+                        <td className="cfg-tabela__acoes">
+                          <button className="btn btn--fantasma" type="button" onClick={() => abrirEdicao(e)}>
+                            <Icone nome="editar" />
+                            Editar<span className="visualmente-oculto"> {e.name}</span>
+                          </button>
+                          {ativo ? (
+                            <button
+                              className="btn btn--fantasma"
+                              type="button"
+                              disabled={disable.isPending}
+                              onClick={async () => {
+                                const ok = await confirmar({
+                                  titulo: `Desativar ${e.name}?`,
+                                  texto: 'A pessoa deixa de aparecer na pesquisa. O histórico continua guardado, e dá para reativar depois.',
+                                  botao: 'Desativar',
+                                  perigo: true,
+                                  icone: 'pessoa',
+                                });
+                                if (ok) disable.mutate(e);
+                              }}
+                            >
+                              Desativar<span className="visualmente-oculto"> {e.name}</span>
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn--fantasma"
+                              type="button"
+                              disabled={reativar.isPending}
+                              onClick={() => reativar.mutate(e)}
+                            >
+                              Reativar<span className="visualmente-oculto"> {e.name}</span>
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </Card>
-    </div>
+      </section>
+
+      {canManageEmployees && (
+        <Gaveta
+          aberta={!!gaveta}
+          titulo={gaveta?.modo === 'editar' ? `Editar ${gaveta.atendente.name}` : 'Novo atendente'}
+          botao={gaveta?.modo === 'editar' ? 'Salvar' : 'Adicionar'}
+          ocupado={create.isPending || update.isPending}
+          onFechar={() => setGaveta(null)}
+          onSalvar={salvarAtendente}
+        >
+          <div className="campo">
+            <label htmlFor="at-unidade">Unidade</label>
+            <select id="at-unidade" value={form.unitId || defaultUnitId} onChange={(e) => mudar('unitId', e.target.value)}>
+              {allowedUnits.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="at-nome">
+              Nome <span className="obrigatorio" aria-hidden="true">*</span>
+            </label>
+            <input
+              ref={nomeRef}
+              id="at-nome"
+              required
+              aria-invalid={tentou && !form.name.trim()}
+              aria-describedby={descr('at-nome', true, true)}
+              value={form.name}
+              onChange={(e) => mudar('name', e.target.value)}
+            />
+            <p className="campo__dica" id="at-nome-dica">
+              Como o cliente vai ver na pesquisa.
+            </p>
+            <p className="campo__erro" id="at-nome-erro" hidden={!(tentou && !form.name.trim())}>
+              Escreva o nome do atendente.
+            </p>
+          </div>
+          <div className="campo">
+            <label htmlFor="at-cargo">
+              Cargo <span className="opcional">(opcional)</span>
+            </label>
+            <input id="at-cargo" placeholder="Ex.: Garçom" value={form.roleTitle} onChange={(e) => mudar('roleTitle', e.target.value)} />
+          </div>
+          <div className="campo">
+            <label htmlFor="at-codigo">
+              Código <span className="opcional">(opcional)</span>
+            </label>
+            <input id="at-codigo" aria-describedby="at-codigo-dica" value={form.code} onChange={(e) => mudar('code', e.target.value)} />
+            <p className="campo__dica" id="at-codigo-dica">
+              Matrícula ou código interno, se a casa usar.
+            </p>
+          </div>
+          {gaveta?.modo === 'editar' && (
+            <div className="campo">
+              <label htmlFor="at-situacao">Situação</label>
+              <select id="at-situacao" value={form.status} onChange={(e) => mudar('status', e.target.value as FormAtendente['status'])}>
+                <option value="active">Ativo (aparece na pesquisa)</option>
+                <option value="inactive">Desativado (não aparece)</option>
+              </select>
+            </div>
+          )}
+          {erroGaveta && (
+            <p className="campo__erro" role="alert">
+              {erroGaveta}
+            </p>
+          )}
+        </Gaveta>
+      )}
+
+      {canManageEmployees && (
+        <Gaveta
+          aberta={importAberto}
+          titulo="Importar planilha de atendentes"
+          botao="Importar"
+          ocupado={importEmployees.isPending}
+          onFechar={() => setImportAberto(false)}
+          onSalvar={() => {
+            setImportTentou(true);
+            if (!importFile) return arquivoRef.current?.focus();
+            importEmployees.mutate();
+          }}
+        >
+          <p className="cfg-info">
+            <Icone nome="lista" />
+            <span>
+              Use uma planilha CSV com as colunas <strong>Nome</strong> (obrigatória), <strong>Código</strong> e{' '}
+              <strong>Cargo</strong>. Uma pessoa por linha. Limite de 2 MB. Exemplo de cabeçalho: <code>Nome,Código,Cargo</code>
+            </span>
+          </p>
+          <div className="campo">
+            <label htmlFor="im-unidade">Unidade dos atendentes</label>
+            <select
+              id="im-unidade"
+              value={importUnitId || defaultUnitId}
+              onChange={(e) => setImportUnitId(e.target.value)}
+              disabled={units.isLoading || importEmployees.isPending}
+            >
+              {allowedUnits.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="im-arquivo">Arquivo CSV</label>
+            <input
+              ref={arquivoRef}
+              id="im-arquivo"
+              className="cfg-arquivo"
+              type="file"
+              accept=".csv,text/csv"
+              disabled={importEmployees.isPending}
+              aria-invalid={importTentou && !importFile}
+              aria-describedby={descr('im-arquivo', false, true)}
+              onChange={(e) => {
+                setImportFile(e.target.files?.[0] ?? null);
+                setImportResult(null);
+                setImportError(null);
+                setImportErrors([]);
+              }}
+            />
+            <p className="campo__erro" id="im-arquivo-erro" hidden={!(importTentou && !importFile)}>
+              Escolha o arquivo da planilha.
+            </p>
+          </div>
+          {importFile && (
+            <div>
+              <button className="btn btn--fantasma" type="button" disabled={importEmployees.isPending} onClick={limparImportacao}>
+                Limpar
+              </button>
+            </div>
+          )}
+          {importResult && (
+            <div className="cfg-resultado" role="status">
+              <p>
+                <strong>
+                  {importResult.imported} de {importResult.total ?? importResult.imported}
+                </strong>{' '}
+                atendente(s) importado(s) com sucesso.
+              </p>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <>
+                  <p>Observações:</p>
+                  <ul>
+                    {importResult.errors.map((er, i) => (
+                      <li key={i}>
+                        Linha {er.row}: {er.message}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+          {importError && (
+            <div className="cfg-resultado cfg-resultado--erro" role="alert">
+              <p>{importError}</p>
+              {importErrors.length > 0 && (
+                <ul>
+                  {importErrors.map((er, i) => (
+                    <li key={i}>
+                      Linha {er.row}: {er.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </Gaveta>
+      )}
+      {janelaConfirmar}
+      {aviso}
+    </ConfigLayout>
   );
 }
-

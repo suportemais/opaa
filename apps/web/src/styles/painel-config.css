@@ -1,0 +1,55 @@
+/* Complementos das telas de Configurações (o que o protótipo não cobre). Tudo sob .painel. */
+
+/* Célula com linha principal + detalhe (nome + código, CNPJ + razão social) */
+.painel .cfg-celula { display: grid; gap: 2px; }
+.painel .cfg-celula small { font-size: 13px; font-weight: 400; }
+.painel .cfg-id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+
+/* Selo do perfil Colaborador (o protótipo não tem esse perfil) */
+.painel .selo-perfil--colaborador { background: var(--neutro-fundo); color: var(--neutro); }
+
+/* Lista dos perfis com a descrição (acima da matriz) */
+.painel .cfg-perfis { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.painel .cfg-perfis li { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: start; gap: 12px; color: var(--mudo); font-size: 14px; line-height: 1.45; }
+.painel .cfg-perfis .selo-perfil { justify-self: start; }
+@media (max-width: 559px) { .painel .cfg-perfis li { grid-template-columns: 1fr; gap: 4px; } }
+
+/* Empresa: cor (seletor + texto) */
+.painel .cfg-cor { display: flex; gap: 10px; align-items: center; }
+.painel .campo .cfg-cor__seletor { flex: none; width: 52px; padding: 4px; cursor: pointer; }
+
+/* Assinatura */
+.painel .cfg-assinatura { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 0; }
+.painel .cfg-assinatura > div { padding: 12px 14px; border-radius: var(--raio); background: var(--bg-suave); }
+.painel .cfg-assinatura dt { color: var(--mudo); font-size: 13px; font-weight: 600; }
+.painel .cfg-assinatura dd { margin: 2px 0 0; font-weight: 600; }
+
+/* Unidades: plataformas de avaliação na gaveta */
+.painel .cfg-plataforma { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--linha); border-radius: 14px; background: var(--superficie); }
+.painel .cfg-plataforma__topo { display: flex; gap: 12px; align-items: flex-start; }
+.painel .cfg-plataforma__sigla { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 10px; background: var(--selecionado); color: var(--link); font-size: 14px; font-weight: 700; }
+.painel .cfg-plataforma--google .cfg-plataforma__sigla { background: #E8F0FE; color: #1A73E8; }
+.painel .cfg-plataforma--ifood .cfg-plataforma__sigla { background: #FDECEC; color: #C8102E; }
+.painel .cfg-plataforma--tripadvisor .cfg-plataforma__sigla { background: #E6F6EF; color: #00845A; }
+.painel .cfg-plataforma--reclameaqui .cfg-plataforma__sigla { background: #FFF3E0; color: #B45309; }
+.painel .cfg-plataforma__texto { display: grid; gap: 4px; min-width: 0; }
+.painel .cfg-plataforma__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--mudo); font-size: 14px; }
+.painel .cfg-plataforma__meta .icone { width: 16px; height: 16px; color: #F59E0B; vertical-align: -2px; }
+.painel .cfg-plataforma__form { display: grid; gap: 12px; }
+
+/* Atendentes: arquivo da importação e resultado */
+.painel .campo input.cfg-arquivo { padding: 8px 10px; }
+.painel .cfg-resultado { display: grid; gap: 6px; padding: 12px 14px; border-radius: var(--raio); background: var(--sucesso-fundo); color: var(--texto); font-size: 14px; }
+.painel .cfg-resultado--erro { background: var(--perigo-fundo); color: var(--perigo); }
+.painel .cfg-resultado ul { margin: 0; padding-left: 20px; list-style: disc; }
+
+/* Usuários: bloco "Definir nova senha" dentro da gaveta */
+.painel .cfg-subsecao { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--linha); }
+.painel .cfg-ok { color: var(--sucesso); font-size: 14px; font-weight: 500; }
+
+/* Integrações: vouchers */
+.painel .cfg-vouchers li { flex-wrap: wrap; }
+.painel .cfg-voucher__texto { display: grid; gap: 2px; flex: 1 1 200px; min-width: 0; }
+.painel .cfg-voucher__codigo { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; letter-spacing: .06em; overflow-wrap: anywhere; }
+.painel .cfg-voucher__acoes { display: flex; gap: 6px; }
+.painel .cfg-voucher__acoes .btn { min-height: 40px; padding: 0 12px; }

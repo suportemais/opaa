@@ -1,195 +1,74 @@
-import * as Dialog from '@radix-ui/react-dialog';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
-import { QrCode } from '../components/QrCode';
+import type { UnarchiveSurveyResponse } from '../lib/api-novos';
+import { Icone } from '../components/painel/Icone';
+import { usePode, useAuthMe } from '../components/painel/usePainel';
+import { Confirmar, type ConfirmarOpcoes } from '../components/painel/pesquisas/Confirmar';
+import { EditorPesquisa, type ResultadoEditor } from '../components/painel/pesquisas/EditorPesquisa';
+import { LinksPesquisa } from '../components/painel/pesquisas/LinksPesquisa';
+import { useAviso } from '../components/painel/pesquisas/useAviso';
 import {
-  DEFAULT_EXTRA_QUESTION_KIND,
-  EXTRA_QUESTION_KIND_LABELS,
-  EXTRA_QUESTION_KINDS,
-  EXTRA_QUESTION_TYPE_MICROCOPY,
-  extraQuestionKindFromType,
-  persistedTypeFromExtraKind,
-  type ExtraQuestionKind,
-} from '../lib/question-types';
-import { isActiveSurvey } from '../lib/survey-list';
+  dataHora,
+  mensagemErro,
+  NOMES_STATUS,
+  quandoRelativo,
+  type SurveyListItem,
+  type Unit,
+} from '../components/painel/pesquisas/tipos';
+import '../styles/painel-pesquisas.css';
 
-const DELETE_COPY = {
-  action: 'Apagar',
-  title: 'Apagar pesquisa?',
-  body: (name: string) => `“${name}” some da listagem. Não dá pra desfazer por aqui.`,
-  confirm: 'Apagar pesquisa',
-  cancel: 'Cancelar',
-} as const;
+type Filtro = 'todas' | 'publicada' | 'rascunho' | 'arquivada';
+const FILTROS: Array<{ valor: Filtro; nome: string; status?: string }> = [
+  { valor: 'todas', nome: 'Todas' },
+  { valor: 'publicada', nome: 'Publicadas', status: 'published' },
+  { valor: 'rascunho', nome: 'Rascunhos', status: 'draft' },
+  { valor: 'arquivada', nome: 'Arquivadas', status: 'archived' },
+];
+const ORDEM: Record<string, number> = { draft: 0, published: 1, archived: 2 };
 
-type Unit = { id: string; name: string };
-type Survey = { id: string; name: string; status: string; units: Array<{ unitId: string; unit: Unit }> };
-type SurveyDetail = {
-  id: string;
-  name: string;
-  description: string | null;
-  status: string;
-  collectCustomer: boolean;
-  anonymousAllowed: boolean;
-  collectEmployee: boolean;
-  units: Array<{ unitId: string; unit: Unit }>;
-  draftVersion: {
-    questions: Array<{
-      id: string;
-      title: string;
-      type: string;
-      required: boolean;
-      config?: { when?: { npsMax?: number; npsMin?: number } } | null;
-      options?: Array<{ id?: string; label: string; value: string; negative?: boolean; order?: number }>;
-    }>;
-  } | null;
-};
-type Distribution = {
-  id: string;
-  surveyId: string;
-  unitId: string | null;
-  employeeId: string | null;
-  channel: string;
-  campaign: string | null;
-  publicToken: string;
-  active: boolean;
-  createdAt: string;
-  unit?: Unit | null;
-};
+const ultimoMomento = (s: SurveyListItem) =>
+  Math.max(
+    ...[s.updatedAt, s.publishedAt, s.archivedAt, s.createdAt]
+      .filter(Boolean)
+      .map((d) => new Date(d as string).getTime())
+      .filter((n) => Number.isFinite(n)),
+    0,
+  );
 
-type ChoiceOptionDraft = {
-  id: string;
-  label: string;
-  value: string;
-  negative: boolean;
-};
-
-type QuestionDraft = {
-  id: string;
-  title: string;
-  kind: ExtraQuestionKind;
-  storedType?: string;
-  required: boolean;
-  onlyLowScore: boolean;
-  options: ChoiceOptionDraft[];
-};
-
-function emptyChoiceOption(label = ''): ChoiceOptionDraft {
-  return { id: crypto.randomUUID(), label, value: crypto.randomUUID(), negative: false };
-}
-
-function defaultChoiceOptions(): ChoiceOptionDraft[] {
-  return [emptyChoiceOption(), emptyChoiceOption()];
-}
-
-function emptyExtraQuestion(title = 'Nova pergunta'): QuestionDraft {
-  return {
-    id: crypto.randomUUID(),
-    title,
-    kind: DEFAULT_EXTRA_QUESTION_KIND,
-    storedType: 'text_long',
-    required: false,
-    onlyLowScore: false,
-    options: [],
-  };
-}
-
-function identityStateFromSurvey(s: Pick<SurveyDetail, 'collectCustomer' | 'anonymousAllowed' | 'collectEmployee'>) {
-  return {
-    collectEmployee: s.collectEmployee,
-    collectCustomer: s.collectCustomer,
-    requireCustomerIdentity: Boolean(s.collectCustomer) && s.anonymousAllowed === false,
-  };
-}
-
-function identityPayload(state: {
-  collectCustomer: boolean;
-  requireCustomerIdentity: boolean;
-  collectEmployee: boolean;
-}) {
-  return {
-    collectCustomer: state.collectCustomer,
-    anonymousAllowed: state.collectCustomer ? !state.requireCustomerIdentity : true,
-    collectEmployee: state.collectEmployee,
-  };
-}
-
-function isIdentityDirty(
-  local: {
-    collectEmployee: boolean;
-    collectCustomer: boolean;
-    requireCustomerIdentity: boolean;
-  },
-  survey: Pick<SurveyDetail, 'collectCustomer' | 'anonymousAllowed' | 'collectEmployee'>,
-) {
-  const saved = identityStateFromSurvey(survey);
+function Quando({ rotulo, iso }: { rotulo: string; iso?: string | null }) {
+  if (!iso) return null;
   return (
-    local.collectEmployee !== saved.collectEmployee ||
-    local.collectCustomer !== saved.collectCustomer ||
-    local.requireCustomerIdentity !== saved.requireCustomerIdentity
+    <time dateTime={iso} title={quandoRelativo(iso) || undefined}>
+      {rotulo} em {dataHora(iso)}
+    </time>
   );
 }
 
-function SurveyIdentityCheckboxes(props: {
-  collectEmployee: boolean;
-  collectCustomer: boolean;
-  requireCustomerIdentity: boolean;
-  disabled?: boolean;
-  onCollectEmployee: (checked: boolean) => void;
-  onCollectCustomer: (checked: boolean) => void;
-  onRequireCustomerIdentity: (checked: boolean) => void;
-}) {
-  return (
-    <div className="md:col-span-2 grid gap-2">
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-slate-300"
-          checked={props.collectEmployee}
-          disabled={props.disabled}
-          onChange={(e) => props.onCollectEmployee(e.target.checked)}
-        />
-        Perguntar “Atendente” na pesquisa
-      </label>
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-slate-300"
-          checked={props.collectCustomer}
-          disabled={props.disabled}
-          onChange={(e) => props.onCollectCustomer(e.target.checked)}
-        />
-        Coletar identificação do cliente
-      </label>
-      <label
-        className={[
-          'flex items-center gap-2 text-sm text-slate-700',
-          props.collectCustomer ? '' : 'opacity-50',
-        ].join(' ')}
-      >
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-slate-300"
-          checked={props.requireCustomerIdentity}
-          disabled={props.disabled || !props.collectCustomer}
-          onChange={(e) => props.onRequireCustomerIdentity(e.target.checked)}
-        />
-        Obrigar o cliente a se identificar
-      </label>
-    </div>
-  );
-}
+type Acao = { tipo: 'arquivar' | 'apagar'; pesquisa: SurveyListItem };
 
 export function SurveysPage() {
   const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const editarId = params.get('editar');
+  const criando = params.get('nova') === '1';
+  const filtroUrl = params.get('status') as Filtro | null;
+  const filtro: Filtro = FILTROS.some((f) => f.valor === filtroUrl) ? (filtroUrl as Filtro) : 'todas';
+
+  const me = useAuthMe();
+  const pode = usePode();
+  const podeGerenciar = !me.data || pode('survey:manage');
+  const { avisar, elemento: toast } = useAviso();
+
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
-  const tenant = useQuery({ queryKey: ['tenantMe'], queryFn: () => apiFetch<{ settings?: { badScoreThreshold?: number } }>('/tenant/me') });
+  const tenant = useQuery({
+    queryKey: ['tenantMe'],
+    queryFn: () => apiFetch<{ tradeName?: string | null; settings?: { badScoreThreshold?: number } }>('/tenant/me'),
+  });
   const surveys = useQuery({
-    queryKey: ['surveys'],
-    queryFn: () => apiFetch<Survey[]>('/surveys'),
+    queryKey: ['surveys', { includeArchived: true }],
+    queryFn: () => apiFetch<SurveyListItem[]>('/surveys?includeArchived=true'),
   });
 
   const badScoreThreshold = useMemo(() => {
@@ -197,787 +76,431 @@ export function SurveysPage() {
     return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
   }, [tenant.data]);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [destaque, setDestaque] = useState<string | null>(null);
+  const [links, setLinks] = useState<{ id: string; unidade?: string | null } | null>(null);
+  const [acao, setAcao] = useState<Acao | null>(null);
+  const novaRef = useRef<HTMLButtonElement>(null);
 
-  const draftDetail = useQuery({
-    queryKey: ['surveyDetail', editingId],
-    queryFn: () => apiFetch<SurveyDetail>(`/surveys/${editingId}`),
-    enabled: Boolean(editingId),
-  });
+  const todas = useMemo(() => surveys.data ?? [], [surveys.data]);
+  const totais = useMemo(() => {
+    const t: Record<Filtro, number> = { todas: todas.length, publicada: 0, rascunho: 0, arquivada: 0 };
+    for (const f of FILTROS) if (f.status) t[f.valor] = todas.filter((s) => s.status === f.status).length;
+    return t;
+  }, [todas]);
+  const itens = useMemo(() => {
+    const status = FILTROS.find((f) => f.valor === filtro)?.status;
+    return todas
+      .filter((s) => !status || s.status === status)
+      .sort((a, b) => (ORDEM[a.status] ?? 9) - (ORDEM[b.status] ?? 9) || ultimoMomento(b) - ultimoMomento(a));
+  }, [todas, filtro]);
 
-  const [name, setName] = useState('Pesquisa de satisfação');
-  const [description, setDescription] = useState('Conte como foi sua experiência.');
-  const [collectEmployee, setCollectEmployee] = useState(true);
-  const [collectCustomer, setCollectCustomer] = useState(true);
-  const [requireCustomerIdentity, setRequireCustomerIdentity] = useState(false);
-  const [questions, setQuestions] = useState<QuestionDraft[]>(() => [
-    emptyExtraQuestion('O que poderíamos melhorar?'),
-  ]);
+  function irPara(next: Record<string, string | null>) {
+    const p = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(next)) {
+      if (v === null) p.delete(k);
+      else p.set(k, v);
+    }
+    setParams(p);
+  }
 
-  const defaultUnitId = useMemo(() => units.data?.[0]?.id ?? null, [units.data]);
-  const [unitId, setUnitId] = useState<string | null>(null);
-
-  const [activeSurveyId, setActiveSurveyId] = useState<string | null>(null);
-  const [distributionUnitId, setDistributionUnitId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
-
-  const distributions = useQuery({
-    queryKey: ['surveyDistributions', activeSurveyId],
-    queryFn: () => apiFetch<Distribution[]>(`/surveys/${activeSurveyId}/distributions`),
-    enabled: Boolean(activeSurveyId),
-  });
-
-  const activeSurveyDetail = useQuery({
-    queryKey: ['surveyDetail', activeSurveyId],
-    queryFn: () => apiFetch<SurveyDetail>(`/surveys/${activeSurveyId}`),
-    enabled: Boolean(activeSurveyId),
-  });
-
-  const [linksCollectEmployee, setLinksCollectEmployee] = useState(true);
-  const [linksCollectCustomer, setLinksCollectCustomer] = useState(true);
-  const [linksRequireCustomerIdentity, setLinksRequireCustomerIdentity] = useState(false);
-
-  useEffect(() => {
-    if (!editingId) return;
-    if (!draftDetail.isFetched || !draftDetail.data) return;
-    const s = draftDetail.data;
-    setName(s.name);
-    setDescription(s.description ?? '');
-    const identity = identityStateFromSurvey(s);
-    setCollectEmployee(identity.collectEmployee);
-    setCollectCustomer(identity.collectCustomer);
-    setRequireCustomerIdentity(identity.requireCustomerIdentity);
-    const firstUnit = s.units[0]?.unitId ?? null;
-    if (firstUnit) setUnitId(firstUnit);
-    const extras: QuestionDraft[] =
-      s.draftVersion?.questions
-        .filter((q) => q.type !== 'nps')
-        .map((q) => {
-          const kind = extraQuestionKindFromType(q.type);
-          const options =
-            q.options?.map((o) => ({
-              id: o.id ?? crypto.randomUUID(),
-              label: o.label,
-              value: o.value,
-              negative: Boolean(o.negative),
-            })) ?? [];
-          return {
-            id: q.id,
-            title: q.title,
-            kind,
-            storedType: q.type,
-            required: q.required,
-            onlyLowScore: Boolean(q.config?.when?.npsMax),
-            options: kind === 'single_choice' && options.length < 2 ? defaultChoiceOptions() : options,
-          };
-        }) ?? [];
-    setQuestions(extras);
-  }, [editingId, draftDetail.data, draftDetail.isFetched]);
-
-  useEffect(() => {
-    if (!activeSurveyId) return;
-    if (!activeSurveyDetail.isFetched || !activeSurveyDetail.data) return;
-    const identity = identityStateFromSurvey(activeSurveyDetail.data);
-    setLinksCollectEmployee(identity.collectEmployee);
-    setLinksCollectCustomer(identity.collectCustomer);
-    setLinksRequireCustomerIdentity(identity.requireCustomerIdentity);
-  }, [activeSurveyId, activeSurveyDetail.data, activeSurveyDetail.isFetched]);
-
-  const startEditing = (surveyId: string) => {
-    setEditingId(surveyId);
+  const invalidar = async () => {
+    await qc.invalidateQueries({ queryKey: ['surveys'] });
+    await qc.invalidateQueries({ queryKey: ['surveyDistributions'] });
   };
 
-  const cancelEditing = () => {
-    setEditingId(null);
-    setName('Pesquisa de satisfação');
-    setDescription('Conte como foi sua experiência.');
-    setCollectEmployee(true);
-    setCollectCustomer(true);
-    setRequireCustomerIdentity(false);
-    setQuestions([emptyExtraQuestion('O que poderíamos melhorar?')]);
-    setUnitId(null);
-    qc.invalidateQueries({ queryKey: ['surveyDetail'] });
-  };
-
-  const buildQuestionsPayload = () => [
-    { title: 'De 1 a 10, o quanto você nos recomendaria?', type: 'nps' as const, required: true },
-    ...questions.map((q) => ({
-      title: q.title,
-      type: persistedTypeFromExtraKind(q.kind, q.storedType),
-      required: q.required,
-      config: q.onlyLowScore ? { when: { npsMax: badScoreThreshold } } : undefined,
-      options:
-        q.kind === 'single_choice'
-          ? q.options
-              .filter((o) => o.label.trim())
-              .map((o) => ({
-                label: o.label.trim(),
-                value: o.value,
-                negative: o.negative,
-              }))
-          : undefined,
-    })),
-  ];
-
-  const create = useMutation({
-    mutationFn: async () => {
-      const u = unitId ?? defaultUnitId;
-      if (!u) throw new Error('no_unit');
-
-      const created = await apiFetch<{ id: string }>('/surveys', {
-        method: 'POST',
-        json: {
-          name,
-          description,
-          ...identityPayload({ collectCustomer, requireCustomerIdentity, collectEmployee }),
-          unitIds: [u],
-          questions: buildQuestionsPayload(),
-        },
-      });
-
-      const published = await apiFetch<{ publicToken: string }>(`/surveys/${created.id}/publish`, {
-        method: 'POST',
-      });
-
-      return { createdId: created.id, publicToken: published.publicToken };
-    },
-    onSuccess: async () => {
-      await Promise.all([qc.invalidateQueries({ queryKey: ['surveys'] }), qc.invalidateQueries({ queryKey: ['units'] })]);
+  const arquivar = useMutation({
+    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    onSuccess: async (_, id) => {
+      setAcao(null);
+      setLinks((l) => (l?.id === id ? null : l));
+      avisar('Pesquisa arquivada');
+      await invalidar();
+      novaRef.current?.focus();
     },
   });
-
-  const updateDraft = useMutation({
-    mutationFn: async () => {
-      if (!editingId) throw new Error('no_editing');
-      const u = unitId ?? defaultUnitId;
-      if (!u) throw new Error('no_unit');
-      return apiFetch<{ ok: boolean; id: string }>(`/surveys/${encodeURIComponent(editingId)}`, {
-        method: 'PATCH',
-        json: {
-          name,
-          description,
-          ...identityPayload({ collectCustomer, requireCustomerIdentity, collectEmployee }),
-          unitIds: [u],
-          questions: buildQuestionsPayload(),
-        },
-      });
-    },
-    onSuccess: async (data) => {
-      await qc.invalidateQueries({ queryKey: ['surveys'] });
-      await qc.invalidateQueries({ queryKey: ['surveyDetail', data?.id] });
+  const apagar = useMutation({
+    mutationFn: (id: string) => apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(id)}/delete`, { method: 'POST' }),
+    onSuccess: async (_, id) => {
+      const era = acao?.pesquisa.status;
+      setAcao(null);
+      setLinks((l) => (l?.id === id ? null : l));
+      avisar(era === 'draft' ? 'Rascunho apagado' : 'Pesquisa apagada');
+      await invalidar();
+      novaRef.current?.focus();
     },
   });
-
-  const saveAndPublish = useMutation({
-    mutationFn: async () => {
-      if (!editingId) throw new Error('no_editing');
-      const u = unitId ?? defaultUnitId;
-      if (!u) throw new Error('no_unit');
-      await apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(editingId)}`, {
-        method: 'PATCH',
-        json: {
-          name,
-          description,
-          ...identityPayload({ collectCustomer, requireCustomerIdentity, collectEmployee }),
-          unitIds: [u],
-          questions: buildQuestionsPayload(),
-        },
-      });
-      return apiFetch<{ publicToken: string }>(`/surveys/${encodeURIComponent(editingId)}/publish`, {
-        method: 'POST',
-      });
+  const desarquivar = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<UnarchiveSurveyResponse>(`/surveys/${encodeURIComponent(id)}/unarchive`, { method: 'POST' }),
+    onSuccess: async (r) => {
+      avisar(r?.status === 'draft' ? 'Pesquisa desarquivada: voltou para os rascunhos' : 'Pesquisa desarquivada: o link volta a funcionar');
+      await invalidar();
+      novaRef.current?.focus();
     },
-    onSuccess: async (_, _vars, _ctx) => {
-      const id = editingId;
-      cancelEditing();
-      await Promise.all([qc.invalidateQueries({ queryKey: ['surveys'] }), qc.invalidateQueries({ queryKey: ['surveyDistributions', id] })]);
-    },
+    onError: (err) => avisar(mensagemErro(err, 'Não deu para desarquivar. Tente de novo.')),
   });
 
-  const createDistribution = useMutation({
-    mutationFn: async () => {
-      if (!activeSurveyId) throw new Error('no_survey');
-      const u = distributionUnitId ?? defaultUnitId;
-      if (!u) throw new Error('no_unit');
+  function concluirEditor(r: ResultadoEditor) {
+    const mensagens = {
+      publicada: 'Pesquisa publicada. Copie o link para começar a receber respostas.',
+      rascunho: 'Rascunho salvo',
+      apagada: 'Rascunho apagado',
+    } as const;
+    avisar(mensagens[r.msg]);
+    setDestaque(r.id ?? null);
+    if (r.msg === 'publicada' && r.id) setLinks({ id: r.id });
+    irPara({ editar: null, nova: null });
+    void invalidar();
+  }
 
-      return apiFetch<Distribution>('/surveys/distributions', {
-        method: 'POST',
-        json: { surveyId: activeSurveyId, unitId: u, channel: 'qrcode' },
-      });
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['surveyDistributions', activeSurveyId] });
-    },
-  });
+  // Ao trocar de tela (lista ↔ editor), volta ao topo
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [editarId, criando]);
 
-  const updateIdentitySettings = useMutation({
-    mutationFn: async () => {
-      if (!activeSurveyId) throw new Error('no_survey');
-      return apiFetch<{ ok: boolean; id: string }>(`/surveys/${encodeURIComponent(activeSurveyId)}`, {
-        method: 'PATCH',
-        json: identityPayload({
-          collectCustomer: linksCollectCustomer,
-          requireCustomerIdentity: linksRequireCustomerIdentity,
-          collectEmployee: linksCollectEmployee,
-        }),
-      });
-    },
-    onSuccess: async (data) => {
-      await qc.invalidateQueries({ queryKey: ['surveyDetail', data?.id] });
-      await qc.invalidateQueries({ queryKey: ['surveys'] });
-    },
-  });
+  useEffect(() => {
+    if (!destaque) return;
+    const t = window.setTimeout(() => setDestaque(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [destaque]);
 
-  const archiveSurvey = useMutation({
-    mutationFn: (surveyId: string) =>
-      apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(surveyId)}`, {
-        method: 'DELETE',
-      }),
-    onSuccess: async (_, surveyId) => {
-      setActiveSurveyId((cur) => (cur === surveyId ? null : cur));
-      if (editingId === surveyId) cancelEditing();
-      await qc.invalidateQueries({ queryKey: ['surveys'] });
-      await qc.invalidateQueries({ queryKey: ['surveyDistributions'] });
-    },
-  });
+  const empresa = tenant.data?.tradeName?.trim() || '';
 
-  const deleteSurvey = useMutation({
-    mutationFn: (surveyId: string) =>
-      apiFetch<{ ok: boolean }>(`/surveys/${encodeURIComponent(surveyId)}/delete`, {
-        method: 'POST',
-      }),
-    onSuccess: async (_, surveyId) => {
-      setPendingDelete(null);
-      setActiveSurveyId((cur) => (cur === surveyId ? null : cur));
-      if (editingId === surveyId) cancelEditing();
-      await qc.invalidateQueries({ queryKey: ['surveys'] });
-      await qc.invalidateQueries({ queryKey: ['surveyDistributions'] });
-    },
-  });
+  if (editarId || criando) {
+    return (
+      <>
+        <EditorPesquisa
+          key={editarId ?? 'nova'}
+          editId={editarId}
+          unidades={units.data ?? []}
+          unidadesCarregando={units.isLoading}
+          badScoreThreshold={badScoreThreshold}
+          empresa={empresa}
+          avisar={avisar}
+          onConcluir={concluirEditor}
+          onSair={() => irPara({ editar: null, nova: null })}
+        />
+        {toast}
+      </>
+    );
+  }
 
-  const listedSurveys = useMemo(
-    () => (surveys.data ?? []).filter(isActiveSurvey),
-    [surveys.data],
-  );
+  const pesquisaLinks = links ? todas.find((s) => s.id === links.id) ?? null : null;
+  const totalUnidades = units.data?.length ?? 0;
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const publishedToken = create.data?.publicToken ?? saveAndPublish.data?.publicToken ?? null;
+  function confirmarOpcoes(a: Acao): ConfirmarOpcoes {
+    const p = a.pesquisa;
+    const nomes = p.units.map((u) => u.unit.name).join(', ');
+    const respostas = p.responsesCount ?? 0;
+    if (a.tipo === 'arquivar') {
+      return {
+        titulo: 'Arquivar esta pesquisa?',
+        texto: (
+          <p>
+            <strong>{p.name}</strong>
+            {nomes ? ` (${nomes})` : ''} para de receber respostas e os links deixam de funcionar.
+            {respostas ? ` As ${respostas.toLocaleString('pt-BR')} respostas continuam guardadas.` : ''} Dá para desarquivar
+            depois.
+          </p>
+        ),
+        botao: 'Arquivar',
+        icone: 'arquivar',
+      };
+    }
+    return {
+      titulo: p.status === 'draft' ? 'Apagar este rascunho?' : 'Apagar esta pesquisa?',
+      texto: (
+        <p>
+          <strong>{p.name}</strong>
+          {nomes ? ` (${nomes})` : ''} some da listagem
+          {p.status === 'published' ? ' e os links param de funcionar na hora' : ''}. Não dá para desfazer por aqui.
+          {p.status === 'published' ? ' Para só tirar do ar, use “Arquivar”.' : ''}
+        </p>
+      ),
+      botao: 'Apagar',
+      perigo: true,
+      icone: 'lixeira',
+    };
+  }
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <div className="text-xl font-semibold">Pesquisas</div>
-        <div className="text-sm text-slate-600">Versões imutáveis (publicadas) e rascunhos</div>
+    <>
+      <div className="cabeca">
+        <div>
+          <h1 className="cabeca__titulo">Pesquisas</h1>
+          <p className="cabeca__desc">Crie a pesquisa, publique e compartilhe o link com os clientes.</p>
+        </div>
+        {podeGerenciar && (
+          <button ref={novaRef} className="btn btn--primario" type="button" onClick={() => irPara({ nova: '1' })}>
+            <Icone nome="mais" />
+            Nova pesquisa
+          </button>
+        )}
       </div>
 
-      <Card title={editingId ? 'Editar pesquisa (rascunho)' : 'Criar e publicar pesquisa (MVP)'}>
-        {editingId && (
-          <div className="mb-3 flex items-center justify-end">
-            <Button variant="ghost" onClick={cancelEditing} disabled={updateDraft.isPending || saveAndPublish.isPending}>
-              Cancelar edição
-            </Button>
-          </div>
-        )}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Descrição</div>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-          <SurveyIdentityCheckboxes
-            collectEmployee={collectEmployee}
-            collectCustomer={collectCustomer}
-            requireCustomerIdentity={requireCustomerIdentity}
-            onCollectEmployee={setCollectEmployee}
-            onCollectCustomer={(checked) => {
-              setCollectCustomer(checked);
-              if (!checked) setRequireCustomerIdentity(false);
-            }}
-            onRequireCustomerIdentity={setRequireCustomerIdentity}
-          />
-          <div className="md:col-span-2">
-            <div className="mb-2 text-sm font-medium text-slate-700">Perguntas</div>
-            <div className="grid gap-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="text-sm font-medium text-slate-900">Pergunta base (fixa)</div>
-                <div className="text-sm text-slate-700">De 1 a 10, o quanto você nos recomendaria?</div>
-              </div>
+      <div className="alternar" role="group" aria-label="Mostrar pesquisas">
+        {FILTROS.map((f) => (
+          <button
+            key={f.valor}
+            type="button"
+            aria-pressed={filtro === f.valor}
+            onClick={() => irPara({ status: f.valor === 'todas' ? null : f.valor })}
+          >
+            {f.nome} <span className="alternar__total">{surveys.data ? totais[f.valor] : '…'}</span>
+          </button>
+        ))}
+      </div>
 
-              {questions.map((q) => (
-                <div key={q.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="md:col-span-2">
-                      <div className="mb-1 text-sm font-medium text-slate-700">Título</div>
-                      <Input
-                        value={q.title}
-                        onChange={(e) =>
-                          setQuestions((prev) => prev.map((x) => (x.id === q.id ? { ...x, title: e.target.value } : x)))
-                        }
-                      />
+      {surveys.isLoading && <p className="vazio">Carregando pesquisas…</p>}
+      {surveys.isError && (
+        <div className="cartao vazio">
+          <strong>Falha ao carregar pesquisas</strong>
+          <button className="btn btn--secundario" type="button" onClick={() => surveys.refetch()}>
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
+      {surveys.data && itens.length > 0 && (
+        <ul className="pq-lista">
+          {itens.map((s) => {
+            const st = NOMES_STATUS[s.status] ?? { rotulo: s.status, classe: '' };
+            const unidades = s.units;
+            const varias = unidades.length > 1;
+            const nomesUnidades =
+              varias && totalUnidades > 1 && unidades.length === totalUnidades
+                ? 'Todas as unidades'
+                : unidades.map((u) => u.unit.name).join(', ');
+            const respostas = s.responsesCount ?? 0;
+            const ocupado = arquivar.isPending || apagar.isPending || desarquivar.isPending;
+            return (
+              <li key={s.id}>
+                <article
+                  className="cartao pq-cartao"
+                  data-novo={destaque === s.id ? '' : undefined}
+                  aria-labelledby={`pq-${s.id}`}
+                >
+                  <div className="pq-cartao__topo">
+                    <span className={`status ${st.classe}`}>{st.rotulo}</span>
+                    <span className="pq-cartao__id" title={s.id}>
+                      #{s.id.slice(0, 8)}
+                    </span>
+                  </div>
+                  <div>
+                    <h2 className="pq-cartao__nome" id={`pq-${s.id}`}>
+                      {s.name}
+                    </h2>
+                    <p className="pq-cartao__meta">
+                      <span>
+                        <Icone nome="loja" />
+                        {nomesUnidades || 'Sem unidade'}
+                      </span>
+                      {s.status === 'draft' ? (
+                        <span>
+                          <Icone nome="relogio" />
+                          <Quando rotulo="Salvo" iso={s.updatedAt ?? s.createdAt} />
+                        </span>
+                      ) : (
+                        s.publishedAt && (
+                          <span>
+                            <Icone nome="relogio" />
+                            <Quando rotulo="Publicada" iso={s.publishedAt} />
+                          </span>
+                        )
+                      )}
+                      {s.status === 'archived' && s.archivedAt && (
+                        <span>
+                          <Icone nome="arquivar" />
+                          <Quando rotulo="Arquivada" iso={s.archivedAt} />
+                        </span>
+                      )}
+                      {s.status !== 'draft' && (
+                        <span>
+                          <Icone nome="cadeado" />
+                          Perguntas não podem ser editadas
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  {s.status === 'draft' && !respostas ? (
+                    <div className="pq-cartao__numero">
+                      <span>
+                        Ainda não publicada: sem link para os clientes.
+                        {varias ? ` Ao publicar, cada unidade ganha o próprio link (${unidades.length} links).` : ''}
+                      </span>
                     </div>
-                    <div>
-                      <div className="mb-1 text-sm font-medium text-slate-700">Tipo</div>
-                      <select
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                        value={q.kind}
-                        onChange={(e) =>
-                          setQuestions((prev) =>
-                            prev.map((x) => {
-                              if (x.id !== q.id) return x;
-                              const kind = e.target.value as ExtraQuestionKind;
-                              return {
-                                ...x,
-                                kind,
-                                options:
-                                  kind === 'single_choice' && x.options.length < 2
-                                    ? defaultChoiceOptions()
-                                    : x.options,
-                              };
-                            }),
-                          )
-                        }
-                      >
-                        {EXTRA_QUESTION_KINDS.map((kind) => (
-                          <option key={kind} value={kind}>
-                            {EXTRA_QUESTION_KIND_LABELS[kind]}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="mt-1 text-xs text-slate-500">{EXTRA_QUESTION_TYPE_MICROCOPY}</div>
+                  ) : (
+                    <div className="pq-cartao__numero">
+                      <strong>{respostas.toLocaleString('pt-BR')}</strong>
+                      <span>
+                        {respostas === 1 ? 'resposta' : 'respostas'}
+                        {varias ? ` nas ${unidades.length} unidades` : ''}
+                      </span>
                     </div>
-                    <div className="md:col-span-3 flex flex-wrap items-center gap-4">
-                      <label className="flex items-center gap-2 text-sm text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={q.required}
-                          onChange={(e) =>
-                            setQuestions((prev) =>
-                              prev.map((x) => (x.id === q.id ? { ...x, required: e.target.checked } : x)),
-                            )
-                          }
-                        />
-                        Obrigatória
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={q.onlyLowScore}
-                          onChange={(e) =>
-                            setQuestions((prev) =>
-                              prev.map((x) => (x.id === q.id ? { ...x, onlyLowScore: e.target.checked } : x)),
-                            )
-                          }
-                        />
-                        Só se nota ≤ {badScoreThreshold}
-                      </label>
-                      <button
-                        type="button"
-                        className="text-sm font-medium text-rose-700 hover:text-rose-800"
-                        onClick={() => setQuestions((prev) => prev.filter((x) => x.id !== q.id))}
-                      >
-                        Remover
-                      </button>
+                  )}
+
+                  {s.status === 'published' && unidades.length > 0 && (
+                    <div className="pq-unidades" aria-label="Link e QR Code por unidade">
+                      {unidades.map((u) => (
+                        <button
+                          key={u.unitId}
+                          className="pq-unidade"
+                          type="button"
+                          aria-haspopup="dialog"
+                          onClick={() => setLinks({ id: s.id, unidade: u.unitId })}
+                        >
+                          <Icone nome="qr" />
+                          {u.unit.name}
+                          <span className="visualmente-oculto">: link e QR Code</span>
+                        </button>
+                      ))}
                     </div>
-                    {q.kind === 'single_choice' && (
-                      <div className="md:col-span-3 grid gap-2">
-                        <div className="text-sm font-medium text-slate-700">Opções</div>
-                        {q.options.map((opt) => (
-                          <div key={opt.id} className="flex flex-wrap items-center gap-2">
-                            <div className="min-w-[12rem] flex-1">
-                              <Input
-                                value={opt.label}
-                                placeholder="Texto da opção"
-                                onChange={(e) =>
-                                  setQuestions((prev) =>
-                                    prev.map((x) =>
-                                      x.id === q.id
-                                        ? {
-                                            ...x,
-                                            options: x.options.map((o) =>
-                                              o.id === opt.id ? { ...o, label: e.target.value } : o,
-                                            ),
-                                          }
-                                        : x,
-                                    ),
-                                  )
-                                }
-                              />
-                            </div>
-                            <label className="flex items-center gap-2 text-sm text-slate-700">
-                              <input
-                                type="checkbox"
-                                checked={opt.negative}
-                                onChange={(e) =>
-                                  setQuestions((prev) =>
-                                    prev.map((x) =>
-                                      x.id === q.id
-                                        ? {
-                                            ...x,
-                                            options: x.options.map((o) =>
-                                              o.id === opt.id ? { ...o, negative: e.target.checked } : o,
-                                            ),
-                                          }
-                                        : x,
-                                    ),
-                                  )
-                                }
-                              />
-                              Negativa
-                            </label>
-                            <button
-                              type="button"
-                              className="text-sm font-medium text-rose-700 hover:text-rose-800"
-                              onClick={() =>
-                                setQuestions((prev) =>
-                                  prev.map((x) =>
-                                    x.id === q.id
-                                      ? { ...x, options: x.options.filter((o) => o.id !== opt.id) }
-                                      : x,
-                                  ),
-                                )
-                              }
-                            >
-                              Remover
-                            </button>
-                          </div>
-                        ))}
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Button
-                            variant="secondary"
-                            onClick={() =>
-                              setQuestions((prev) =>
-                                prev.map((x) =>
-                                  x.id === q.id ? { ...x, options: [...x.options, emptyChoiceOption()] } : x,
-                                ),
-                              )
-                            }
+                  )}
+
+                  <div className="pq-cartao__acoes">
+                    {s.status === 'published' && (
+                      <>
+                        <button
+                          className="btn btn--primario"
+                          type="button"
+                          aria-haspopup="dialog"
+                          onClick={() => setLinks({ id: s.id })}
+                        >
+                          <Icone nome="link" />
+                          Links{varias ? ` (${unidades.length})` : ''}
+                        </button>
+                        {podeGerenciar && (
+                          <button
+                            className="btn btn--secundario"
+                            type="button"
+                            disabled={ocupado}
+                            onClick={() => setAcao({ tipo: 'arquivar', pesquisa: s })}
                           >
-                            Adicionar opção
-                          </Button>
-                          {q.options.filter((o) => o.label.trim()).length < 2 && (
-                            <div className="text-xs text-slate-500">Defina pelo menos 2 opções.</div>
-                          )}
-                        </div>
-                      </div>
+                            <Icone nome="arquivar" />
+                            Arquivar
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {s.status === 'draft' && (
+                      <>
+                        {podeGerenciar && (
+                          <button
+                            className="btn btn--primario"
+                            type="button"
+                            onClick={() => irPara({ editar: s.id })}
+                          >
+                            <Icone nome="editar" />
+                            Continuar editando
+                          </button>
+                        )}
+                        <button
+                          className="btn btn--secundario"
+                          type="button"
+                          aria-haspopup="dialog"
+                          onClick={() => setLinks({ id: s.id })}
+                        >
+                          <Icone nome="link" />
+                          Links
+                        </button>
+                        {podeGerenciar && (
+                          <button
+                            className="btn btn--secundario"
+                            type="button"
+                            disabled={ocupado}
+                            onClick={() => setAcao({ tipo: 'arquivar', pesquisa: s })}
+                          >
+                            <Icone nome="arquivar" />
+                            Arquivar
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {s.status === 'archived' && (
+                      <>
+                        {podeGerenciar && (
+                          <button
+                            className="btn btn--secundario"
+                            type="button"
+                            disabled={ocupado}
+                            onClick={() => desarquivar.mutate(s.id)}
+                          >
+                            {desarquivar.isPending && desarquivar.variables === s.id ? 'Desarquivando…' : 'Desarquivar'}
+                          </button>
+                        )}
+                        <button
+                          className="btn btn--secundario"
+                          type="button"
+                          aria-haspopup="dialog"
+                          onClick={() => setLinks({ id: s.id })}
+                        >
+                          <Icone nome="link" />
+                          Links
+                        </button>
+                      </>
+                    )}
+                    {podeGerenciar && (
+                      <button
+                        className="btn btn--perigo btn--icone"
+                        type="button"
+                        disabled={ocupado}
+                        aria-label={`Apagar ${s.name}${nomesUnidades ? ` (${nomesUnidades})` : ''}`}
+                        title="Apagar"
+                        onClick={() => setAcao({ tipo: 'apagar', pesquisa: s })}
+                      >
+                        <Icone nome="lixeira" />
+                      </button>
                     )}
                   </div>
-                </div>
-              ))}
-
-              <Button
-                variant="secondary"
-                onClick={() => setQuestions((prev) => [...prev, emptyExtraQuestion()])}
-              >
-                Adicionar pergunta
-              </Button>
-            </div>
-          </div>
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={unitId ?? defaultUnitId ?? ''}
-              onChange={(e) => setUnitId(e.target.value)}
-              disabled={units.isLoading || !units.data?.length}
-            >
-              {units.data?.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {publishedToken && (
-            <div className="md:col-span-2 rounded-md bg-slate-50 p-3 text-sm">
-              <div className="text-slate-500">Link público</div>
-              <a
-                className="font-mono text-sky-700 hover:underline"
-                href={`/public/${publishedToken}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                /public/{publishedToken}
-              </a>
-            </div>
-          )}
-
-          <div className="md:col-span-2 flex flex-wrap gap-2">
-            {!editingId && (
-              <Button disabled={create.isPending} onClick={() => create.mutate()}>
-                {create.isPending ? 'Publicando...' : 'Criar e publicar'}
-              </Button>
-            )}
-            {editingId && (
-              <>
-                <Button
-                  variant="secondary"
-                  disabled={updateDraft.isPending || saveAndPublish.isPending || draftDetail.isFetching}
-                  onClick={() => updateDraft.mutate()}
-                >
-                  {updateDraft.isPending ? 'Salvando...' : 'Salvar rascunho'}
-                </Button>
-                <Button disabled={saveAndPublish.isPending || updateDraft.isPending || draftDetail.isFetching} onClick={() => saveAndPublish.mutate()}>
-                  {saveAndPublish.isPending ? 'Publicando...' : 'Salvar e publicar'}
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      <Card title="Lista">
-        {surveys.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {surveys.isError && <div className="text-sm text-rose-700">Falha ao carregar pesquisas</div>}
-        {surveys.data && listedSurveys.length === 0 && <div className="text-sm text-slate-600">Nenhuma pesquisa</div>}
-        {listedSurveys.length > 0 && (
-          <div className="divide-y divide-slate-200">
-            {listedSurveys.map((s) => (
-              <div key={s.id} className="flex items-center justify-between py-3">
-                <div>
-                  <div className="text-sm font-medium">{s.name}</div>
-                  <div className="text-xs text-slate-500">{s.status}</div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {s.status === 'draft' && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setActiveSurveyId(null);
-                        startEditing(s.id);
-                      }}
-                    >
-                      Editar
-                    </Button>
-                  )}
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setActiveSurveyId((cur) => (cur === s.id ? null : s.id));
-                      setDistributionUnitId(defaultUnitId);
-                      updateIdentitySettings.reset();
-                    }}
-                  >
-                    Links
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={archiveSurvey.isPending || deleteSurvey.isPending}
-                    onClick={() => {
-                      const ok = window.confirm(`Arquivar a pesquisa "${s.name}"? Os links públicos serão desativados.`);
-                      if (!ok) return;
-                      archiveSurvey.mutate(s.id);
-                    }}
-                  >
-                    Arquivar
-                  </Button>
-                  <Button
-                    variant="danger"
-                    disabled={archiveSurvey.isPending || deleteSurvey.isPending}
-                    onClick={() => setPendingDelete({ id: s.id, name: s.name })}
-                  >
-                    {DELETE_COPY.action}
-                  </Button>
-                  <div className="text-xs font-mono text-slate-500">{s.id}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Dialog.Root
-        open={Boolean(pendingDelete)}
-        onOpenChange={(open) => {
-          if (!open && !deleteSurvey.isPending) setPendingDelete(null);
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-900/40" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-5 shadow-xl focus:outline-none">
-            <Dialog.Title className="text-lg font-semibold text-slate-900">{DELETE_COPY.title}</Dialog.Title>
-            <Dialog.Description className="mt-2 text-sm text-slate-600">
-              {pendingDelete ? DELETE_COPY.body(pendingDelete.name) : null}
-            </Dialog.Description>
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <Button
-                variant="secondary"
-                disabled={deleteSurvey.isPending}
-                onClick={() => setPendingDelete(null)}
-              >
-                {DELETE_COPY.cancel}
-              </Button>
-              <Button
-                variant="danger"
-                disabled={!pendingDelete || deleteSurvey.isPending}
-                onClick={() => {
-                  if (!pendingDelete) return;
-                  deleteSurvey.mutate(pendingDelete.id);
-                }}
-              >
-                {DELETE_COPY.confirm}
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {activeSurveyId && (
-        <Card title="Links e QR Codes" description="Distribuições públicas da pesquisa selecionada">
-          <div className="grid gap-4">
-            <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div>
-                <div className="text-sm font-medium text-slate-900">Identificação</div>
-                <div className="text-xs text-slate-600">
-                  Mesmas opções da criação. Alterações valem para as próximas respostas nos links abaixo.
-                </div>
-              </div>
-              {activeSurveyDetail.isLoading && <div className="text-sm text-slate-600">Carregando configurações...</div>}
-              {activeSurveyDetail.isError && (
-                <div className="text-sm text-rose-700">Falha ao carregar configurações da pesquisa</div>
-              )}
-              {activeSurveyDetail.data && (
-                <>
-                  <SurveyIdentityCheckboxes
-                    collectEmployee={linksCollectEmployee}
-                    collectCustomer={linksCollectCustomer}
-                    requireCustomerIdentity={linksRequireCustomerIdentity}
-                    disabled={activeSurveyDetail.data.status === 'archived'}
-                    onCollectEmployee={setLinksCollectEmployee}
-                    onCollectCustomer={(checked) => {
-                      setLinksCollectCustomer(checked);
-                      if (!checked) setLinksRequireCustomerIdentity(false);
-                    }}
-                    onRequireCustomerIdentity={setLinksRequireCustomerIdentity}
-                  />
-                  {activeSurveyDetail.data.status === 'archived' ? (
-                    <div className="text-sm text-slate-600">Pesquisa arquivada. Identificação não pode ser alterada.</div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        disabled={
-                          updateIdentitySettings.isPending ||
-                          activeSurveyDetail.isFetching ||
-                          !isIdentityDirty(
-                            {
-                              collectEmployee: linksCollectEmployee,
-                              collectCustomer: linksCollectCustomer,
-                              requireCustomerIdentity: linksRequireCustomerIdentity,
-                            },
-                            activeSurveyDetail.data,
-                          )
-                        }
-                        onClick={() => updateIdentitySettings.mutate()}
-                      >
-                        {updateIdentitySettings.isPending ? 'Salvando...' : 'Salvar identificação'}
-                      </Button>
-                      {updateIdentitySettings.isError && (
-                        <div className="text-sm text-rose-700">Falha ao salvar identificação</div>
-                      )}
-                      {updateIdentitySettings.isSuccess &&
-                        !isIdentityDirty(
-                          {
-                            collectEmployee: linksCollectEmployee,
-                            collectCustomer: linksCollectCustomer,
-                            requireCustomerIdentity: linksRequireCustomerIdentity,
-                          },
-                          activeSurveyDetail.data,
-                        ) && <div className="text-sm text-emerald-700">Configurações salvas.</div>}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="md:col-span-2">
-                <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                  value={distributionUnitId ?? defaultUnitId ?? ''}
-                  onChange={(e) => setDistributionUnitId(e.target.value)}
-                  disabled={units.isLoading || !units.data?.length}
-                >
-                  {units.data?.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-end">
-                <Button disabled={createDistribution.isPending} onClick={() => createDistribution.mutate()}>
-                  {createDistribution.isPending ? 'Gerando...' : 'Gerar novo QR'}
-                </Button>
-              </div>
-            </div>
-
-            {distributions.isLoading && <div className="text-sm text-slate-600">Carregando links...</div>}
-            {distributions.isError && <div className="text-sm text-rose-700">Falha ao carregar links</div>}
-            {distributions.data && distributions.data.length === 0 && (
-              <div className="text-sm text-slate-600">Nenhuma distribuição</div>
-            )}
-            {distributions.data && distributions.data.length > 0 && (
-              <div className="grid gap-4">
-                {distributions.data.map((d) => {
-                  const path = `/public/${d.publicToken}`;
-                  const url = `${origin}${path}`;
-                  return (
-                    <div key={d.id} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[240px_1fr]">
-                      <div className="flex items-start justify-center md:justify-start">
-                        <QrCode value={url} />
-                      </div>
-                      <div className="grid gap-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium text-slate-900">Canal</div>
-                            <div className="text-sm text-slate-700">{d.channel}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-medium text-slate-900">Unidade</div>
-                            <div className="text-sm text-slate-700">{d.unit?.name ?? '—'}</div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-md bg-slate-50 p-3 text-sm">
-                          <div className="text-slate-500">Link público</div>
-                          <a className="font-mono text-sky-700 hover:underline" href={path} target="_blank" rel="noreferrer">
-                            {path}
-                          </a>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            variant="secondary"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(url);
-                              } catch {}
-                            }}
-                          >
-                            Copiar link
-                          </Button>
-                          <a
-                            className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Abrir
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Card>
+                </article>
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </div>
+
+      {surveys.data && itens.length === 0 && (
+        <div className="cartao vazio">
+          <strong>Nenhuma pesquisa aqui</strong>
+          {podeGerenciar ? 'Crie uma em “Nova pesquisa” ou escolha outro filtro.' : 'Escolha outro filtro.'}
+        </div>
+      )}
+
+      {pesquisaLinks && (
+        <LinksPesquisa
+          key={`${pesquisaLinks.id}-${links?.unidade ?? ''}`}
+          pesquisa={pesquisaLinks}
+          unidadeInicial={links?.unidade ?? null}
+          unidades={units.data ?? []}
+          podeGerenciar={podeGerenciar}
+          avisar={avisar}
+          onFechar={() => setLinks(null)}
+        />
+      )}
+
+      <Confirmar
+        opcoes={acao ? confirmarOpcoes(acao) : null}
+        ocupado={arquivar.isPending || apagar.isPending}
+        erro={
+          arquivar.isError
+            ? mensagemErro(arquivar.error, 'Não deu para arquivar. Tente de novo.')
+            : apagar.isError
+              ? mensagemErro(apagar.error, 'Não deu para apagar. Tente de novo.')
+              : null
+        }
+        onConfirmar={() => {
+          if (!acao) return;
+          if (acao.tipo === 'arquivar') arquivar.mutate(acao.pesquisa.id);
+          else apagar.mutate(acao.pesquisa.id);
+        }}
+        onCancelar={() => {
+          setAcao(null);
+          arquivar.reset();
+          apagar.reset();
+        }}
+      />
+      {toast}
+    </>
   );
 }

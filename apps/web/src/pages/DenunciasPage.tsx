@@ -1,271 +1,220 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import type { WhistleblowerSummary } from '../lib/api-novos';
+import { whistleblowerCategoryLabel, whistleblowerPriorityLabel, whistleblowerStatusLabel } from '../lib/labels';
+import { Icone } from '../components/painel/Icone';
 import {
-  whistleblowerCategoryLabel,
-  whistleblowerPriorityClass,
-  whistleblowerPriorityLabel,
-  whistleblowerStatusClass,
-  whistleblowerStatusLabel,
-} from '../lib/labels';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
-import { QrCode } from '../components/QrCode';
-
-type WhistleblowerRow = {
-  id: string;
-  protocol: string;
-  category: string;
-  customCategory: string | null;
-  title: string;
-  status: string;
-  priority: string;
-  reporterAnonymous: boolean;
-  reporterName: string | null;
-  reporterEmail: string | null;
-  reporterPhone: string | null;
-  createdAt: string;
-  unit: { id: string; name: string } | null;
-};
+  CATEGORIAS,
+  PRIORIDADES,
+  SITUACOES,
+  categoriaTexto,
+  ordenarDenuncias,
+  quando,
+  dataHora,
+  type DenunciaLinha,
+} from '../components/painel/denuncias/comum';
+import { SeloIdent, SeloPrioridade, SeloSituacao } from '../components/painel/denuncias/Selos';
+import { useAviso } from '../components/painel/denuncias/useAviso';
+import { DenunciaGaveta } from '../components/painel/denuncias/DenunciaGaveta';
+import { DivulgarGaveta } from '../components/painel/denuncias/DivulgarGaveta';
+import '../styles/painel-denuncias.css';
 
 type Unit = { id: string; name: string };
+type TenantMe = { id: string; slug: string; tradeName: string; legalName: string };
 
-type TenantMe = {
-  id: string;
-  slug: string;
-  tradeName: string;
-  legalName: string;
-  settings?: { badScoreThreshold?: number };
+const LIMITE = 200;
+
+/** Filtros e valores padrão (só o que difere do padrão vai para o endereço). */
+const PADRAO = {
+  q: '',
+  status: 'open',
+  priority: 'any',
+  category: 'any',
+  unitId: '',
+  identified: 'any',
+  from: '',
+  to: '',
 };
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'any', label: 'Todas' },
-  { value: 'moral_harassment', label: 'Assédio moral' },
-  { value: 'sexual_harassment', label: 'Assédio sexual' },
-  { value: 'discrimination', label: 'Discriminação' },
-  { value: 'racism', label: 'Racismo' },
-  { value: 'racial_injury', label: 'Injúria racial' },
-  { value: 'homophobia', label: 'Homofobia' },
-  { value: 'transphobia', label: 'Transfobia' },
-  { value: 'religious_intolerance', label: 'Intolerância religiosa' },
-  { value: 'fraud', label: 'Fraude' },
-  { value: 'corruption', label: 'Corrupção' },
-  { value: 'conflict_of_interest', label: 'Conflito de interesses' },
-  { value: 'policy_violation', label: 'Violação de políticas internas' },
-  { value: 'work_safety', label: 'Segurança do trabalho' },
-  { value: 'lgpd_privacy', label: 'LGPD / privacidade' },
-  { value: 'misconduct', label: 'Conduta inadequada' },
-  { value: 'other', label: 'Outro' },
-];
+type Filtros = typeof PADRAO;
 
 export function DenunciasPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const [f, setF] = useState<Filtros>(() => {
+    const inicial = { ...PADRAO };
+    (Object.keys(PADRAO) as Array<keyof Filtros>).forEach((k) => {
+      const v = searchParams.get(k);
+      if (v !== null) inicial[k] = v;
+    });
+    return inicial;
+  });
+  const [abertaId, setAbertaId] = useState<string | null>(() => searchParams.get('abrir'));
+  const [divulgarAberta, setDivulgarAberta] = useState(false);
+  const ultimoGatilho = useRef<string | null>(null);
+  const botaoDivulgar = useRef<HTMLButtonElement>(null);
+  const buscaRef = useRef<HTMLInputElement>(null);
+  const { avisar, elemento: aviso } = useAviso();
 
-  const [status, setStatus] = useState<string>(() => searchParams.get('status') ?? 'any');
-  const [priority, setPriority] = useState<string>(() => searchParams.get('priority') ?? 'any');
-  const [category, setCategory] = useState<string>(() => searchParams.get('category') ?? 'any');
-  const [from, setFrom] = useState(searchParams.get('from') ?? '');
-  const [to, setTo] = useState(searchParams.get('to') ?? '');
-  const [unitId, setUnitId] = useState(searchParams.get('unitId') ?? '');
-  const [identified, setIdentified] = useState<string>(() => searchParams.get('identified') ?? 'any');
-  const [q, setQ] = useState(searchParams.get('q') ?? '');
+  const set = (k: keyof Filtros) => (e: { target: { value: string } }) => setF((s) => ({ ...s, [k]: e.target.value }));
 
   const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
-  const tenant = useQuery({
-    queryKey: ['tenantMe'],
-    queryFn: () => apiFetch<TenantMe>('/tenant/me'),
-  });
-
-  const publicSlug = tenant.data?.slug ?? '';
-  const publicPath = publicSlug ? `/canal-etico/${publicSlug}` : '';
-  const publicFullUrl = publicPath ? `${origin}${publicPath}` : '';
+  const tenant = useQuery({ queryKey: ['tenantMe'], queryFn: () => apiFetch<TenantMe>('/tenant/me') });
 
   const queryString = useMemo(() => {
-    const params = new URLSearchParams();
-    if (status && status !== 'any') params.set('status', status);
-    if (priority && priority !== 'any') params.set('priority', priority);
-    if (category && category !== 'any') params.set('category', category);
-    if (identified && identified !== 'any') params.set('identified', identified);
-    if (from) params.set('from', from);
-    if (to) params.set('to', to);
-    if (unitId) params.set('unitId', unitId);
-    if (q.trim()) params.set('q', q.trim());
-    const qs = params.toString();
-    return qs ? `?${qs}` : '';
-  }, [status, priority, category, identified, from, to, unitId, q]);
+    const p = new URLSearchParams();
+    if (f.status) p.set('status', f.status);
+    if (f.priority !== 'any') p.set('priority', f.priority);
+    if (f.category !== 'any') p.set('category', f.category);
+    if (f.identified !== 'any') p.set('identified', f.identified);
+    if (f.from) p.set('from', f.from);
+    if (f.to) p.set('to', f.to);
+    if (f.unitId) p.set('unitId', f.unitId);
+    if (f.q.trim()) p.set('q', f.q.trim());
+    p.set('take', String(LIMITE));
+    return `?${p.toString()}`;
+  }, [f]);
 
+  // Filtros no endereço (dá para voltar ao mesmo recorte)
   useEffect(() => {
-    setSearchParams(new URLSearchParams(queryString.replace(/^\?/, '')), { replace: true });
-  }, [queryString, setSearchParams]);
+    const p = new URLSearchParams();
+    (Object.keys(PADRAO) as Array<keyof Filtros>).forEach((k) => {
+      if (f[k] !== PADRAO[k]) p.set(k, f[k]);
+    });
+    if (abertaId) p.set('abrir', abertaId);
+    setSearchParams(p, { replace: true });
+  }, [f, abertaId, setSearchParams]);
 
   const rows = useQuery({
     queryKey: ['whistleblower', queryString],
-    queryFn: () => apiFetch<WhistleblowerRow[]>(`/whistleblower${queryString}`),
+    queryFn: () => apiFetch<DenunciaLinha[]>(`/whistleblower${queryString}`),
   });
 
+  const resumo = useQuery({
+    queryKey: ['whistleblowerSummary', f.unitId],
+    queryFn: () =>
+      apiFetch<WhistleblowerSummary>(`/whistleblower/summary${f.unitId ? `?unitId=${encodeURIComponent(f.unitId)}` : ''}`),
+  });
+
+  const itens = useMemo(() => ordenarDenuncias(rows.data ?? []), [rows.data]);
+  const filtrosAlterados = (Object.keys(PADRAO) as Array<keyof Filtros>).some((k) => f[k] !== PADRAO[k]);
+
+  function abrir(id: string) {
+    ultimoGatilho.current = id;
+    setAbertaId(id);
+  }
+
+  function aoFecharDetalhe() {
+    setAbertaId(null);
+    const id = ultimoGatilho.current;
+    if (id) document.querySelector<HTMLButtonElement>(`[data-den-abrir="${id}"]`)?.focus();
+  }
+
+  const r = resumo.data;
+  const valor = (n: number | undefined) => (resumo.isLoading ? '…' : resumo.isError ? '—' : (n ?? 0));
+
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <>
+      <div className="cabeca">
         <div>
-          <div className="text-xl font-semibold">Denúncias</div>
-          <div className="text-sm text-slate-600">Listagem de denúncias recebidas pelo canal de ética e conformidade</div>
+          <h1 className="cabeca__titulo">Denúncias</h1>
+          <p className="cabeca__desc">Relatos do canal de ética, enviados pela equipe. Ficam separados das pesquisas de clientes.</p>
         </div>
+        <button
+          ref={botaoDivulgar}
+          className="btn btn--secundario"
+          type="button"
+          aria-haspopup="dialog"
+          onClick={() => setDivulgarAberta(true)}
+        >
+          <Icone nome="link" />
+          Divulgar o canal
+        </button>
       </div>
 
-      <Card
-        title="Canal público de denúncias"
-        description="Use este link ou QR Code para disponibilizar o canal de denúncias na sua empresa, intranet, murais ou e-mails."
-      >
-        {tenant.isLoading && <div className="text-sm text-slate-600">Carregando informações do tenant...</div>}
-        {tenant.isError && <div className="text-sm text-rose-700">Falha ao carregar informações do tenant.</div>}
-        {tenant.data && (
-          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-            <div className="flex items-start justify-center md:justify-start">
-              {publicFullUrl ? (
-                <QrCode value={publicFullUrl} centerIconSrc="/icon-opiina.png" size={220} />
-              ) : (
-                <div className="h-[220px] w-[220px] rounded-md bg-slate-100" />
-              )}
-            </div>
-            <div className="grid gap-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="text-sm font-medium text-slate-900">Tenant</div>
-                  <div className="text-sm text-slate-700">
-                    {tenant.data.tradeName} <span className="text-slate-500">({tenant.data.slug})</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium text-slate-900">Tipo de acesso</div>
-                  <div className="text-sm text-slate-700">Público · sem login · anônimo garantido</div>
-                </div>
-              </div>
+      <p className="den-sigilo">
+        <Icone nome="cadeado" />
+        <span>
+          <strong>Confidencial.</strong> Só os perfis com acesso a Denúncias veem esta tela. Não compartilhe os relatos fora da equipe
+          responsável.
+        </span>
+      </p>
 
-              <div className="grid gap-2">
-                <div className="rounded-md bg-slate-50 p-3 text-sm">
-                  <div className="text-slate-500">Link principal (canal de ética)</div>
-                  <a className="font-mono text-sky-700 hover:underline" href={publicPath} target="_blank" rel="noreferrer">
-                    {publicPath || '—'}
-                  </a>
-                </div>
-                <div className="rounded-md bg-slate-50 p-3 text-sm">
-                  <div className="text-slate-500">Link alternativo (/whistleblower)</div>
-                  <a className="font-mono text-sky-700 hover:underline" href={publicSlug ? `/whistleblower/${publicSlug}` : ''} target="_blank" rel="noreferrer">
-                    {publicSlug ? `/whistleblower/${publicSlug}` : '—'}
-                  </a>
-                </div>
-              </div>
+      <section className="kpis" aria-label="Resumo das denúncias">
+        <article className="kpi">
+          <p className="kpi__rotulo">Novas</p>
+          <p className="kpi__valor">{valor(r?.novas)}</p>
+          <p className="kpi__nota">Ainda sem análise</p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Em andamento</p>
+          <p className="kpi__valor">{valor(r?.emAndamento)}</p>
+          <p className="kpi__nota">Em análise, investigação ou aguardando informações</p>
+        </article>
+        <article className={`kpi${r && r.altaCritica > 0 ? ' kpi--alerta' : ''}`}>
+          <p className="kpi__rotulo">Prioridade alta ou crítica</p>
+          <p className="kpi__valor">{valor(r?.altaCritica)}</p>
+          <p className="kpi__nota">{r && r.altaCritica > 0 ? 'Em aberto. Trate primeiro.' : 'Nenhuma em aberto'}</p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Concluídas</p>
+          <p className="kpi__valor">{valor(r?.concluidas90d)}</p>
+          <p className="kpi__nota">Nos últimos 90 dias</p>
+        </article>
+      </section>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  disabled={!publicFullUrl}
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(publicFullUrl);
-                    } catch {}
-                  }}
-                >
-                  Copiar link
-                </Button>
-                <a
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  href={publicPath}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Abrir canal
-                </a>
-              </div>
-            </div>
+      <section className="cartao" aria-label="Filtros">
+        <form className="filtros" onSubmit={(e) => e.preventDefault()}>
+          <div className="campo campo--busca">
+            <label htmlFor="d-busca">Buscar</label>
+            <input
+              id="d-busca"
+              ref={buscaRef}
+              type="search"
+              placeholder="Protocolo, texto do relato ou denunciante"
+              autoComplete="off"
+              value={f.q}
+              onChange={set('q')}
+            />
+            <Icone nome="busca" />
           </div>
-        )}
-      </Card>
-
-      <Card title="Filtros" description="Filtre por status, prioridade, categoria, unidade e identificação">
-        <div className="grid gap-3 md:grid-cols-4">
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Status</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="any">Todos</option>
-              <option value="received">Recebida</option>
-              <option value="analyzing">Em análise</option>
-              <option value="investigating">Em investigação</option>
-              <option value="awaiting_info">Aguardando informações</option>
-              <option value="completed">Concluída</option>
-              <option value="archived">Arquivada</option>
-            </select>
-          </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Prioridade</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-            >
+          <div className="campo">
+            <label htmlFor="d-situacao">Situação</label>
+            <select id="d-situacao" value={f.status} onChange={set('status')}>
+              <option value="open">Em aberto</option>
               <option value="any">Todas</option>
-              <option value="low">Baixa</option>
-              <option value="medium">Média</option>
-              <option value="high">Alta</option>
-              <option value="critical">Crítica</option>
-            </select>
-          </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Categoria</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+              {SITUACOES.map((s) => (
+                <option key={s} value={s}>
+                  {whistleblowerStatusLabel(s)}
                 </option>
               ))}
             </select>
           </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Identificação</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={identified}
-              onChange={(e) => setIdentified(e.target.value)}
-            >
+          <div className="campo">
+            <label htmlFor="d-prioridade">Prioridade</label>
+            <select id="d-prioridade" value={f.priority} onChange={set('priority')}>
               <option value="any">Todas</option>
-              <option value="anonymous">Anônimas</option>
-              <option value="identified">Identificadas</option>
+              {PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {whistleblowerPriorityLabel(p)}
+                </option>
+              ))}
             </select>
           </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">De</div>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <div className="campo">
+            <label htmlFor="d-categoria">Categoria</label>
+            <select id="d-categoria" value={f.category} onChange={set('category')}>
+              <option value="any">Todas</option>
+              {CATEGORIAS.map((c) => (
+                <option key={c} value={c}>
+                  {whistleblowerCategoryLabel(c)}
+                </option>
+              ))}
+            </select>
           </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Até</div>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Unidade</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
-              disabled={units.isLoading}
-            >
+          <div className="campo">
+            <label htmlFor="d-unidade">Unidade</label>
+            <select id="d-unidade" value={f.unitId} onChange={set('unitId')} disabled={units.isLoading}>
               <option value="">Todas</option>
               {units.data?.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -274,91 +223,133 @@ export function DenunciasPage() {
               ))}
             </select>
           </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Busca</div>
-            <Input
-              placeholder="Protocolo, título ou denunciante"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
+          <div className="campo">
+            <label htmlFor="d-ident">Identificação</label>
+            <select id="d-ident" value={f.identified} onChange={set('identified')}>
+              <option value="any">Todas</option>
+              <option value="anonymous">Anônimas</option>
+              <option value="identified">Identificadas</option>
+            </select>
           </div>
+          <div className="campo">
+            <label htmlFor="d-de">Recebidas de</label>
+            <input id="d-de" type="date" value={f.from} onChange={set('from')} max={f.to || undefined} />
+          </div>
+          <div className="campo">
+            <label htmlFor="d-ate">Até</label>
+            <input id="d-ate" type="date" value={f.to} onChange={set('to')} min={f.from || undefined} />
+          </div>
+        </form>
+        <div className="filtros__rodape">
+          <p className="filtros__contagem" role="status" aria-live="polite">
+            {rows.data ? (
+              <>
+                <strong>{itens.length}</strong> {itens.length === 1 ? 'denúncia' : 'denúncias'}
+                {itens.length >= LIMITE ? ` (as ${LIMITE} mais recentes; refine os filtros)` : ''}
+              </>
+            ) : rows.isLoading ? (
+              'Carregando…'
+            ) : (
+              ''
+            )}
+          </p>
+          <button
+            className="btn btn--fantasma"
+            type="button"
+            disabled={!filtrosAlterados}
+            onClick={() => {
+              setF({ ...PADRAO });
+              buscaRef.current?.focus();
+            }}
+          >
+            Limpar filtros
+          </button>
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        {rows.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {rows.isError && <div className="text-sm text-rose-700">Falha ao carregar denúncias</div>}
-        {rows.data && rows.data.length === 0 && <div className="text-sm text-slate-600">Sem denúncias</div>}
-        {rows.data && rows.data.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-slate-500">
+      <section className="cartao" aria-label="Lista de denúncias">
+        {rows.isError && (
+          <p className="cli__erro cli__erro--geral" role="alert">
+            Falha ao carregar denúncias.
+          </p>
+        )}
+        {rows.isLoading && <p className="vazio">Carregando…</p>}
+        {rows.data && itens.length > 0 && (
+          <div className="tabela-rolagem">
+            <table className="tabela oc-tabela den-tabela">
+              <thead>
                 <tr>
-                  <th className="px-2 py-2 font-medium">Protocolo</th>
-                  <th className="px-2 py-2 font-medium">Categoria</th>
-                  <th className="px-2 py-2 font-medium">Data</th>
-                  <th className="px-2 py-2 font-medium">Unidade</th>
-                  <th className="px-2 py-2 font-medium">Identificação</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">Prioridade</th>
+                  <th scope="col">Prioridade</th>
+                  <th scope="col">Denúncia</th>
+                  <th scope="col">Unidade</th>
+                  <th scope="col">Situação</th>
+                  <th scope="col">Identificação</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 text-slate-700">
-                {rows.data.map((r) => {
-                  const identified = !r.reporterAnonymous;
-                  return (
-                    <tr key={r.id} className="align-top hover:bg-slate-50">
-                      <td className="px-2 py-3 align-top">
-                        <div className="flex flex-col gap-1">
-                          <Link to={`/app/whistleblower/${r.id}`} className="font-mono text-xs font-semibold text-sky-700 hover:underline">
-                            {r.protocol}
-                          </Link>
-                          <div className="font-medium text-slate-900">{r.title}</div>
-                          <div className="text-xs text-slate-500">
-                            {r.category === 'other' && r.customCategory ? r.customCategory : whistleblowerCategoryLabel(r.category)}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-2 py-3 align-top text-xs">
-                        {r.category === 'other' && r.customCategory ? r.customCategory : whistleblowerCategoryLabel(r.category)}
-                      </td>
-                      <td className="px-2 py-3 align-top text-xs text-slate-700">{formatDate(r.createdAt)}</td>
-                      <td className="px-2 py-3 align-top text-xs text-slate-700">{r.unit?.name ?? '—'}</td>
-                      <td className="px-2 py-3 align-top">
-                        {identified ? (
-                          <div>
-                            <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
-                              Identificado
-                            </span>
-                            {r.reporterName && <div className="mt-1 text-xs text-slate-700">{r.reporterName}</div>}
-                            {!r.reporterName && (r.reporterEmail || r.reporterPhone) && (
-                              <div className="mt-1 text-xs text-slate-600">{r.reporterEmail ?? r.reporterPhone}</div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                            Anônimo
-                          </span>
+              <tbody>
+                {itens.map((d) => (
+                  <tr key={d.id}>
+                    <td data-col="nota">
+                      <SeloPrioridade priority={d.priority} />
+                    </td>
+                    <td data-col="comentario">
+                      <button
+                        className="oc-abrir"
+                        type="button"
+                        data-den-abrir={d.id}
+                        aria-haspopup="dialog"
+                        onClick={() => abrir(d.id)}
+                      >
+                        <span className="oc-abrir__texto">{d.title}</span>
+                        <span className="oc-abrir__meta">
+                          {d.protocol} · {categoriaTexto(d)} ·{' '}
+                          <time dateTime={d.createdAt} title={dataHora(d.createdAt)}>
+                            {quando(d.createdAt)}
+                          </time>
+                          {d.assignee ? ` · Resp.: ${d.assignee.name}` : ''}
+                        </span>
+                      </button>
+                    </td>
+                    <td data-col="unidade">{d.unit?.name ?? 'Não informada'}</td>
+                    <td data-col="etapa">
+                      <SeloSituacao status={d.status} />
+                    </td>
+                    <td data-col="responsavel">
+                      <span className="den-ident-celula">
+                        <SeloIdent anonima={d.reporterAnonymous} />
+                        {!d.reporterAnonymous && (d.reporterName || d.reporterEmail || d.reporterPhone) && (
+                          <span className="den-contato">{d.reporterName ?? d.reporterEmail ?? d.reporterPhone}</span>
                         )}
-                      </td>
-                      <td className="px-2 py-3 align-top">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${whistleblowerStatusClass(r.status)}`}>
-                          {whistleblowerStatusLabel(r.status)}
-                        </span>
-                      </td>
-                      <td className="px-2 py-3 align-top">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${whistleblowerPriorityClass(r.priority)}`}>
-                          {whistleblowerPriorityLabel(r.priority)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </Card>
-    </div>
+        {rows.data && itens.length === 0 && (
+          <p className="vazio">
+            <strong>Nenhuma denúncia com esses filtros</strong>
+            Escolha "Todas" em Situação ou clique em "Limpar filtros".
+          </p>
+        )}
+      </section>
+
+      <DenunciaGaveta id={abertaId} onFechar={aoFecharDetalhe} avisar={avisar} />
+      <DivulgarGaveta
+        aberta={divulgarAberta}
+        onFechar={() => {
+          setDivulgarAberta(false);
+          botaoDivulgar.current?.focus();
+        }}
+        slug={tenant.data?.slug ?? ''}
+        empresa={tenant.data?.tradeName ?? ''}
+        carregando={tenant.isLoading}
+        erro={tenant.isError}
+        avisar={avisar}
+      />
+      {aviso}
+    </>
   );
 }

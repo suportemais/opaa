@@ -30,6 +30,8 @@ import { AdminSubscriptionsPage } from './pages/admin/AdminSubscriptionsPage';
 import { LandingPage } from './pages/LandingPage';
 import { RewardCampaignsPage } from './pages/RewardCampaignsPage';
 import { IntegrationsPage } from './pages/IntegrationsPage';
+import { MinhaContaPage } from './pages/MinhaContaPage';
+import { AceitarConvitePage } from './pages/AceitarConvitePage';
 import { getAccessToken } from './lib/auth-store';
 import { apiFetch } from './lib/api';
 import { isPlatformOperator } from './lib/billing-access';
@@ -103,6 +105,7 @@ export default function App() {
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/convite" element={<AceitarConvitePage />} />
       <Route path="/public/:token" element={<PublicSurveyPage />} />
       {import.meta.env.DEV && (
         <Route element={<AppShell />}>
@@ -144,6 +147,7 @@ export default function App() {
         <Route path="units" element={<UnitsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="employees" element={<EmployeesPage />} />
+        <Route path="conta" element={<MinhaContaPage />} />
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="premios" element={<RewardCampaignsPage />} />
         <Route

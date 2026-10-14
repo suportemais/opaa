@@ -1,291 +1,438 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import type { CustomerListPage } from '../lib/api-novos';
+import { Icone } from '../components/painel/Icone';
+import { usePode } from '../components/painel/usePainel';
+import { useAviso } from '../components/painel/clientes/Aviso';
+import { ClienteGavetaConteudo, NotaSelo } from '../components/painel/clientes/ClienteGaveta';
+import { ExportarConteudo } from '../components/painel/clientes/ExportarGaveta';
+import { Gaveta } from '../components/painel/clientes/Gaveta';
+import { ImportarConteudo } from '../components/painel/clientes/ImportarGaveta';
+import { NovoClienteConteudo } from '../components/painel/clientes/NovoClienteGaveta';
+import {
+  type Cliente,
+  ORIGEM_ROTULO,
+  aniversario,
+  baixarModeloImportacao,
+  mesNascimento,
+  nomeDoMes,
+  quando,
+  useUnidadesPermitidas,
+} from '../components/painel/clientes/util';
+import '../styles/painel-clientes.css';
 
-const CONTACT_IMPORT_HEADERS = ['Nome', 'E-mail', 'Telefone', 'CPF', 'Unidade', 'Observações'] as const;
+const POR_PAGINA = 50;
+const FILTROS = ['q', 'unidade', 'ofertas', 'aniversario', 'origem'] as const;
 
-type Unit = { id: string; name: string };
+const MES_ATUAL = new Date().getMonth() + 1;
+const MES_QUE_VEM = (MES_ATUAL % 12) + 1;
 
-type ImportResult = {
-  imported: number;
-  created?: number;
-  updated?: number;
-  total?: number;
-  errors?: Array<{ row: number; message: string }>;
+const contar = (p: URLSearchParams) => {
+  const q = new URLSearchParams(p);
+  q.set('page', '1');
+  q.set('pageSize', '1');
+  return apiFetch<CustomerListPage<Cliente>>(`/customers?${q}`).then((r) => r.total);
 };
 
-type Customer = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  originUnitId: string | null;
-  originUnit: Unit | null;
-  firstInteractionAt: string | null;
-  lastInteractionAt: string | null;
-  createdAt: string;
-};
-
-function formatDateTime(value: string | null) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
-
-function toCsvRows(rows: Array<Record<string, string>>) {
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const headers = Object.keys(rows[0] ?? {});
-  const out = [headers.map(escape).join(',')];
-  for (const r of rows) out.push(headers.map((h) => escape(r[h] ?? '')).join(','));
-  return out.join('\n');
-}
-
-function downloadContactTemplate() {
-  const header = CONTACT_IMPORT_HEADERS.join(',');
-  const example = ['Maria Silva', 'maria@email.com', '11999999999', '', 'Unidade Centro', ''].join(',');
-  const csv = `\uFEFF${header}\n${example}\n`;
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'modelo-leads.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
+type Gavetas = 'novo' | 'importar' | 'exportar' | null;
 
 export function CustomersPage() {
-  const qc = useQueryClient();
-  const [q, setQ] = useState('');
-  const query = useMemo(() => q.trim(), [q]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+  const pode = usePode();
+  const podeEditar = pode('customer:manage');
+  const podeVerRespostas = pode('response:read');
+  const [params, setParams] = useSearchParams();
+  const [aviso, avisar] = useAviso();
+  const { unidades, todas } = useUnidadesPermitidas();
+  const [gaveta, setGaveta] = useState<Gavetas>(null);
 
-  const me = useQuery({
-    queryKey: ['authMe'],
-    queryFn: () =>
-      apiFetch<{ permissionCodes: string[] }>('/auth/me').catch(() => ({ permissionCodes: [] })),
-    staleTime: 60 * 1000,
-    retry: false,
-  });
-  const canManageCustomers = (me.data?.permissionCodes ?? []).includes('customer:manage');
+  const estado = {
+    q: params.get('q') ?? '',
+    unidade: params.get('unidade') ?? '',
+    ofertas: params.get('ofertas') ?? '',
+    aniversario: params.get('aniversario') ?? '',
+    origem: params.get('origem') ?? '',
+  };
+  const pagina = Math.max(1, Number(params.get('pagina')) || 1);
+  const abrir = params.get('abrir');
 
-  const customers = useQuery({
-    queryKey: ['customers', query],
-    queryFn: () => apiFetch<Customer[]>(`/customers${query ? `?q=${encodeURIComponent(query)}` : ''}`),
-  });
+  // Busca: digita livre e aplica depois de uma pausa.
+  const [busca, setBusca] = useState(estado.q);
+  useEffect(() => setBusca((b) => (b.trim() === estado.q ? b : estado.q)), [estado.q]);
+  useEffect(() => {
+    if (busca.trim() === estado.q) return;
+    const t = window.setTimeout(() => mudar({ q: busca.trim() }), 300);
+    return () => window.clearTimeout(t);
+  }, [busca]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const importContacts = useMutation({
-    mutationFn: async (file: File) => {
-      const form = new FormData();
-      form.append('file', file);
-      return apiFetch<ImportResult>('/customers/import', { method: 'POST', body: form });
-    },
-    onSuccess: async (data) => {
-      setImportResult(data);
-      setImportError(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      await qc.invalidateQueries({ queryKey: ['customers'] });
-    },
-    onError: (err) => {
-      const body = err instanceof ApiError ? err.body : null;
-      const payload = body && typeof body === 'object' ? (body as { message?: string; errors?: ImportResult['errors'] }) : null;
-      setImportError(payload?.message === 'missing_file' ? 'Selecione um arquivo CSV.' : payload?.message ?? 'Falha ao importar');
-      setImportResult(payload?.errors ? { imported: 0, errors: payload.errors } : null);
-    },
-  });
-
-  function exportCsv() {
-    if (!customers.data || customers.data.length === 0) return;
-    const rows = customers.data.map((c) => ({
-      Nome: c.name ?? '',
-      'E-mail': c.email ?? '',
-      Telefone: c.phone ?? '',
-      Unidade: c.originUnit?.name ?? '',
-      'Última interação': c.lastInteractionAt ?? '',
-      'Criado em': c.createdAt ?? '',
-    }));
-    const csv = toCsvRows(rows);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'clientes.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  function mudar(novos: Partial<Record<(typeof FILTROS)[number] | 'pagina' | 'abrir', string>>, manterPagina = false) {
+    setParams(
+      (atual) => {
+        const p = new URLSearchParams(atual);
+        for (const [k, v] of Object.entries(novos)) {
+          if (v) p.set(k, v);
+          else p.delete(k);
+        }
+        if (!manterPagina && !('pagina' in novos)) p.delete('pagina');
+        return p;
+      },
+      { replace: true },
+    );
   }
 
-  function exportPrint() {
-    if (!customers.data || customers.data.length === 0) return;
-    const rows = customers.data
-      .map(
-        (c) => `
-        <tr>
-          <td>${(c.name ?? '—').replace(/</g, '&lt;')}</td>
-          <td>${(c.email ?? '—').replace(/</g, '&lt;')}</td>
-          <td>${(c.phone ?? '—').replace(/</g, '&lt;')}</td>
-          <td>${(c.originUnit?.name ?? '—').replace(/</g, '&lt;')}</td>
-          <td>${formatDateTime(c.lastInteractionAt).replace(/</g, '&lt;')}</td>
-        </tr>`,
-      )
-      .join('');
-    const html = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Clientes</title>
-  <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; color: #0f172a; }
-    h1 { font-size: 18px; margin: 0 0 12px; }
-    .meta { font-size: 12px; color: #64748b; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border-bottom: 1px solid #e2e8f0; padding: 8px; text-align: left; vertical-align: top; }
-    th { color: #475569; font-weight: 600; }
-  </style>
-</head>
-<body>
-  <h1>Clientes</h1>
-  <div class="meta">Exportado em ${new Date().toLocaleString()}</div>
-  <table>
-    <thead>
-      <tr>
-        <th>Nome</th>
-        <th>E-mail</th>
-        <th>Telefone</th>
-        <th>Unidade</th>
-        <th>Última interação</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-</body>
-</html>`;
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
+  /** Filtros da lista no formato da API. */
+  const filtrosApi = useMemo(() => {
+    const p = new URLSearchParams();
+    if (estado.q) p.set('q', estado.q);
+    if (estado.unidade) p.set('unitId', estado.unidade);
+    if (estado.ofertas === 'sim' || estado.ofertas === 'nao') p.set('offers', estado.ofertas);
+    if (estado.aniversario === 'mes') p.set('birthdayMonth', String(MES_ATUAL));
+    if (estado.aniversario === 'proximo') p.set('birthdayMonth', String(MES_QUE_VEM));
+    if (estado.origem) p.set('source', estado.origem);
+    return p;
+  }, [estado.q, estado.unidade, estado.ofertas, estado.aniversario, estado.origem]);
+  const filtrosTexto = filtrosApi.toString();
+  const temFiltro = FILTROS.some((k) => estado[k]);
+
+  const lista = useQuery({
+    queryKey: ['customers', 'pagina', filtrosTexto, pagina],
+    queryFn: () => {
+      const p = new URLSearchParams(filtrosApi);
+      p.set('page', String(pagina));
+      p.set('pageSize', String(POR_PAGINA));
+      return apiFetch<CustomerListPage<Cliente>>(`/customers?${p}`);
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  // Resumo (contagens pela própria API, com page/pageSize=1)
+  const [kTotal, kOfertas, kAniv, kPlanilha] = useQueries({
+    queries: [
+      new URLSearchParams(),
+      new URLSearchParams({ offers: 'sim' }),
+      new URLSearchParams({ birthdayMonth: String(MES_ATUAL) }),
+      new URLSearchParams({ source: 'import' }),
+    ].map((p) => ({ queryKey: ['customers', 'contagem', p.toString()], queryFn: () => contar(p) })),
+  });
+  const n = (v?: number) => (typeof v === 'number' ? v.toLocaleString('pt-BR') : '—');
+  const pct =
+    typeof kTotal.data === 'number' && typeof kOfertas.data === 'number' && kTotal.data > 0
+      ? Math.round((kOfertas.data / kTotal.data) * 100)
+      : 0;
+
+  const total = lista.data?.total ?? 0;
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const itens = lista.data?.items ?? [];
+
+  function limpar() {
+    setBusca('');
+    setParams(new URLSearchParams(), { replace: true });
+    document.getElementById('c-busca')?.focus();
   }
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <div className="text-xl font-semibold">Clientes</div>
-        <div className="text-sm text-slate-600">Cadastros gerados a partir de identificações (opcional) na pesquisa</div>
-      </div>
-
-      <Card title="Buscar">
-        <div className="grid gap-2">
-          <div className="text-sm text-slate-600">Nome, e-mail ou telefone</div>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ex: Maria, maria@email.com, 11999999999" />
+    <>
+      <div className="cabeca">
+        <div>
+          <h1 className="cabeca__titulo">Clientes</h1>
+          <p className="cabeca__desc">Quem deixou o contato na pesquisa (é opcional), entrou por planilha ou foi cadastrado pela equipe.</p>
         </div>
-      </Card>
-
-      <Card title="Lista">
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <Button variant="secondary" onClick={downloadContactTemplate}>
-            Baixar modelo
-          </Button>
-          {canManageCustomers && (
+        <div className="cabeca__acoes">
+          {podeEditar ? (
             <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setImportResult(null);
-                  setImportError(null);
-                  importContacts.mutate(file);
-                }}
-              />
-              <Button
-                variant="secondary"
-                disabled={importContacts.isPending}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {importContacts.isPending ? 'Importando...' : 'Importar (CSV)'}
-              </Button>
+              <button className="btn btn--secundario" type="button" aria-haspopup="dialog" onClick={() => setGaveta('importar')}>
+                Importar planilha
+              </button>
+              <button className="btn btn--secundario" type="button" aria-haspopup="dialog" onClick={() => setGaveta('exportar')}>
+                Exportar
+              </button>
+              <button className="btn btn--primario" type="button" aria-haspopup="dialog" onClick={() => setGaveta('novo')}>
+                <Icone nome="mais" />
+                Novo cliente
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn--fantasma" type="button" onClick={baixarModeloImportacao}>
+                Baixar modelo
+              </button>
+              <button className="btn btn--secundario" type="button" aria-haspopup="dialog" onClick={() => setGaveta('exportar')}>
+                Exportar
+              </button>
             </>
           )}
-          <Button variant="secondary" disabled={!customers.data || customers.data.length === 0} onClick={exportCsv}>
-            Exportar (CSV)
-          </Button>
-          <Button variant="secondary" disabled={!customers.data || customers.data.length === 0} onClick={exportPrint}>
-            Exportar (PDF)
-          </Button>
         </div>
-        {(importResult || importError) && (
-          <div className="mb-4 grid gap-2">
-            {importResult && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                {importResult.created ?? importResult.imported} criado(s)
-                {typeof importResult.updated === 'number' ? ` · ${importResult.updated} atualizado(s)` : ''}
-                {typeof importResult.total === 'number' ? ` · ${importResult.total} linha(s)` : ''}.
-                {importResult.errors && importResult.errors.length > 0 && (
-                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-emerald-900">
-                    {importResult.errors.map((e, i) => (
-                      <li key={`${e.row}-${i}`}>
-                        Linha {e.row}: {e.message}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {importError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{importError}</div>}
+      </div>
+
+      <section className="kpis" aria-label="Resumo dos clientes">
+        <article className="kpi">
+          <p className="kpi__rotulo">Clientes cadastrados</p>
+          <p className="kpi__valor">{n(kTotal.data)}</p>
+          <p className="kpi__nota">Nas unidades que você vê</p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Aceitam receber ofertas</p>
+          <p className="kpi__valor">{pct}%</p>
+          <p className="kpi__nota">
+            {n(kOfertas.data)} de {n(kTotal.data)} clientes
+          </p>
+        </article>
+        <article className="kpi">
+          <a
+            className="kpi__rotulo kpi__link"
+            href="?aniversario=mes"
+            onClick={(e) => {
+              e.preventDefault();
+              setBusca('');
+              setParams(new URLSearchParams({ aniversario: 'mes' }), { replace: true });
+              document.getElementById('c-contagem')?.scrollIntoView({ block: 'center' });
+            }}
+          >
+            Aniversariantes de {nomeDoMes(MES_ATUAL)}
+          </a>
+          <p className="kpi__valor">{n(kAniv.data)}</p>
+          <p className="kpi__nota">Ver quem são</p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Vieram por planilha</p>
+          <p className="kpi__valor">{n(kPlanilha.data)}</p>
+          <p className="kpi__nota">Importados pela equipe</p>
+        </article>
+      </section>
+
+      <section className="cartao" aria-label="Filtros">
+        <form className="filtros" onSubmit={(e) => e.preventDefault()}>
+          <div className="campo campo--busca">
+            <label htmlFor="c-busca">Buscar</label>
+            <input
+              id="c-busca"
+              type="search"
+              placeholder="Nome, e-mail ou telefone"
+              autoComplete="off"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+            <Icone nome="busca" />
           </div>
-        )}
-        {customers.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {customers.isError && (
-          <div className="text-sm text-rose-700">
-            {customers.error instanceof ApiError
-              ? `Falha ao carregar clientes (${customers.error.status})`
-              : 'Falha ao carregar clientes'}
+          <div className="campo">
+            <label htmlFor="c-unidade">Unidade</label>
+            <select id="c-unidade" value={estado.unidade} onChange={(e) => mudar({ unidade: e.target.value })}>
+              <option value="">Todas</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </div>
+          <div className="campo">
+            <label htmlFor="c-ofertas">Ofertas</label>
+            <select id="c-ofertas" value={estado.ofertas} onChange={(e) => mudar({ ofertas: e.target.value })}>
+              <option value="">Todos</option>
+              <option value="sim">Aceitam receber</option>
+              <option value="nao">Não aceitam</option>
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="c-aniversario">Aniversário</label>
+            <select id="c-aniversario" value={estado.aniversario} onChange={(e) => mudar({ aniversario: e.target.value })}>
+              <option value="">Todos</option>
+              <option value="mes">Em {nomeDoMes(MES_ATUAL)}</option>
+              <option value="proximo">Em {nomeDoMes(MES_QUE_VEM)}</option>
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="c-origem">Origem</label>
+            <select id="c-origem" value={estado.origem} onChange={(e) => mudar({ origem: e.target.value })}>
+              <option value="">Todas</option>
+              <option value="survey">{ORIGEM_ROTULO.survey}</option>
+              <option value="import">{ORIGEM_ROTULO.import}</option>
+              <option value="manual">{ORIGEM_ROTULO.manual}</option>
+            </select>
+          </div>
+        </form>
+        <div className="filtros__rodape">
+          <p className="filtros__contagem" id="c-contagem" role="status" aria-live="polite">
+            {lista.data ? (
+              <>
+                <strong>{total.toLocaleString('pt-BR')}</strong> {total === 1 ? 'cliente' : 'clientes'}
+              </>
+            ) : null}
+          </p>
+          {temFiltro && (
+            <button className="btn btn--fantasma" type="button" onClick={limpar}>
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="cartao" aria-label="Lista de clientes" aria-busy={lista.isFetching || undefined}>
+        {lista.isLoading && <p className="cl-mudo">Carregando…</p>}
+        {lista.isError && (
+          <p className="vazio">
+            <strong>Não foi possível carregar os clientes</strong>
+            {lista.error instanceof ApiError ? `Erro ${lista.error.status}. ` : ''}Tente recarregar a página.
+          </p>
         )}
-        {customers.data && customers.data.length === 0 && <div className="text-sm text-slate-600">Nenhum cliente</div>}
-        {customers.data && customers.data.length > 0 && (
-          <div className="overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-slate-500">
+        {lista.data && itens.length === 0 && (
+          <p className="vazio">
+            <strong>{temFiltro ? 'Nenhum cliente com esses filtros' : 'Nenhum cliente ainda'}</strong>
+            {temFiltro ? 'Tente outra busca ou clique em “Limpar filtros”.' : 'Eles aparecem quando alguém deixa o contato na pesquisa.'}
+          </p>
+        )}
+        {itens.length > 0 && (
+          <div className="tabela-rolagem">
+            <table className="tabela cl-tabela">
+              <thead>
                 <tr>
-                  <th className="py-2 pr-3 font-medium">Nome</th>
-                  <th className="py-2 pr-3 font-medium">E-mail</th>
-                  <th className="py-2 pr-3 font-medium">Telefone</th>
-                  <th className="py-2 pr-3 font-medium">Unidade</th>
-                  <th className="py-2 pr-3 font-medium">Última interação</th>
+                  <th scope="col">Cliente</th>
+                  <th scope="col">Unidade</th>
+                  <th scope="col">Respostas</th>
+                  <th scope="col">Última interação</th>
+                  <th scope="col">Aniversário</th>
+                  <th scope="col">Origem</th>
+                  <th scope="col">Ofertas</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {customers.data.map((c) => (
-                  <tr key={c.id} className="align-top">
-                    <td className="py-2 pr-3">
-                      <Link to={`/app/customers/${c.id}`} className="font-medium text-sky-700 hover:underline">
-                        {c.name ?? '—'}
-                      </Link>
-                      <div className="text-xs font-mono text-slate-400">{c.id}</div>
-                    </td>
-                    <td className="py-2 pr-3">{c.email ?? '—'}</td>
-                    <td className="py-2 pr-3">{c.phone ?? '—'}</td>
-                    <td className="py-2 pr-3">{c.originUnit?.name ?? '—'}</td>
-                    <td className="py-2 pr-3">{formatDateTime(c.lastInteractionAt)}</td>
-                  </tr>
-                ))}
+              <tbody>
+                {itens.map((c) => {
+                  const aniv = aniversario(c.birthDate);
+                  const respostas = c.totalResponses ?? 0;
+                  return (
+                    <tr key={c.id}>
+                      <td data-col="cliente">
+                        <button
+                          className="oc-abrir"
+                          type="button"
+                          data-cl-abrir={c.id}
+                          aria-haspopup="dialog"
+                          onClick={() => mudar({ abrir: c.id }, true)}
+                        >
+                          <span className="oc-abrir__texto">
+                            {c.name || 'Sem nome'}
+                            {c.doNotContact && <span className="cl-selo cl-selo--alerta">não contatar</span>}
+                          </span>
+                          <span className="oc-abrir__meta">{[c.phone, c.email].filter(Boolean).join(' · ') || '—'}</span>
+                        </button>
+                      </td>
+                      <td data-col="unidade">{c.originUnit?.name ?? '—'}</td>
+                      <td data-col="respostas">
+                        <span className="cl-respostas">
+                          {typeof c.lastNpsScore === 'number' && <NotaSelo nota={c.lastNpsScore} rotulo="Última nota " />}
+                          {respostas} {respostas === 1 ? 'resposta' : 'respostas'}
+                        </span>
+                      </td>
+                      <td data-col="ultima">
+                        {c.lastInteractionAt ? quando(c.lastInteractionAt) : <span className="cl-mudo">Nenhuma ainda</span>}
+                      </td>
+                      <td data-col="aniversario">
+                        {aniv ? (
+                          <>
+                            <Icone nome="premios" />
+                            <span className="visualmente-oculto">Aniversário </span>
+                            {aniv}
+                            {mesNascimento(c.birthDate) === MES_ATUAL && <span className="cl-selo">este mês</span>}
+                          </>
+                        ) : (
+                          <span className="cl-mudo">Sem data</span>
+                        )}
+                      </td>
+                      <td data-col="origem">{c.source ? ORIGEM_ROTULO[c.source] : <span className="cl-mudo">—</span>}</td>
+                      <td data-col="ofertas">
+                        {c.acceptsOffers === true ? (
+                          <span className="cl-ofertas cl-ofertas--sim">Aceita ofertas</span>
+                        ) : c.acceptsOffers === false ? (
+                          <span className="cl-ofertas">Não aceita ofertas</span>
+                        ) : (
+                          <span className="cl-ofertas">Não informado</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </Card>
-    </div>
+        {lista.data && paginas > 1 && (
+          <nav className="cl-paginacao" aria-label="Páginas">
+            <button
+              className="btn btn--secundario"
+              type="button"
+              disabled={pagina <= 1}
+              onClick={() => mudar({ pagina: pagina - 1 > 1 ? String(pagina - 1) : '' })}
+            >
+              Anterior
+            </button>
+            <span>
+              Página <strong>{pagina}</strong> de {paginas}
+            </span>
+            <button
+              className="btn btn--secundario"
+              type="button"
+              disabled={pagina >= paginas}
+              onClick={() => mudar({ pagina: String(pagina + 1) })}
+            >
+              Próxima
+            </button>
+          </nav>
+        )}
+      </section>
+
+      <Gaveta aberta={Boolean(abrir)} onFechar={() => mudar({ abrir: '' }, true)} rotuloId="cg-titulo" larga focoInicial="cg-titulo">
+        {abrir && (
+          <ClienteGavetaConteudo
+            id={abrir}
+            unidades={unidades}
+            podeEditar={podeEditar}
+            podeVerRespostas={podeVerRespostas}
+            onFechar={() => mudar({ abrir: '' }, true)}
+            onSalvo={(c) => {
+              mudar({ abrir: '' }, true);
+              avisar(`Dados de ${c.name || 'cliente'} salvos`);
+            }}
+          />
+        )}
+      </Gaveta>
+
+      <Gaveta aberta={gaveta === 'novo'} onFechar={() => setGaveta(null)} rotuloId="cn-titulo" larga focoInicial="cn-nome">
+        <NovoClienteConteudo
+          unidades={unidades}
+          todasUnidades={todas}
+          onFechar={() => setGaveta(null)}
+          onCriado={(c) => {
+            setGaveta(null);
+            avisar(`${c.name || 'Cliente'} cadastrado`);
+          }}
+          onAbrirExistente={(id) => {
+            setGaveta(null);
+            mudar({ abrir: id }, true);
+          }}
+        />
+      </Gaveta>
+
+      <Gaveta aberta={gaveta === 'importar'} onFechar={() => setGaveta(null)} rotuloId="ci-titulo" focoInicial="ci-titulo">
+        <ImportarConteudo
+          onFechar={() => setGaveta(null)}
+          onImportado={(r) => avisar(`Importação concluída: ${r.created ?? r.imported} novo(s)${typeof r.updated === 'number' ? `, ${r.updated} atualizado(s)` : ''}`)}
+        />
+      </Gaveta>
+
+      <Gaveta aberta={gaveta === 'exportar'} onFechar={() => setGaveta(null)} rotuloId="ce-titulo" focoInicial="ce-titulo">
+        <ExportarConteudo
+          filtrosLista={filtrosApi}
+          totais={{ lista: lista.data?.total, ofertas: kOfertas.data, todos: kTotal.data }}
+          onFechar={() => setGaveta(null)}
+          onExportado={(qtd) => {
+            setGaveta(null);
+            avisar(`${qtd} ${qtd === 1 ? 'cliente exportado' : 'clientes exportados'}`);
+          }}
+        />
+      </Gaveta>
+
+      {aviso}
+    </>
   );
 }

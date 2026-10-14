@@ -1,169 +1,67 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, apiFetch } from '../lib/api';
-import { unitCnpjLine } from '../lib/cnpj';
-import { couponCampaignStatusClass, couponCampaignStatusLabel } from '../lib/labels';
+import { apiFetch } from '../lib/api';
 import { isActiveSurvey } from '../lib/survey-list';
+import { Icone } from '../components/painel/Icone';
+import { usePode } from '../components/painel/usePainel';
+import { useAviso } from '../components/painel/clientes/Aviso';
+import { Gaveta } from '../components/painel/clientes/Gaveta';
+import { type AcaoCampanha, CampanhaCartao } from '../components/painel/premios/CampanhaCartao';
+import { CampanhaForm, type ModoForm } from '../components/painel/premios/CampanhaForm';
+import { useConfirmar } from '../components/painel/premios/Confirmar';
+import {
+  type Campanha,
+  type EmpresaMm,
+  type Pesquisa,
+  type Situacao,
+  type UnidadeCnpj,
+  MENSAGEM_PADRAO,
+  dataCurta,
+  erroCampanha,
+  opcoesEmpresa,
+  real,
+  situacaoDa,
+} from '../components/painel/premios/util';
+import '../styles/painel-premios.css';
 
-type Survey = { id: string; name: string; status: string };
-type RewardCampaign = {
-  id: string;
-  name: string;
-  surveyId: string | null;
-  surveyName: string | null;
-  mmCompanyId: string | null;
-  rewardAmountCents: number | null;
-  validityDays: number | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  message: string | null;
-  prefix: string | null;
-  status: string;
-  perCustomerLimit: number;
-  issuedCount: number;
-  redeemedCount: number;
-  unitId?: string | null;
-  unitName?: string | null;
-  cnpj?: string | null;
-  issuer?: { cnpj: string; legalName: string; tradeName: string } | null;
-};
-
-type Unit = {
-  id: string;
-  name: string;
-  document: string | null;
-  legalName?: string | null;
-};
-
-const UNIT_COPY = {
-  LABEL: 'Unidade',
-  MULTI: 'Escolha a unidade antes de gerar',
-  MICRO: 'O voucher vincula no Muito Mais pelo CNPJ desta unidade.',
-} as const;
-
-/** Muito Mais Company.id + Company.tradeName — never an establishment. */
-type MmCompany = { id: string; tradeName: string };
-type MmCompanyOption = { id: string; label: string };
-
-const DEFAULT_WHATSAPP = 'Seu prêmio de R$ {{amount}}:\n{{code}}\nResgate: {{link}}';
-const WHATSAPP_TOKENS = ['{{code}}', '{{link}}', '{{amount}}'] as const;
-
-const DESIGN_PREVIEW_SURVEYS: Survey[] = [
+// ---------------------------------------------------------------------------
+// Prévia de design (só em DEV: /premios-preview ou ?preview=1). Nada disso vai para produção.
+// ---------------------------------------------------------------------------
+const PREVIEW_PESQUISAS: Pesquisa[] = [
   { id: 's1', name: 'NPS pós-visita', status: 'active' },
   { id: 's2', name: 'CSAT delivery', status: 'active' },
   { id: 's3', name: 'NPS unidade Centro', status: 'active' },
 ];
-
-const DESIGN_PREVIEW_COMPANIES: MmCompany[] = [
-  { id: 'mm-company-gepos', tradeName: 'Grupo Geppos' },
+const PREVIEW_EMPRESAS: EmpresaMm[] = [{ id: 'mm-company-gepos', tradeName: 'Grupo Geppos' }];
+const PREVIEW_UNIDADES: UnidadeCnpj[] = [
+  { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Unidade Centro', document: '33000167000101', legalName: 'Centro Alimentos LTDA' },
 ];
-
-const DESIGN_PREVIEW_UNITS: Unit[] = [
+const U = PREVIEW_UNIDADES[0];
+const PREVIEW_CAMPANHAS: Campanha[] = [
   {
-    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    name: 'Unidade Centro',
-    document: '33000167000101',
-    legalName: 'Centro Alimentos LTDA',
-  },
-];
-
-const DESIGN_PREVIEW_CAMPAIGNS: RewardCampaign[] = [
-  {
-    id: 'c1',
-    name: 'NPS Setembro — R$10',
-    surveyId: 's1',
-    surveyName: 'NPS pós-visita',
-    mmCompanyId: 'mm-company-gepos',
-    rewardAmountCents: 1000,
-    validityDays: 30,
-    startsAt: '2026-09-15T12:00:00.000Z',
-    endsAt: '2026-10-15T23:59:00.000Z',
-    message: DEFAULT_WHATSAPP,
-    prefix: 'MM',
-    status: 'active',
-    perCustomerLimit: 1,
-    issuedCount: 128,
-    redeemedCount: 47,
-    unitId: DESIGN_PREVIEW_UNITS[0].id,
-    unitName: DESIGN_PREVIEW_UNITS[0].name,
-    cnpj: DESIGN_PREVIEW_UNITS[0].document,
-    issuer: {
-      cnpj: DESIGN_PREVIEW_UNITS[0].document!,
-      legalName: DESIGN_PREVIEW_UNITS[0].legalName!,
-      tradeName: DESIGN_PREVIEW_UNITS[0].name,
-    },
+    id: 'c1', name: 'NPS Setembro — R$10', surveyId: 's1', surveyName: 'NPS pós-visita', mmCompanyId: 'mm-company-gepos',
+    rewardAmountCents: 1000, validityDays: 30, startsAt: '2026-09-15T12:00:00.000Z', endsAt: '2026-12-15T23:59:00.000Z',
+    message: MENSAGEM_PADRAO, prefix: 'MM', status: 'active', perCustomerLimit: 1, issuedCount: 128, redeemedCount: 47,
+    unitId: U.id, unitName: U.name, cnpj: U.document, issuer: { cnpj: U.document!, legalName: U.legalName!, tradeName: U.name },
   },
   {
-    id: 'c2',
-    name: 'CSAT delivery — R$20',
-    surveyId: 's2',
-    surveyName: 'CSAT delivery',
-    mmCompanyId: 'mm-company-gepos',
-    rewardAmountCents: 2000,
-    validityDays: 30,
-    startsAt: null,
-    endsAt: null,
-    message: DEFAULT_WHATSAPP,
-    prefix: 'MM',
-    status: 'paused',
-    perCustomerLimit: 1,
-    issuedCount: 56,
-    redeemedCount: 12,
-    unitId: DESIGN_PREVIEW_UNITS[0].id,
-    unitName: DESIGN_PREVIEW_UNITS[0].name,
-    cnpj: DESIGN_PREVIEW_UNITS[0].document,
+    id: 'c2', name: 'CSAT delivery — R$20', surveyId: 's2', surveyName: 'CSAT delivery', mmCompanyId: 'mm-company-gepos',
+    rewardAmountCents: 2000, validityDays: 30, startsAt: null, endsAt: null, message: MENSAGEM_PADRAO, prefix: 'MM',
+    status: 'paused', perCustomerLimit: 1, issuedCount: 56, redeemedCount: 12, unitId: U.id, unitName: U.name, cnpj: U.document,
   },
   {
-    id: 'c3',
-    name: 'Campanha piloto — R$10',
-    surveyId: 's3',
-    surveyName: 'NPS unidade Centro',
-    mmCompanyId: 'mm-company-gepos',
-    rewardAmountCents: 1000,
-    validityDays: 30,
-    startsAt: null,
-    endsAt: null,
-    message: DEFAULT_WHATSAPP,
-    prefix: 'MM',
-    status: 'finished',
-    perCustomerLimit: 1,
-    issuedCount: 210,
-    redeemedCount: 98,
-    unitId: DESIGN_PREVIEW_UNITS[0].id,
-    unitName: DESIGN_PREVIEW_UNITS[0].name,
-    cnpj: DESIGN_PREVIEW_UNITS[0].document,
+    id: 'c4', name: 'Natal — R$15', surveyId: 's1', surveyName: 'NPS pós-visita', mmCompanyId: 'mm-company-gepos',
+    rewardAmountCents: 1500, validityDays: 15, startsAt: '2027-12-01T12:00:00.000Z', endsAt: '2027-12-31T23:59:00.000Z',
+    message: MENSAGEM_PADRAO, prefix: 'MM', status: 'active', perCustomerLimit: 1, issuedCount: 0, redeemedCount: 0,
+    unitId: U.id, unitName: U.name, cnpj: U.document,
+  },
+  {
+    id: 'c3', name: 'Campanha piloto — R$10', surveyId: 's3', surveyName: 'NPS unidade Centro', mmCompanyId: 'mm-company-gepos',
+    rewardAmountCents: 1000, validityDays: 30, startsAt: null, endsAt: null, message: MENSAGEM_PADRAO, prefix: 'MM',
+    status: 'finished', perCustomerLimit: 1, issuedCount: 210, redeemedCount: 98, unitId: U.id, unitName: U.name, cnpj: U.document,
   },
 ];
-
-function campaignFormError(err: unknown): string {
-  const code =
-    err instanceof ApiError &&
-    typeof err.body === 'object' &&
-    err.body &&
-    'message' in err.body
-      ? String((err.body as { message?: unknown }).message)
-      : err instanceof Error
-        ? err.message
-        : '';
-
-  switch (code) {
-    case 'issuer_cnpj_required':
-      return 'Cadastre um CNPJ válido nesta unidade para emitir o voucher.';
-    case 'unit_required':
-      return UNIT_COPY.MULTI;
-    case 'unit_not_found':
-      return 'Unidade não encontrada.';
-    case 'invalid_document':
-      return 'Informe um CNPJ válido da unidade.';
-    default:
-      return err instanceof Error ? err.message : 'Falha ao salvar a campanha.';
-  }
-}
-
-function campaignUnitLine(row: RewardCampaign): string {
-  return unitCnpjLine(row.unitName || row.issuer?.tradeName || 'Unidade', row.cnpj || row.issuer?.cnpj);
-}
 
 function isDesignPreview() {
   if (!import.meta.env.DEV) return false;
@@ -172,766 +70,249 @@ function isDesignPreview() {
   return new URLSearchParams(window.location.search).get('preview') === '1';
 }
 
-const FIELD_CLASS =
-  'h-12 w-full rounded-full border border-opiina-border bg-white px-4 text-sm text-opiina-navy shadow-none outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100';
-
-function reaisFromCents(cents: number | null | undefined) {
-  if (typeof cents !== 'number' || !Number.isFinite(cents)) return '';
-  return (cents / 100).toFixed(2).replace('.', ',');
-}
-
-function formatBRL(cents: number | null | undefined) {
-  const raw = reaisFromCents(cents);
-  return raw ? `R$ ${raw}` : '—';
-}
-
-function centsFromReais(raw: string) {
-  const trimmed = raw.trim().replace(/[R$\s]/g, '');
-  if (!trimmed) return null;
-  const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
-  const n = Number(normalized);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n * 100);
-}
-
-function toDateTimeLocal(value: string | null | undefined) {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromDateTimeLocal(value: string) {
-  if (!value.trim()) return undefined;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return d.toISOString();
-}
-
-/** Operator label = MM Company.tradeName. Never tenant/unit/establishment names. */
-function buildMmCompanyOptions(
-  companies: MmCompany[],
-  selectedId?: string | null,
-): MmCompanyOption[] {
-  const options = companies
-    .filter((row) => row.id.trim() && row.tradeName.trim())
-    .map((row) => ({ id: row.id.trim(), label: `${row.tradeName.trim()} — MM` }));
-  const selected = selectedId?.trim();
-  if (selected && !options.some((row) => row.id === selected)) {
-    options.push({ id: selected, label: 'Empresa Muito Mais' });
-  }
-  return options;
-}
-
-function StatusChip({ status }: { status: string }) {
-  return (
-    <span
-      className={[
-        'inline-flex items-center rounded-full px-3 py-1 text-xs font-medium',
-        couponCampaignStatusClass(status),
-      ].join(' ')}
-    >
-      {couponCampaignStatusLabel(status)}
-    </span>
-  );
-}
+type Filtro = 'todas' | 'ativa' | 'agendada' | 'encerrada';
+const FILTROS: Array<{ id: Filtro; rotulo: string }> = [
+  { id: 'todas', rotulo: 'Todas' },
+  { id: 'ativa', rotulo: 'Ativas' },
+  { id: 'agendada', rotulo: 'Agendadas' },
+  { id: 'encerrada', rotulo: 'Encerradas' },
+];
+const ORDEM: Record<Situacao, number> = { ativa: 0, pausada: 1, rascunho: 2, agendada: 3, encerrada: 4 };
+const naFiltro = (f: Filtro, s: Situacao) =>
+  f === 'todas' || s === f || (f === 'ativa' && (s === 'pausada' || s === 'rascunho'));
 
 export function RewardCampaignsPage() {
   const qc = useQueryClient();
   const preview = isDesignPreview();
-  const surveys = useQuery({
-    queryKey: ['surveys'],
-    queryFn: () => apiFetch<Survey[]>('/surveys'),
-    enabled: !preview,
-  });
+  const pode = usePode();
+  // Sem /auth/me na prévia, mostra as ações como antes.
+  const podeGerir = preview || pode('survey:manage');
+  const [params, setParams] = useSearchParams();
+  const filtroUrl = params.get('status') as Filtro | null;
+  const filtro: Filtro = FILTROS.some((f) => f.id === filtroUrl) ? (filtroUrl as Filtro) : 'todas';
+  const [aviso, avisar] = useAviso();
+  const [confirmacao, confirmar] = useConfirmar();
+  const [form, setForm] = useState<{ modo: ModoForm; campanha: Campanha | null } | null>(null);
+
+  const surveys = useQuery({ queryKey: ['surveys'], queryFn: () => apiFetch<Pesquisa[]>('/surveys'), enabled: !preview });
   const campaigns = useQuery({
     queryKey: ['coupon-campaigns'],
-    queryFn: () => apiFetch<RewardCampaign[]>('/coupon-campaigns'),
+    queryFn: () => apiFetch<Campanha[]>('/coupon-campaigns'),
     enabled: !preview,
   });
   const mmCompanies = useQuery({
     queryKey: ['mm-companies'],
-    queryFn: () => apiFetch<MmCompany[]>('/mm-companies'),
+    queryFn: () => apiFetch<EmpresaMm[]>('/mm-companies'),
     staleTime: 60 * 1000,
     enabled: !preview,
   });
-  const units = useQuery({
-    queryKey: ['units'],
-    queryFn: () => apiFetch<Unit[]>('/units'),
-    enabled: !preview,
+  const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<UnidadeCnpj[]>('/units'), enabled: !preview });
+
+  const pesquisas = useMemo(() => (preview ? PREVIEW_PESQUISAS : (surveys.data ?? []).filter(isActiveSurvey)), [preview, surveys.data]);
+  const campanhas = useMemo(() => (preview ? PREVIEW_CAMPANHAS : (campaigns.data ?? [])), [preview, campaigns.data]);
+  const empresas = useMemo(() => (preview ? PREVIEW_EMPRESAS : (mmCompanies.data ?? [])), [preview, mmCompanies.data]);
+  const unidades = useMemo(() => (preview ? PREVIEW_UNIDADES : (units.data ?? [])), [preview, units.data]);
+  const unidadePorId = useMemo(() => new Map(unidades.map((u) => [u.id, u])), [unidades]);
+
+  const comSituacao = useMemo(() => {
+    const agora = Date.now();
+    return campanhas.map((c) => ({ c, s: situacaoDa(c, agora) }));
+  }, [campanhas]);
+  const itens = comSituacao
+    .filter(({ s }) => naFiltro(filtro, s))
+    .sort((a, b) => ORDEM[a.s] - ORDEM[b.s] || (b.c.startsAt ?? '').localeCompare(a.c.startsAt ?? ''));
+
+  // Resumo
+  const ativas = comSituacao.filter(({ s }) => s === 'ativa').length;
+  const enviados = campanhas.reduce((t, c) => t + (c.issuedCount ?? 0), 0);
+  const resgatados = campanhas.reduce((t, c) => t + (c.redeemedCount ?? 0), 0);
+  const valorResgatado = campanhas.reduce((t, c) => t + (c.redeemedCount ?? 0) * (c.rewardAmountCents ?? 0), 0);
+  const taxa = enviados ? Math.round((resgatados / enviados) * 100) : 0;
+  const nfmt = (v: number) => v.toLocaleString('pt-BR');
+
+  const semIntegracao = !preview && !mmCompanies.isLoading && !mmCompanies.isError && empresas.length === 0;
+
+  const acao = useMutation({
+    mutationFn: ({ tipo, id }: { tipo: 'pause' | 'activate' | 'finish'; id: string }) =>
+      apiFetch<Campanha>(`/coupon-campaigns/${id}/${tipo}`, { method: 'POST' }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
+    },
   });
-  const surveyRows = useMemo(
-    () =>
-      preview
-        ? DESIGN_PREVIEW_SURVEYS
-        : (surveys.data ?? []).filter(isActiveSurvey),
-    [preview, surveys.data],
-  );
-  const campaignRows = useMemo(
-    () => (preview ? DESIGN_PREVIEW_CAMPAIGNS : (campaigns.data ?? [])),
-    [preview, campaigns.data],
-  );
-  const companyRows = useMemo(
-    () => (preview ? DESIGN_PREVIEW_COMPANIES : (mmCompanies.data ?? [])),
-    [preview, mmCompanies.data],
-  );
-  const unitRows = useMemo(
-    () => (preview ? DESIGN_PREVIEW_UNITS : (units.data ?? [])),
-    [preview, units.data],
-  );
 
-  const [mode, setMode] = useState<'list' | 'form'>('list');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [surveyId, setSurveyId] = useState('');
-  const [mmCompanyId, setMmCompanyId] = useState('');
-  const [unitId, setUnitId] = useState('');
-  const [amountReais, setAmountReais] = useState('10,00');
-  const [validityDays, setValidityDays] = useState('30');
-  const [startsAt, setStartsAt] = useState('');
-  const [endsAt, setEndsAt] = useState('');
-  const [message, setMessage] = useState(DEFAULT_WHATSAPP);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const companyOptions = useMemo(() => {
-    const editingRow = campaignRows.find((row) => row.id === editingId);
-    return buildMmCompanyOptions(companyRows, editingRow?.mmCompanyId ?? mmCompanyId);
-  }, [companyRows, campaignRows, editingId, mmCompanyId]);
-
-  const defaultSurveyId = useMemo(() => surveyRows[0]?.id ?? '', [surveyRows]);
-  const defaultCompanyId = companyOptions[0]?.id ?? '';
-  const isMultiUnit = unitRows.length > 1;
-  const selectedUnit = useMemo(() => {
-    return unitRows.find((item) => item.id === unitId) ?? (unitRows.length === 1 ? unitRows[0] : undefined);
-  }, [unitRows, unitId]);
-  const selectedUnitId = selectedUnit?.id ?? '';
-  const selectedHasCnpj = Boolean(selectedUnit?.document?.trim());
-
-  useEffect(() => {
-    if (!surveyId && defaultSurveyId) setSurveyId(defaultSurveyId);
-  }, [defaultSurveyId, surveyId]);
-
-  useEffect(() => {
-    if (!mmCompanyId && defaultCompanyId) setMmCompanyId(defaultCompanyId);
-  }, [defaultCompanyId, mmCompanyId]);
-
-  useEffect(() => {
-    if (unitRows.length === 1) setUnitId(unitRows[0].id);
-  }, [unitRows]);
-
-  function resetForm() {
-    setEditingId(null);
-    setName('');
-    setSurveyId(defaultSurveyId);
-    setMmCompanyId(defaultCompanyId);
-    setUnitId(unitRows.length === 1 ? unitRows[0].id : '');
-    setAmountReais('10,00');
-    setValidityDays('30');
-    setStartsAt('');
-    setEndsAt('');
-    setMessage(DEFAULT_WHATSAPP);
-    setFormError(null);
-  }
-
-  function openCreate() {
-    resetForm();
-    setMode('form');
-  }
-
-  function openEdit(row: RewardCampaign) {
-    setEditingId(row.id);
-    setName(row.name);
-    setSurveyId(row.surveyId ?? defaultSurveyId);
-    setMmCompanyId(row.mmCompanyId ?? defaultCompanyId);
-    setUnitId(row.unitId ?? (unitRows.length === 1 ? unitRows[0].id : ''));
-    setAmountReais(reaisFromCents(row.rewardAmountCents) || '10,00');
-    setValidityDays(row.validityDays ? String(row.validityDays) : '');
-    setStartsAt(toDateTimeLocal(row.startsAt));
-    setEndsAt(toDateTimeLocal(row.endsAt));
-    setMessage(row.message || DEFAULT_WHATSAPP);
-    setFormError(null);
-    setMode('form');
-  }
-
-  function backToList() {
-    resetForm();
-    setMode('list');
-  }
-
-  function payload() {
-    const rewardAmountCents = centsFromReais(amountReais);
-    if (!name.trim()) throw new Error('Informe o nome da campanha.');
-    if (!surveyId) throw new Error('Selecione a pesquisa elegível.');
-    if (!mmCompanyId.trim()) throw new Error('Selecione a empresa Muito Mais.');
-    if (isMultiUnit && !selectedUnitId) throw new Error(UNIT_COPY.MULTI);
-    if (!selectedUnitId) throw new Error(UNIT_COPY.MULTI);
-    if (!selectedHasCnpj) {
-      throw new Error('Cadastre um CNPJ válido nesta unidade para emitir o voucher.');
-    }
-    if (!rewardAmountCents) throw new Error('Informe um valor em R$ maior que zero.');
-    const days = validityDays.trim() ? Number(validityDays) : undefined;
-    if (days != null && (!Number.isInteger(days) || days < 1))
-      throw new Error('Validade deve ser um número de dias.');
-    return {
-      name: name.trim(),
-      surveyId,
-      mmCompanyId: mmCompanyId.trim(),
-      unitId: selectedUnitId,
-      rewardAmountCents,
-      validityDays: days,
-      startsAt: fromDateTimeLocal(startsAt),
-      endsAt: fromDateTimeLocal(endsAt),
-      message: message.trim() || undefined,
-      prefix: 'MM',
-    };
-  }
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const body = payload();
-      if (editingId) {
-        return apiFetch<RewardCampaign>(`/coupon-campaigns/${editingId}`, {
-          method: 'PATCH',
-          json: body,
-        });
+  async function executar(a: AcaoCampanha, c: Campanha) {
+    if (a === 'editar') return setForm({ modo: 'editar', campanha: c });
+    if (a === 'modelo') return setForm({ modo: 'modelo', campanha: c });
+    try {
+      if (a === 'pausar') {
+        await acao.mutateAsync({ tipo: 'pause', id: c.id });
+        return avisar(`${c.name}: pausada. Novos clientes não recebem voucher até você retomar.`);
       }
-      return apiFetch<RewardCampaign>('/coupon-campaigns', {
-        method: 'POST',
-        json: { ...body, activate: true },
+      if (a === 'retomar') {
+        await acao.mutateAsync({ tipo: 'activate', id: c.id });
+        return avisar(`${c.name}: ativa de novo`);
+      }
+      // Encerrar e "Cancelar campanha agendada": as duas só mudam o status para encerrada (nada é apagado).
+      const cancelar = a === 'cancelar';
+      const ok = await confirmar({
+        titulo: cancelar ? 'Cancelar esta campanha?' : 'Encerrar esta campanha?',
+        texto: cancelar ? (
+          <>
+            <strong>{c.name}</strong> ainda não começou e não vai enviar vouchers. Ela fica na lista como encerrada.
+          </>
+        ) : (
+          <>
+            <strong>{c.name}</strong> para de enviar vouchers agora. Os números até aqui continuam no histórico. Não dá para
+            reabrir; para repetir, use “Usar como modelo”.
+          </>
+        ),
+        botao: cancelar ? 'Cancelar campanha' : 'Encerrar',
+        botaoVoltar: 'Voltar',
+        perigo: true,
+        icone: 'alerta',
       });
-    },
-    onSuccess: async () => {
-      backToList();
-      await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
-    },
-    onError: (err) => {
-      setFormError(campaignFormError(err));
-    },
-  });
-
-  const pause = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<RewardCampaign>(`/coupon-campaigns/${id}/pause`, { method: 'POST' }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
-    },
-  });
-
-  const activate = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<RewardCampaign>(`/coupon-campaigns/${id}/activate`, { method: 'POST' }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['coupon-campaigns'] });
-    },
-  });
-
-  function insertToken(token: string) {
-    setMessage((prev) => (prev.includes(token) ? prev : `${prev.trim()}\n${token}`.trim()));
+      if (!ok) return;
+      await acao.mutateAsync({ tipo: 'finish', id: c.id });
+      avisar(cancelar ? `${c.name}: cancelada` : `${c.name}: encerrada`);
+    } catch (err) {
+      avisar(erroCampanha(err));
+    }
   }
 
-  const rows = campaignRows;
-  const listLoading = preview ? false : campaigns.isLoading;
-
-  const novaCampanha = (
-    <button
-      type="button"
-      onClick={openCreate}
-      className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-opiina-navy px-5 text-sm font-medium text-white hover:bg-slate-800"
-    >
-      Nova campanha
-    </button>
-  );
-
-  if (mode === 'form') {
-    return (
-        <CampaignForm
-          editing={Boolean(editingId)}
-          name={name}
-          setName={setName}
-          surveyId={surveyId}
-          setSurveyId={setSurveyId}
-          surveys={surveyRows}
-          mmCompanyId={mmCompanyId}
-          setMmCompanyId={setMmCompanyId}
-          companyOptions={companyOptions}
-          companiesLoading={preview ? false : mmCompanies.isLoading}
-          companiesError={preview ? false : mmCompanies.isError}
-          unitId={unitId}
-          setUnitId={setUnitId}
-          unitRows={unitRows}
-          selectedUnit={selectedUnit}
-          isMultiUnit={isMultiUnit}
-          unitsLoading={preview ? false : units.isLoading}
-          amountReais={amountReais}
-          setAmountReais={setAmountReais}
-          validityDays={validityDays}
-          setValidityDays={setValidityDays}
-          startsAt={startsAt}
-          setStartsAt={setStartsAt}
-          endsAt={endsAt}
-          setEndsAt={setEndsAt}
-          message={message}
-          setMessage={setMessage}
-          formError={formError}
-          pending={save.isPending}
-          onBack={backToList}
-          onInsertToken={insertToken}
-          onSubmit={() => {
-            try {
-              setFormError(null);
-              payload();
-              save.mutate();
-            } catch (err) {
-              setFormError(err instanceof Error ? err.message : 'Dados inválidos');
-            }
-          }}
-        />
+  function mudarFiltro(f: Filtro) {
+    setParams(
+      (atual) => {
+        const p = new URLSearchParams(atual);
+        if (f === 'todas') p.delete('status');
+        else p.set('status', f);
+        return p;
+      },
+      { replace: true },
     );
   }
 
+  const carregando = !preview && campaigns.isLoading;
+
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <>
+      <div className="cabeca">
         <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-3xl font-semibold tracking-tight text-opiina-navy">Prêmios</h1>
-            <span className="inline-flex items-center rounded-full bg-[#E8F4FF] px-3 py-1 text-xs font-medium text-opiina-cyan">
-              Prêmios Muito Mais
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-opiina-muted md:hidden">
-            Campanhas de recompensa vinculadas às pesquisas.
-          </p>
+          <h1 className="cabeca__titulo">Prêmios</h1>
+          <p className="cabeca__desc">Vouchers Muito Mais em R$ para quem responde às pesquisas, enviados por WhatsApp.</p>
         </div>
-        {novaCampanha}
-      </div>
-
-        {listLoading ? (
-          <div className="text-sm text-opiina-muted">Carregando...</div>
-        ) : rows.length === 0 ? (
-          <div className="rounded-2xl border border-opiina-border bg-white px-5 py-8 text-sm text-opiina-muted">
-            Sem campanhas? Crie a primeira em &quot;Nova campanha&quot;.
+        {podeGerir && (
+          <div className="cabeca__acoes">
+            <button className="btn btn--primario" type="button" aria-haspopup="dialog" onClick={() => setForm({ modo: 'nova', campanha: null })}>
+              <Icone nome="mais" />
+              Nova campanha
+            </button>
           </div>
-        ) : (
-          <>
-            <div className="grid gap-4 md:hidden">
-              {rows.map((row) => (
-                <CampaignCard
-                  key={row.id}
-                  row={row}
-                  onEdit={() => openEdit(row)}
-                  onPause={() => pause.mutate(row.id)}
-                  onActivate={() => activate.mutate(row.id)}
-                  pausePending={pause.isPending}
-                  activatePending={activate.isPending}
-                />
-              ))}
-            </div>
-
-            <div className="hidden overflow-hidden rounded-2xl border border-opiina-border bg-white md:block">
-              <table className="min-w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-opiina-border text-opiina-muted">
-                    <th className="px-5 py-3.5 font-medium">Nome</th>
-                    <th className="px-5 py-3.5 font-medium">Pesquisa</th>
-                    <th className="px-5 py-3.5 font-medium">Unidade</th>
-                    <th className="px-5 py-3.5 font-medium">Valor</th>
-                    <th className="px-5 py-3.5 font-medium">Status</th>
-                    <th className="px-5 py-3.5 font-medium">Emitidos</th>
-                    <th className="px-5 py-3.5 font-medium">Resgatados</th>
-                    <th className="px-5 py-3.5 font-medium">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className="border-t border-opiina-border">
-                      <td className="px-5 py-4 font-medium text-opiina-navy">{row.name}</td>
-                      <td className="px-5 py-4 text-opiina-navy">{row.surveyName ?? '—'}</td>
-                      <td className="px-5 py-4 text-opiina-navy">
-                        {row.unitId || row.cnpj || row.issuer ? campaignUnitLine(row) : '—'}
-                      </td>
-                      <td className="px-5 py-4 text-opiina-navy">
-                        {formatBRL(row.rewardAmountCents)}
-                      </td>
-                      <td className="px-5 py-4">
-                        <StatusChip status={row.status} />
-                      </td>
-                      <td className="px-5 py-4 text-opiina-navy">{row.issuedCount}</td>
-                      <td className="px-5 py-4 text-opiina-navy">{row.redeemedCount}</td>
-                      <td className="px-5 py-4">
-                        <CampaignActions
-                          row={row}
-                          layout="inline"
-                          onEdit={() => openEdit(row)}
-                          onPause={() => pause.mutate(row.id)}
-                          onActivate={() => activate.mutate(row.id)}
-                          pausePending={pause.isPending}
-                          activatePending={activate.isPending}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
         )}
-    </div>
-  );
-}
-
-function CampaignCard(props: {
-  row: RewardCampaign;
-  onEdit: () => void;
-  onPause: () => void;
-  onActivate: () => void;
-  pausePending: boolean;
-  activatePending: boolean;
-}) {
-  const { row } = props;
-  return (
-    <article className="rounded-2xl border border-opiina-border bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-base font-semibold text-opiina-navy">{row.name}</h2>
-        <StatusChip status={row.status} />
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-        <div>
-          <dt className="text-opiina-muted">Pesquisa</dt>
-          <dd className="mt-0.5 font-medium text-opiina-navy">{row.surveyName ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-opiina-muted">Unidade</dt>
-          <dd className="mt-0.5 font-medium text-opiina-navy">
-            {row.unitId || row.cnpj || row.issuer ? campaignUnitLine(row) : '—'}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-opiina-muted">Valor</dt>
-          <dd className="mt-0.5 font-medium text-opiina-navy">
-            {formatBRL(row.rewardAmountCents)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-opiina-muted">Emitidos</dt>
-          <dd className="mt-0.5 font-medium text-opiina-navy">{row.issuedCount}</dd>
-        </div>
-        <div>
-          <dt className="text-opiina-muted">Resgatados</dt>
-          <dd className="mt-0.5 font-medium text-opiina-navy">{row.redeemedCount}</dd>
-        </div>
-      </dl>
-      <div className="mt-5">
-        <CampaignActions {...props} layout="card" />
-      </div>
-    </article>
-  );
-}
 
-function CampaignActions(props: {
-  row: RewardCampaign;
-  layout: 'card' | 'inline';
-  onEdit: () => void;
-  onPause: () => void;
-  onActivate: () => void;
-  pausePending: boolean;
-  activatePending: boolean;
-}) {
-  const finished = props.row.status === 'finished';
-  const active = props.row.status === 'active';
-  const pill =
-    'inline-flex h-9 items-center justify-center rounded-full border border-opiina-border bg-white px-4 text-sm font-medium text-opiina-navy hover:bg-slate-50 disabled:opacity-50';
-  const link =
-    props.layout === 'card'
-      ? 'text-sm font-medium text-opiina-navy hover:underline disabled:opacity-50'
-      : 'text-sm font-medium text-opiina-cta hover:underline disabled:opacity-50';
-  const muted = 'text-sm font-medium text-opiina-navy hover:underline disabled:opacity-50';
+      {semIntegracao && (
+        <div className="cartao pr-aviso">
+          <Icone nome="plug" />
+          <div>
+            <strong>A Muito Mais não está conectada</strong>
+            <p>É ela que gera os vouchers. Sem a conexão, as campanhas não enviam prêmios.</p>
+          </div>
+          <Link className="btn btn--secundario" to="/app/integracoes">
+            Conectar em Integrações
+          </Link>
+        </div>
+      )}
 
-  return (
-    <div
-      className={
-        props.layout === 'card'
-          ? 'flex items-center justify-between gap-3'
-          : 'flex flex-wrap items-center gap-4'
-      }
-    >
-      <button type="button" className={link} onClick={props.onEdit}>
-        Editar
-      </button>
-      {!finished &&
-        (active ? (
-          <button
-            type="button"
-            className={props.layout === 'card' ? pill : muted}
-            disabled={props.pausePending}
-            onClick={props.onPause}
-          >
-            Pausar
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={props.layout === 'card' ? pill : muted}
-            disabled={props.activatePending}
-            onClick={props.onActivate}
-          >
-            Ativar
+      <section className="kpis" aria-label="Resumo das campanhas">
+        <article className="kpi">
+          <p className="kpi__rotulo">Campanhas ativas</p>
+          <p className="kpi__valor">{ativas}</p>
+          <p className="kpi__nota">{campanhas.length} no total</p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Vouchers enviados</p>
+          <p className="kpi__valor">{nfmt(enviados)}</p>
+          <p className="kpi__nota">Em todas as campanhas</p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Resgatados</p>
+          <p className="kpi__valor">{taxa}%</p>
+          <p className="kpi__nota">
+            {nfmt(resgatados)} de {nfmt(enviados)} vouchers
+          </p>
+        </article>
+        <article className="kpi">
+          <p className="kpi__rotulo">Valor resgatado</p>
+          <p className="kpi__valor">{real(valorResgatado)}</p>
+          <p className="kpi__nota">Soma dos vouchers usados</p>
+        </article>
+      </section>
+
+      <div className="alternar" role="group" aria-label="Mostrar campanhas">
+        {FILTROS.map((f) => (
+          <button key={f.id} type="button" aria-pressed={filtro === f.id} onClick={() => mudarFiltro(f.id)}>
+            {f.rotulo} <span className="alternar__total">{comSituacao.filter(({ s }) => naFiltro(f.id, s)).length}</span>
           </button>
         ))}
-    </div>
-  );
-}
-
-function FieldLabel({ children }: { children: string }) {
-  return <div className="mb-1.5 text-sm font-medium text-opiina-navy">{children}</div>;
-}
-
-function CampaignForm(props: {
-  editing: boolean;
-  name: string;
-  setName: (v: string) => void;
-  surveyId: string;
-  setSurveyId: (v: string) => void;
-  surveys: Survey[];
-  mmCompanyId: string;
-  setMmCompanyId: (v: string) => void;
-  companyOptions: MmCompanyOption[];
-  companiesLoading: boolean;
-  companiesError: boolean;
-  unitId: string;
-  setUnitId: (v: string) => void;
-  unitRows: Unit[];
-  selectedUnit?: Unit;
-  isMultiUnit: boolean;
-  unitsLoading: boolean;
-  amountReais: string;
-  setAmountReais: (v: string) => void;
-  validityDays: string;
-  setValidityDays: (v: string) => void;
-  startsAt: string;
-  setStartsAt: (v: string) => void;
-  endsAt: string;
-  setEndsAt: (v: string) => void;
-  message: string;
-  setMessage: (v: string) => void;
-  formError: string | null;
-  pending: boolean;
-  onBack: () => void;
-  onInsertToken: (token: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <div className="mx-auto w-full max-w-xl">
-      <button
-        type="button"
-        onClick={props.onBack}
-        className="text-sm font-medium text-opiina-navy hover:underline"
-      >
-        ← Voltar à lista
-      </button>
-      <h1 className="mt-4 text-3xl font-semibold tracking-tight text-opiina-navy">
-        {props.editing ? 'Editar campanha' : 'Nova campanha'}
-      </h1>
-      <p className="mt-2 text-sm text-opiina-muted">
-        {props.editing
-          ? 'Atualize e salve a campanha de prêmio.'
-          : 'Crie e ative uma campanha de prêmio.'}
-      </p>
-
-      <div className="mt-6 grid gap-4">
-        <label>
-          <FieldLabel>Nome</FieldLabel>
-          <input
-            value={props.name}
-            onChange={(e) => props.setName(e.target.value)}
-            placeholder="NPS Setembro — R$10"
-            className={FIELD_CLASS}
-          />
-        </label>
-        <label>
-          <FieldLabel>Pesquisa</FieldLabel>
-          <select
-            className={FIELD_CLASS}
-            value={props.surveyId}
-            onChange={(e) => props.setSurveyId(e.target.value)}
-          >
-            <option value="">Selecione</option>
-            {props.surveys.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <FieldLabel>Empresa Muito Mais</FieldLabel>
-          <select
-            className={FIELD_CLASS}
-            value={props.mmCompanyId}
-            onChange={(e) => props.setMmCompanyId(e.target.value)}
-            disabled={props.companiesLoading}
-          >
-            <option value="">
-              {props.companiesLoading ? 'Carregando empresas...' : 'Selecione a empresa'}
-            </option>
-            {props.companyOptions.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.label}
-              </option>
-            ))}
-          </select>
-          <div className="mt-1.5 text-xs text-opiina-muted">
-            Empresa vinculada em Integrações (Company.id). Estabelecimentos não entram nesta lista.
-          </div>
-          {props.companiesError && (
-            <div className="mt-1.5 text-xs text-rose-700">
-              Não foi possível carregar a empresa Muito Mais.
-            </div>
-          )}
-          {!props.companiesLoading &&
-            !props.companiesError &&
-            props.companyOptions.length === 0 && (
-              <div className="mt-1.5 text-xs text-opiina-muted">
-                Nenhuma empresa vinculada.{' '}
-                <Link to="/app/integracoes" className="font-medium text-opiina-cyan hover:underline">
-                  Conecte o Muito Mais em Integrações
-                </Link>
-                .
-              </div>
-            )}
-        </label>
-        <label>
-          <FieldLabel>{UNIT_COPY.LABEL}</FieldLabel>
-          {props.isMultiUnit ? (
-            <select
-              className={FIELD_CLASS}
-              value={props.unitId}
-              onChange={(e) => props.setUnitId(e.target.value)}
-              disabled={props.unitsLoading}
-            >
-              <option value="">{UNIT_COPY.MULTI}</option>
-              {props.unitRows.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {unitCnpjLine(item.name, item.document)}
-                </option>
-              ))}
-            </select>
-          ) : props.selectedUnit ? (
-            <div className="flex h-12 items-center text-sm font-medium text-opiina-navy">
-              {unitCnpjLine(props.selectedUnit.name, props.selectedUnit.document)}
-            </div>
-          ) : (
-            <div className="flex h-12 items-center text-sm text-opiina-muted">
-              {props.unitsLoading ? 'Carregando...' : UNIT_COPY.MULTI}
-            </div>
-          )}
-          {props.isMultiUnit && props.selectedUnit && (
-            <div className="mt-2 text-sm font-medium text-opiina-navy">
-              {unitCnpjLine(props.selectedUnit.name, props.selectedUnit.document)}
-            </div>
-          )}
-          <div className="mt-1.5 text-xs text-opiina-muted">{UNIT_COPY.MICRO}</div>
-          {!props.unitsLoading && props.unitRows.length === 0 && (
-            <div className="mt-1.5 text-xs text-opiina-muted">
-              Nenhuma unidade cadastrada.{' '}
-              <Link to="/app/unidades" className="font-medium text-opiina-cyan hover:underline">
-                Cadastre a unidade e o CNPJ em Unidades
-              </Link>
-              .
-            </div>
-          )}
-          {props.selectedUnit && !props.selectedUnit.document?.trim() && (
-            <div className="mt-1.5 text-xs text-rose-700">
-              Cadastre um CNPJ válido nesta unidade para emitir o voucher.{' '}
-              <Link to="/app/unidades" className="font-medium text-opiina-cyan hover:underline">
-                Ir para Unidades
-              </Link>
-            </div>
-          )}
-        </label>
-        <label>
-          <FieldLabel>Valor R$ (fixo)</FieldLabel>
-          <input
-            value={props.amountReais}
-            onChange={(e) => props.setAmountReais(e.target.value)}
-            placeholder="10,00"
-            inputMode="decimal"
-            className={FIELD_CLASS}
-          />
-        </label>
-        <label>
-          <FieldLabel>Validade (dias)</FieldLabel>
-          <input
-            value={props.validityDays}
-            onChange={(e) => props.setValidityDays(e.target.value)}
-            placeholder="30"
-            inputMode="numeric"
-            className={FIELD_CLASS}
-          />
-        </label>
-        <label>
-          <FieldLabel>Início</FieldLabel>
-          <input
-            type="datetime-local"
-            value={props.startsAt}
-            onChange={(e) => props.setStartsAt(e.target.value)}
-            className={FIELD_CLASS}
-          />
-        </label>
-        <label>
-          <FieldLabel>Fim</FieldLabel>
-          <input
-            type="datetime-local"
-            value={props.endsAt}
-            onChange={(e) => props.setEndsAt(e.target.value)}
-            className={FIELD_CLASS}
-          />
-        </label>
-        <label>
-          <FieldLabel>Texto WhatsApp</FieldLabel>
-          <textarea
-            className="min-h-[3rem] w-full resize-none rounded-[28px] border border-opiina-border bg-white px-4 py-3 text-sm text-opiina-navy outline-none placeholder:text-slate-400 focus:border-opiina-cyan focus:ring-2 focus:ring-sky-100"
-            value={props.message}
-            onChange={(e) => props.setMessage(e.target.value)}
-            placeholder={DEFAULT_WHATSAPP}
-            rows={3}
-          />
-          <div className="mt-2 text-xs text-opiina-muted">
-            Placeholders:{' '}
-            {WHATSAPP_TOKENS.map((token, i) => (
-              <button
-                key={token}
-                type="button"
-                onClick={() => props.onInsertToken(token)}
-                className="font-mono text-opiina-cyan hover:underline"
-              >
-                {i > 0 ? ' ' : ''}
-                {token}
-              </button>
-            ))}
-          </div>
-        </label>
-
-        <div className="rounded-2xl bg-[#EFF6FF] px-4 py-3 text-sm text-opiina-navy">
-          Limite por cliente: 1 (fixo — não editável)
-        </div>
-
-        {props.formError && (
-          <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {props.formError}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={props.onSubmit}
-          disabled={props.pending}
-          className="inline-flex h-12 w-full items-center justify-center rounded-full bg-opiina-cta text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {props.pending ? 'Salvando...' : props.editing ? 'Salvar' : 'Criar e ativar'}
-        </button>
       </div>
-    </div>
+
+      {carregando && <p className="mudo">Carregando…</p>}
+      {!preview && campaigns.isError && (
+        <div className="cartao vazio">
+          <strong>Não foi possível carregar as campanhas</strong>
+          Tente recarregar a página.
+        </div>
+      )}
+      {!carregando && itens.length > 0 && (
+        <ul className="pq-lista" aria-busy={acao.isPending || undefined}>
+          {itens.map(({ c, s }) => (
+            <CampanhaCartao
+              key={c.id}
+              campanha={c}
+              situacao={s}
+              unidade={c.unitId ? unidadePorId.get(c.unitId) : undefined}
+              podeGerir={podeGerir}
+              ocupado={acao.isPending && acao.variables?.id === c.id}
+              onAcao={executar}
+            />
+          ))}
+        </ul>
+      )}
+      {!carregando && !campaigns.isError && itens.length === 0 && (
+        <div className="cartao vazio">
+          <strong>{campanhas.length ? 'Nenhuma campanha aqui' : 'Nenhuma campanha ainda'}</strong>
+          {campanhas.length ? 'Escolha outro filtro ou crie uma em “Nova campanha”.' : 'Crie a primeira em “Nova campanha”.'}
+        </div>
+      )}
+
+      <Gaveta aberta={Boolean(form)} onFechar={() => setForm(null)} rotuloId="pr-titulo" larga focoInicial="pr-nome">
+        {form && (
+          <CampanhaForm
+            modo={form.modo}
+            inicial={form.campanha}
+            pesquisas={pesquisas}
+            empresas={opcoesEmpresa(empresas, form.campanha?.mmCompanyId)}
+            empresasCarregando={!preview && mmCompanies.isLoading}
+            empresasErro={!preview && mmCompanies.isError}
+            unidades={unidades}
+            unidadesCarregando={!preview && units.isLoading}
+            onFechar={() => setForm(null)}
+            onSalvo={(c, modo, agendada) => {
+              setForm(null);
+              avisar(
+                modo === 'editar'
+                  ? `${c.name}: alterações salvas`
+                  : agendada
+                    ? `${c.name}: agendada para ${dataCurta(c.startsAt)}`
+                    : `${c.name}: ativa`,
+              );
+            }}
+          />
+        )}
+      </Gaveta>
+
+      {confirmacao}
+      {aviso}
+    </>
   );
 }

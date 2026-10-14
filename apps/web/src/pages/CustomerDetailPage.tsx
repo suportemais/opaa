@@ -1,52 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
-import { feedbackCasePriorityLabel, feedbackCaseStatusLabel, interactionChannelLabel } from '../lib/labels';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-
-type Unit = { id: string; name: string };
-
-type Customer = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  originUnitId: string | null;
-  originUnit: Unit | null;
-  firstInteractionAt: string | null;
-  lastInteractionAt: string | null;
-  doNotContact: boolean;
-  doNotContactAt: string | null;
-  doNotContactReason: string | null;
-  tags: unknown;
-  notes: string | null;
-  createdAt: string;
-};
-
-type CustomerResponse = {
-  id: string;
-  startedAt: string;
-  completedAt: string | null;
-  npsScore: number | null;
-  npsClass: string | null;
-  mainComment: string | null;
-  survey: { id: string; name: string };
-  unit: { id: string; name: string } | null;
-};
-
-type CustomerCase = {
-  id: string;
-  status: string;
-  priority: string;
-  updatedAt: string;
-  createdAt: string;
-  description: string | null;
-  unit: { id: string; name: string } | null;
-  surveyResponse: { id: string; npsScore: number | null; npsClass: string | null };
-};
+import { feedbackCasePriorityLabel, interactionChannelLabel } from '../lib/labels';
+import { Icone } from '../components/painel/Icone';
+import { iniciais, usePode } from '../components/painel/usePainel';
+import { useAviso } from '../components/painel/clientes/Aviso';
+import { EtapaOcorrencia, NotaSelo } from '../components/painel/clientes/ClienteGaveta';
+import { DadosClienteForm } from '../components/painel/clientes/DadosClienteForm';
+import {
+  type Cliente,
+  type OcorrenciaCliente,
+  type RespostaCliente,
+  dataHora,
+  erroCliente,
+  origemTexto,
+  quando,
+  useUnidadesPermitidas,
+} from '../components/painel/clientes/util';
+import '../styles/painel-clientes.css';
 
 type CustomerInteraction = {
   id: string;
@@ -59,13 +31,6 @@ type CustomerInteraction = {
   createdByUser: { id: string; name: string; email: string } | null;
 };
 
-function formatDateTime(value: string | null) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
-
 function parseTags(value: string) {
   return value
     .split(',')
@@ -74,461 +39,474 @@ function parseTags(value: string) {
     .slice(0, 20);
 }
 
-export function CustomerDetailPage() {
-  const params = useParams();
-  const id = params.id ?? '';
+function tagsDe(raw: unknown): string[] {
+  return Array.isArray(raw) && raw.every((t) => typeof t === 'string') ? (raw as string[]) : [];
+}
+
+/** Tags, observações internas e "Não contatar" (PATCH /customers/:id). */
+function AcoesCrm({ cliente, podeEditar, onSalvo }: { cliente: Cliente; podeEditar: boolean; onSalvo: () => void }) {
   const qc = useQueryClient();
+  const [doNotContact, setDoNotContact] = useState(Boolean(cliente.doNotContact));
+  const [motivo, setMotivo] = useState(cliente.doNotContactReason ?? '');
+  const [tagsTexto, setTagsTexto] = useState(tagsDe(cliente.tags).join(', '));
+  const [notas, setNotas] = useState(cliente.notes ?? '');
 
-  const customer = useQuery({
-    queryKey: ['customer', id],
-    queryFn: () => apiFetch<Customer>(`/customers/${id}`),
-    enabled: Boolean(id),
-  });
-
-  const tagsFromApi = useMemo(() => {
-    const raw = customer.data?.tags;
-    if (Array.isArray(raw) && raw.every((t) => typeof t === 'string')) return raw as string[];
-    return [];
-  }, [customer.data?.tags]);
-
-  const [doNotContact, setDoNotContact] = useState(false);
-  const [doNotContactReason, setDoNotContactReason] = useState('');
-  const [tagsText, setTagsText] = useState('');
-  const [notes, setNotes] = useState('');
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [originUnitId, setOriginUnitId] = useState('');
-
-  const me = useQuery({
-    queryKey: ['authMe'],
-    queryFn: () =>
-      apiFetch<{ permissionCodes: string[]; unitIds: string[] }>('/auth/me').catch(() => ({
-        permissionCodes: [],
-        unitIds: [],
-      })),
-    staleTime: 60 * 1000,
-    retry: false,
-  });
-  const canSeeAllUnits = (me.data?.permissionCodes ?? []).includes('unit:manage');
-  const units = useQuery({
-    queryKey: ['units'],
-    queryFn: () => apiFetch<Unit[]>('/units'),
-  });
-  const allowedUnits = useMemo<Unit[]>(() => {
-    if (!units.data) return [];
-    if (canSeeAllUnits) return units.data;
-    const allowed = new Set(me.data?.unitIds ?? []);
-    return units.data.filter((u) => allowed.has(u.id));
-  }, [units.data, canSeeAllUnits, me.data?.unitIds]);
-
-  useEffect(() => {
-    if (!customer.data) return;
-    setDoNotContact(Boolean(customer.data.doNotContact));
-    setDoNotContactReason(customer.data.doNotContactReason ?? '');
-    setTagsText(tagsFromApi.join(', '));
-    setNotes(customer.data.notes ?? '');
-    setName(customer.data.name ?? '');
-    setEmail(customer.data.email ?? '');
-    setPhone(customer.data.phone ?? '');
-    setOriginUnitId(customer.data.originUnitId ?? customer.data.originUnit?.id ?? '');
-  }, [customer.data, tagsFromApi]);
-
-  const saveProfile = useMutation({
-    mutationFn: async () => {
-      return apiFetch<Customer>(`/customers/${id}`, {
-        method: 'PATCH',
-        json: {
-          name: name.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          originUnitId: originUnitId || undefined,
-        },
-      });
-    },
-    onSuccess: async () => {
-      setProfileOpen(false);
-      await qc.invalidateQueries({ queryKey: ['customer', id] });
-      await qc.invalidateQueries({ queryKey: ['customers'] });
-    },
-  });
-
-  const saveActions = useMutation({
-    mutationFn: async () => {
-      return apiFetch<Customer>(`/customers/${id}`, {
+  const salvar = useMutation({
+    mutationFn: () =>
+      apiFetch<Cliente>(`/customers/${cliente.id}`, {
         method: 'PATCH',
         json: {
           doNotContact,
-          doNotContactReason: doNotContact ? doNotContactReason : undefined,
-          tags: parseTags(tagsText),
-          notes,
+          doNotContactReason: doNotContact ? motivo : undefined,
+          tags: parseTags(tagsTexto),
+          notes: notas,
         },
-      });
-    },
+      }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['customer', id] });
+      await qc.invalidateQueries({ queryKey: ['customer', cliente.id] });
       await qc.invalidateQueries({ queryKey: ['customers'] });
+      onSalvo();
     },
   });
 
-  const responses = useQuery({
-    queryKey: ['customerResponses', id],
-    queryFn: () => apiFetch<CustomerResponse[]>(`/customers/${id}/responses`),
-    enabled: Boolean(id),
-  });
-
-  const cases = useQuery({
-    queryKey: ['customerCases', id],
-    queryFn: () => apiFetch<CustomerCase[]>(`/customers/${id}/cases`),
-    enabled: Boolean(id),
-  });
-
-  const interactions = useQuery({
-    queryKey: ['customerInteractions', id],
-    queryFn: () => apiFetch<CustomerInteraction[]>(`/customers/${id}/interactions`),
-    enabled: Boolean(id),
-  });
-
-  const [channel, setChannel] = useState('whatsapp');
-  const [outcome, setOutcome] = useState('');
-  const [interactionNotes, setInteractionNotes] = useState('');
-
-  const createInteraction = useMutation({
-    mutationFn: async () => {
-      return apiFetch<CustomerInteraction>(`/customers/${id}/interactions`, {
-        method: 'POST',
-        json: {
-          channel,
-          direction: 'outbound',
-          outcome: outcome.trim() || undefined,
-          notes: interactionNotes.trim() || undefined,
-        },
-      });
-    },
-    onSuccess: async () => {
-      setOutcome('');
-      setInteractionNotes('');
-      await qc.invalidateQueries({ queryKey: ['customerInteractions', id] });
-    },
-  });
-
-  if (!id) return <div className="text-sm text-rose-700">Cliente inválido</div>;
+  function enviar(e: FormEvent) {
+    e.preventDefault();
+    salvar.mutate();
+  }
 
   return (
-    <div className="grid gap-6">
-      <div className="flex items-start justify-between gap-3">
+    <form className="cartao" aria-labelledby="cd-t-crm" onSubmit={enviar}>
+      <div className="cartao__topo">
         <div>
-          <div className="text-xl font-semibold">Cliente</div>
-          <div className="text-sm text-slate-600">Histórico e cadastros vinculados às respostas</div>
+          <h2 className="cartao__titulo" id="cd-t-crm">
+            Controle do CRM
+          </h2>
+          <p className="cartao__sub">Preferência de contato, tags e observações. Só a equipe vê.</p>
         </div>
-        <Link to="/app/customers" className="text-sm text-slate-600 hover:underline">
-          Voltar
-        </Link>
       </div>
-
-      <Card title="Dados">
-        {customer.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {customer.isError && <div className="text-sm text-rose-700">Falha ao carregar cliente</div>}
-        {customer.data && (
-          <div className="grid gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-slate-600">Identificação e contato</div>
-              <Button variant="secondary" onClick={() => setProfileOpen((v) => !v)}>
-                {profileOpen ? 'Recolher' : 'Editar cadastro'}
-              </Button>
-            </div>
-
-            {profileOpen ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (opcional)" />
-                </div>
-                <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail (opcional)" />
-                </div>
-                <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone (opcional)" />
-                </div>
-                <div className="md:col-span-2">
-                  <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-                  <select
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                    value={originUnitId}
-                    onChange={(e) => setOriginUnitId(e.target.value)}
-                  >
-                    <option value="">Selecione a unidade</option>
-                    {allowedUnits.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                    {originUnitId && !allowedUnits.some((u) => u.id === originUnitId) && customer.data.originUnit && (
-                      <option value={originUnitId}>{customer.data.originUnit.name}</option>
-                    )}
-                  </select>
-                </div>
-                <div className="md:col-span-2 flex items-center justify-end gap-2">
-                  <Button
-                    variant="secondary"
-                    disabled={saveProfile.isPending}
-                    onClick={() => {
-                      setProfileOpen(false);
-                      setName(customer.data.name ?? '');
-                      setEmail(customer.data.email ?? '');
-                      setPhone(customer.data.phone ?? '');
-                      setOriginUnitId(customer.data.originUnitId ?? customer.data.originUnit?.id ?? '');
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button disabled={saveProfile.isPending} onClick={() => saveProfile.mutate()}>
-                    {saveProfile.isPending ? 'Salvando...' : 'Salvar'}
-                  </Button>
-                </div>
-                {saveProfile.isError && (
-                  <div className="md:col-span-2 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                    Falha ao salvar cadastro
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-2 text-sm">
-                <div className="rounded-md bg-slate-50 p-3">
-                  <div className="text-slate-500">Nome</div>
-                  <div className="text-slate-900">{customer.data.name ?? '—'}</div>
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <div className="rounded-md bg-slate-50 p-3">
-                    <div className="text-slate-500">E-mail</div>
-                    <div className="text-slate-900">{customer.data.email ?? '—'}</div>
-                  </div>
-                  <div className="rounded-md bg-slate-50 p-3">
-                    <div className="text-slate-500">Telefone</div>
-                    <div className="text-slate-900">{customer.data.phone ?? '—'}</div>
-                  </div>
-                </div>
-                <div className="rounded-md bg-slate-50 p-3">
-                  <div className="text-slate-500">Unidade</div>
-                  <div className="text-slate-900">{customer.data.originUnit?.name ?? '—'}</div>
-                </div>
+      <div className="gaveta__form">
+        <div className={`cl-consentimento${doNotContact ? '' : ' cl-consentimento--sim'}`}>
+          <Icone nome={doNotContact ? 'cadeado' : 'ok'} />
+          <div style={{ display: 'grid', gap: 8, flex: 1 }}>
+            <label className="cl-chave">
+              <input
+                type="checkbox"
+                checked={doNotContact}
+                disabled={!podeEditar}
+                onChange={(e) => setDoNotContact(e.target.checked)}
+              />
+              Não contatar
+            </label>
+            {cliente.doNotContact && cliente.doNotContactAt && (
+              <span className="cl-mudo">Ativado em {dataHora(cliente.doNotContactAt)}</span>
+            )}
+            {doNotContact && (
+              <div className="campo">
+                <label htmlFor="cd-motivo">
+                  Motivo <span className="cl-mudo">(opcional)</span>
+                </label>
+                <input id="cd-motivo" value={motivo} disabled={!podeEditar} onChange={(e) => setMotivo(e.target.value)} />
               </div>
             )}
-
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="rounded-md bg-slate-50 p-3">
-                <div className="text-slate-500">Primeira interação</div>
-                <div className="text-slate-900">{formatDateTime(customer.data.firstInteractionAt)}</div>
-              </div>
-              <div className="rounded-md bg-slate-50 p-3">
-                <div className="text-slate-500">Última interação</div>
-                <div className="text-slate-900">{formatDateTime(customer.data.lastInteractionAt)}</div>
-              </div>
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="rounded-md bg-slate-50 p-3">
-                <div className="text-slate-500">Não contatar</div>
-                <div className="text-slate-900">{customer.data.doNotContact ? 'Sim' : 'Não'}</div>
-              </div>
-              <div className="rounded-md bg-slate-50 p-3">
-                <div className="text-slate-500">Ativado em</div>
-                <div className="text-slate-900">{formatDateTime(customer.data.doNotContactAt)}</div>
-              </div>
-            </div>
-            <div className="text-xs font-mono text-slate-400">{customer.data.id}</div>
-          </div>
-        )}
-      </Card>
-
-      <Card title="Ações" description="Controle operacional do CRM (tags, observações e preferências)">
-        {!customer.data && <div className="text-sm text-slate-600">Carregue um cliente para editar</div>}
-        {customer.data && (
-          <div className="grid gap-4">
-            <div className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3">
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={doNotContact}
-                  onChange={(e) => setDoNotContact(e.target.checked)}
-                />
-                Não contatar
-              </label>
-              {doNotContact && (
-                <div className="flex-1 min-w-[240px]">
-                  <Input
-                    value={doNotContactReason}
-                    onChange={(e) => setDoNotContactReason(e.target.value)}
-                    placeholder="Motivo (opcional)"
-                  />
-                </div>
-              )}
-              <div className="ml-auto flex items-center gap-2">
-                <Button disabled={saveActions.isPending} onClick={() => saveActions.mutate()}>
-                  {saveActions.isPending ? 'Salvando...' : 'Salvar'}
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Tags</div>
-              <Input value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="Ex: vip, reclamação, retorno" />
-              <div className="mt-1 text-xs text-slate-500">Separe por vírgula</div>
-            </div>
-
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Observações internas</div>
-              <textarea
-                className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Contexto do cliente, acordos, detalhes relevantes..."
-              />
-            </div>
-
-            {saveActions.isError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">Falha ao salvar</div>}
-          </div>
-        )}
-      </Card>
-
-      <Card title="Contato" description="Registre tentativas/retornos para apoiar recuperação e histórico">
-        <div className="grid gap-3 md:grid-cols-[180px_1fr]">
-          <div>
-            <div className="mb-1 text-sm font-medium text-slate-700">Canal</div>
-            <select
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={channel}
-              onChange={(e) => setChannel(e.target.value)}
-            >
-              <option value="whatsapp">WhatsApp</option>
-              <option value="phone">Telefone</option>
-              <option value="email">E-mail</option>
-              <option value="sms">SMS</option>
-              <option value="in_person">Presencial</option>
-            </select>
-          </div>
-          <div>
-            <div className="mb-1 text-sm font-medium text-slate-700">Resultado</div>
-            <Input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="Ex: respondeu, sem retorno, agendado" />
-          </div>
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Notas</div>
-            <textarea
-              className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-              value={interactionNotes}
-              onChange={(e) => setInteractionNotes(e.target.value)}
-              placeholder="Resumo do contato (opcional)"
-            />
-          </div>
-          <div className="md:col-span-2 flex items-center justify-end gap-2">
-            <Button disabled={createInteraction.isPending} onClick={() => createInteraction.mutate()}>
-              {createInteraction.isPending ? 'Registrando...' : 'Registrar contato'}
-            </Button>
           </div>
         </div>
-
-        <div className="mt-4">
-          {interactions.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-          {interactions.isError && <div className="text-sm text-rose-700">Falha ao carregar histórico</div>}
-          {interactions.data && interactions.data.length === 0 && <div className="text-sm text-slate-600">Nenhum contato registrado</div>}
-          {interactions.data && interactions.data.length > 0 && (
-            <div className="overflow-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-slate-500">
-                  <tr>
-                    <th className="py-2 pr-3 font-medium">Data</th>
-                    <th className="py-2 pr-3 font-medium">Canal</th>
-                    <th className="py-2 pr-3 font-medium">Resultado</th>
-                    <th className="py-2 pr-3 font-medium">Notas</th>
-                    <th className="py-2 pr-3 font-medium">Operador</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {interactions.data.map((i) => (
-                    <tr key={i.id} className="align-top">
-                      <td className="py-2 pr-3 whitespace-nowrap">{formatDateTime(i.createdAt)}</td>
-                      <td className="py-2 pr-3">{interactionChannelLabel(i.channel)}</td>
-                      <td className="py-2 pr-3">{i.outcome ?? '—'}</td>
-                      <td className="py-2 pr-3">{i.notes ?? '—'}</td>
-                      <td className="py-2 pr-3">{i.createdByUser?.name ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div className="campo">
+          <label htmlFor="cd-tags">Tags</label>
+          <input
+            id="cd-tags"
+            value={tagsTexto}
+            disabled={!podeEditar}
+            placeholder="Ex.: vip, reclamação, retorno"
+            aria-describedby="cd-tags-dica"
+            onChange={(e) => setTagsTexto(e.target.value)}
+          />
+          <p className="campo__dica" id="cd-tags-dica">
+            Separe por vírgula (até 20).
+          </p>
+          {parseTags(tagsTexto).length > 0 && (
+            <div className="cl-tags" aria-hidden="true">
+              {parseTags(tagsTexto).map((t) => (
+                <span key={t}>{t}</span>
+              ))}
             </div>
           )}
         </div>
-      </Card>
+        <div className="campo">
+          <label htmlFor="cd-notas">Observações internas</label>
+          <textarea
+            id="cd-notas"
+            rows={4}
+            value={notas}
+            disabled={!podeEditar}
+            placeholder="Contexto do cliente, acordos, detalhes relevantes…"
+            onChange={(e) => setNotas(e.target.value)}
+          />
+        </div>
+        {salvar.isError && (
+          <p className="cl-lgpd" role="alert">
+            <Icone nome="alerta" />
+            <span>{erroCliente(salvar.error, 'Falha ao salvar.')}</span>
+          </p>
+        )}
+        {podeEditar && (
+          <div className="gaveta__acoes">
+            <button className="btn btn--primario" type="submit" disabled={salvar.isPending}>
+              {salvar.isPending ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        )}
+      </div>
+    </form>
+  );
+}
 
-      <Card title="Respostas" description="Pesquisas respondidas por este cliente">
-        {responses.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {responses.isError && <div className="text-sm text-rose-700">Falha ao carregar respostas</div>}
-        {responses.data && responses.data.length === 0 && <div className="text-sm text-slate-600">Nenhuma resposta</div>}
-        {responses.data && responses.data.length > 0 && (
-          <div className="overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-slate-500">
+/** Registro de interações (contatos feitos com o cliente) + histórico. */
+function Contatos({ id, podeEditar, onRegistrado }: { id: string; podeEditar: boolean; onRegistrado: () => void }) {
+  const qc = useQueryClient();
+  const [canal, setCanal] = useState('whatsapp');
+  const [resultado, setResultado] = useState('');
+  const [notas, setNotas] = useState('');
+  const interacoes = useQuery({
+    queryKey: ['customerInteractions', id],
+    queryFn: () => apiFetch<CustomerInteraction[]>(`/customers/${id}/interactions`),
+  });
+  const registrar = useMutation({
+    mutationFn: () =>
+      apiFetch<CustomerInteraction>(`/customers/${id}/interactions`, {
+        method: 'POST',
+        json: { channel: canal, direction: 'outbound', outcome: resultado.trim() || undefined, notes: notas.trim() || undefined },
+      }),
+    onSuccess: async () => {
+      setResultado('');
+      setNotas('');
+      await qc.invalidateQueries({ queryKey: ['customerInteractions', id] });
+      onRegistrado();
+    },
+  });
+
+  return (
+    <section className="cartao cl-largo" aria-labelledby="cd-t-contatos">
+      <div className="cartao__topo">
+        <div>
+          <h2 className="cartao__titulo" id="cd-t-contatos">
+            Contatos com o cliente
+          </h2>
+          <p className="cartao__sub">Registre tentativas e retornos para apoiar a recuperação e o histórico.</p>
+        </div>
+      </div>
+      {podeEditar && (
+        <form
+          className="gaveta__form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            registrar.mutate();
+          }}
+        >
+          <div className="campos-2">
+            <div className="campo">
+              <label htmlFor="cd-canal">Canal</label>
+              <select id="cd-canal" value={canal} onChange={(e) => setCanal(e.target.value)}>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="phone">Telefone</option>
+                <option value="email">E-mail</option>
+                <option value="sms">SMS</option>
+                <option value="in_person">Presencial</option>
+              </select>
+            </div>
+            <div className="campo">
+              <label htmlFor="cd-resultado">Resultado</label>
+              <input
+                id="cd-resultado"
+                value={resultado}
+                placeholder="Ex.: respondeu, sem retorno, agendado"
+                onChange={(e) => setResultado(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="campo">
+            <label htmlFor="cd-contato-notas">
+              Notas <span className="cl-mudo">(opcional)</span>
+            </label>
+            <textarea id="cd-contato-notas" rows={3} value={notas} placeholder="Resumo do contato" onChange={(e) => setNotas(e.target.value)} />
+          </div>
+          {registrar.isError && (
+            <p className="cl-lgpd" role="alert">
+              <Icone nome="alerta" />
+              <span>Não foi possível registrar o contato.</span>
+            </p>
+          )}
+          <div className="gaveta__acoes">
+            <button className="btn btn--primario" type="submit" disabled={registrar.isPending}>
+              {registrar.isPending ? 'Registrando…' : 'Registrar contato'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div style={{ marginTop: 18 }}>
+        {interacoes.isLoading && <p className="cl-mudo">Carregando…</p>}
+        {interacoes.isError && <p className="cl-mudo">Falha ao carregar o histórico.</p>}
+        {interacoes.data && interacoes.data.length === 0 && <p className="cl-mudo">Nenhum contato registrado.</p>}
+        {interacoes.data && interacoes.data.length > 0 && (
+          <div className="tabela-rolagem">
+            <table className="tabela cl-tabela-simples">
+              <thead>
                 <tr>
-                  <th className="py-2 pr-3 font-medium">Data</th>
-                  <th className="py-2 pr-3 font-medium">Pesquisa</th>
-                  <th className="py-2 pr-3 font-medium">Unidade</th>
-                  <th className="py-2 pr-3 font-medium">NPS</th>
-                  <th className="py-2 pr-3 font-medium">Comentário</th>
+                  <th scope="col">Data</th>
+                  <th scope="col">Canal</th>
+                  <th scope="col">Resultado</th>
+                  <th scope="col">Notas</th>
+                  <th scope="col">Operador</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {responses.data.map((r) => (
-                  <tr key={r.id} className="align-top">
-                    <td className="py-2 pr-3 whitespace-nowrap">{formatDateTime(r.completedAt ?? r.startedAt)}</td>
-                    <td className="py-2 pr-3">{r.survey.name}</td>
-                    <td className="py-2 pr-3">{r.unit?.name ?? '—'}</td>
-                    <td className="py-2 pr-3">{typeof r.npsScore === 'number' ? r.npsScore : '—'}</td>
-                    <td className="py-2 pr-3">{r.mainComment ?? '—'}</td>
+              <tbody>
+                {interacoes.data.map((i) => (
+                  <tr key={i.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{dataHora(i.createdAt)}</td>
+                    <td>{interactionChannelLabel(i.channel)}</td>
+                    <td className="cl-quebra">{i.outcome ?? '—'}</td>
+                    <td className="cl-quebra">{i.notes ?? '—'}</td>
+                    <td>{i.createdByUser?.name ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </Card>
+      </div>
+    </section>
+  );
+}
 
-      <Card title="Ocorrências" description="Casos abertos para detratores ou tratativas">
-        {cases.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {cases.isError && <div className="text-sm text-rose-700">Falha ao carregar ocorrências</div>}
-        {cases.data && cases.data.length === 0 && <div className="text-sm text-slate-600">Nenhuma ocorrência</div>}
-        {cases.data && cases.data.length > 0 && (
-          <div className="overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-slate-500">
-                <tr>
-                  <th className="py-2 pr-3 font-medium">Status</th>
-                  <th className="py-2 pr-3 font-medium">Prioridade</th>
-                  <th className="py-2 pr-3 font-medium">Unidade</th>
-                  <th className="py-2 pr-3 font-medium">Atualizado</th>
-                  <th className="py-2 pr-3 font-medium">Link</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {cases.data.map((c) => (
-                  <tr key={c.id}>
-                    <td className="py-2 pr-3">{feedbackCaseStatusLabel(c.status)}</td>
-                    <td className="py-2 pr-3">{feedbackCasePriorityLabel(c.priority)}</td>
-                    <td className="py-2 pr-3">{c.unit?.name ?? '—'}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{formatDateTime(c.updatedAt)}</td>
-                    <td className="py-2 pr-3">
-                      <Link to={`/app/feedbacks/${c.surveyResponse.id}`} className="text-sky-700 hover:underline">
-                        Abrir
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+export function CustomerDetailPage() {
+  const params = useParams();
+  const id = params.id ?? '';
+  const pode = usePode();
+  const podeEditar = pode('customer:manage');
+  const podeVerRespostas = pode('response:read');
+  const { unidades } = useUnidadesPermitidas();
+  const [aviso, avisar] = useAviso();
+
+  const customer = useQuery({
+    queryKey: ['customer', id],
+    queryFn: () => apiFetch<Cliente>(`/customers/${id}`),
+    enabled: Boolean(id),
+  });
+  const responses = useQuery({
+    queryKey: ['customerResponses', id],
+    queryFn: () => apiFetch<RespostaCliente[]>(`/customers/${id}/responses`),
+    enabled: Boolean(id) && podeVerRespostas,
+  });
+  const cases = useQuery({
+    queryKey: ['customerCases', id],
+    queryFn: () => apiFetch<OcorrenciaCliente[]>(`/customers/${id}/cases`),
+    enabled: Boolean(id) && podeVerRespostas,
+  });
+
+  if (!id) return <p className="vazio">Cliente inválido</p>;
+  const c = customer.data;
+  const nome = c?.name || 'Cliente sem nome';
+
+  return (
+    <>
+      <div className="cabeca">
+        <div>
+          <p className="trilha">
+            <Link to="/app/customers">Clientes</Link>
+            <span aria-hidden="true">›</span>
+            <span>{c ? nome : 'Cliente'}</span>
+          </p>
+          <div className="cl-cabeca">
+            <span className="avatar" aria-hidden="true">
+              {iniciais(nome)}
+            </span>
+            <div>
+              <h1 className="cabeca__titulo">{customer.isLoading ? 'Carregando…' : nome}</h1>
+              <p className="cabeca__desc">{c ? origemTexto(c.source) : 'Histórico e cadastro vinculados às respostas'}</p>
+            </div>
           </div>
-        )}
-      </Card>
-    </div>
+        </div>
+        <div className="cabeca__acoes">
+          <Link className="btn btn--secundario" to="/app/customers">
+            Voltar para a lista
+          </Link>
+        </div>
+      </div>
+
+      {customer.isError && (
+        <p className="vazio cartao">
+          <strong>Não foi possível carregar o cliente</strong>
+          Ele pode não existir ou estar em uma unidade que você não acessa.
+        </p>
+      )}
+
+      {c && (
+        <div className="cl-pagina">
+          <section className="cartao" aria-labelledby="cd-t-cadastro">
+            <div className="cartao__topo">
+              <div>
+                <h2 className="cartao__titulo" id="cd-t-cadastro">
+                  Cadastro
+                </h2>
+                <p className="cartao__sub">Identificação, contato e aceite de ofertas.</p>
+              </div>
+            </div>
+            <DadosClienteForm
+              key={c.id}
+              cliente={c}
+              unidades={unidades}
+              podeEditar={podeEditar}
+              prefixo="cd"
+              onSalvo={() => avisar('Cadastro salvo')}
+            />
+            <p className="cl-id" style={{ marginTop: 12 }}>
+              {c.id}
+            </p>
+          </section>
+
+          <div className="cl-coluna">
+            <section className="cartao" aria-labelledby="cd-t-resumo">
+              <div className="cartao__topo">
+                <h2 className="cartao__titulo" id="cd-t-resumo">
+                  Resumo
+                </h2>
+              </div>
+              <div className="rk-detalhe">
+                <div className="rk-detalhe__numeros">
+                  <div>
+                    <span>Respostas</span>
+                    <strong>{c.totalResponses ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Última nota</span>
+                    <strong>{typeof c.lastNpsScore === 'number' ? c.lastNpsScore : '—'}</strong>
+                  </div>
+                  <div>
+                    <span>Satisfação média</span>
+                    <strong>
+                      {typeof c.satisfactionAvg === 'number' ? c.satisfactionAvg.toFixed(1).replace('.', ',') : '—'}
+                    </strong>
+                  </div>
+                </div>
+                <dl className="cl-linhas">
+                  <div>
+                    <dt>Primeira interação</dt>
+                    <dd>{dataHora(c.firstInteractionAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Última interação</dt>
+                    <dd>{dataHora(c.lastInteractionAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Cadastrado em</dt>
+                    <dd>{dataHora(c.createdAt)}</dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+
+            <AcoesCrm key={c.id} cliente={c} podeEditar={podeEditar} onSalvo={() => avisar('Alterações salvas')} />
+          </div>
+
+          <Contatos id={id} podeEditar={podeEditar} onRegistrado={() => avisar('Contato registrado')} />
+
+          {podeVerRespostas && (
+            <section className="cartao cl-largo" aria-labelledby="cd-t-respostas">
+              <div className="cartao__topo">
+                <div>
+                  <h2 className="cartao__titulo" id="cd-t-respostas">
+                    Respostas
+                  </h2>
+                  <p className="cartao__sub">Pesquisas respondidas por este cliente.</p>
+                </div>
+              </div>
+              {responses.isLoading && <p className="cl-mudo">Carregando…</p>}
+              {responses.isError && <p className="cl-mudo">Falha ao carregar as respostas.</p>}
+              {responses.data && responses.data.length === 0 && <p className="cl-mudo">Nenhuma resposta.</p>}
+              {responses.data && responses.data.length > 0 && (
+                <div className="tabela-rolagem">
+                  <table className="tabela cl-tabela-simples">
+                    <thead>
+                      <tr>
+                        <th scope="col">Data</th>
+                        <th scope="col">Pesquisa</th>
+                        <th scope="col">Unidade</th>
+                        <th scope="col">Nota</th>
+                        <th scope="col">Comentário</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {responses.data.map((r) => (
+                        <tr key={r.id}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{dataHora(r.completedAt ?? r.startedAt)}</td>
+                          <td>{r.survey.name}</td>
+                          <td>{r.unit?.name ?? '—'}</td>
+                          <td>{typeof r.npsScore === 'number' ? <NotaSelo nota={r.npsScore} /> : '—'}</td>
+                          <td className="cl-quebra">{r.mainComment ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {podeVerRespostas && (
+            <section className="cartao cl-largo" aria-labelledby="cd-t-ocs">
+              <div className="cartao__topo">
+                <div>
+                  <h2 className="cartao__titulo" id="cd-t-ocs">
+                    Ocorrências
+                  </h2>
+                  <p className="cartao__sub">Casos abertos para detratores ou tratativas.</p>
+                </div>
+              </div>
+              {cases.isLoading && <p className="cl-mudo">Carregando…</p>}
+              {cases.isError && <p className="cl-mudo">Falha ao carregar as ocorrências.</p>}
+              {cases.data && cases.data.length === 0 && <p className="cl-mudo">Nenhuma ocorrência.</p>}
+              {cases.data && cases.data.length > 0 && (
+                <div className="tabela-rolagem">
+                  <table className="tabela cl-tabela-simples">
+                    <thead>
+                      <tr>
+                        <th scope="col">Etapa</th>
+                        <th scope="col">Prioridade</th>
+                        <th scope="col">Unidade</th>
+                        <th scope="col">Atualizada</th>
+                        <th scope="col">
+                          <span className="visualmente-oculto">Abrir</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cases.data.map((o) => (
+                        <tr key={o.id}>
+                          <td>
+                            <EtapaOcorrencia status={o.status} />
+                          </td>
+                          <td>{feedbackCasePriorityLabel(o.priority)}</td>
+                          <td>{o.unit?.name ?? '—'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }} title={dataHora(o.updatedAt)}>
+                            {quando(o.updatedAt)}
+                          </td>
+                          <td>
+                            <Link className="link-texto" to={`/app/feedbacks/${o.surveyResponse.id}`}>
+                              Abrir
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      )}
+
+      {aviso}
+    </>
   );
 }

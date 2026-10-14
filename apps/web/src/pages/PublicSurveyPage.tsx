@@ -1,27 +1,11 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Scale1to10 } from '../components/survey/Scale1to10';
-import { Stars1to5 } from '../components/survey/Stars1to5';
-import { ThumbsChoice } from '../components/survey/ThumbsChoice';
-import { WhyFollowUp } from '../components/survey/WhyFollowUp';
+import { ApiError, apiFetch } from '../lib/api';
 import { randomId } from '../lib/id';
-import {
-  isAnswerMissing,
-  isPrimaryRatingType,
-  isScaleExtraQuestionType,
-  isScaleScore,
-  isSingleChoiceQuestionType,
-  isStarsQuestionType,
-  isStarsScore,
-  isThumbsQuestionType,
-  isThumbsValue,
-  packAnswerValue,
-  shouldShowWhyFollowUp,
-} from '../lib/question-types';
+import { Icone } from '../components/painel/Icone';
+import { FormularioCliente, type AtendenteCliente, type EnvioCliente } from '../components/survey/FormularioCliente';
+import '../styles/painel-pesquisas.css';
 
 type PublicOption = { id: string; label: string; value: string; order: number; negative?: boolean };
 type PublicQuestion = {
@@ -35,6 +19,7 @@ type PublicQuestion = {
   config?: unknown;
 };
 type PublicSurvey = {
+  tradeName?: string | null;
   settings?: { badScoreThreshold?: number };
   unit?: { id: string; name: string; googleBusinessUrl: string | null } | null;
   survey: {
@@ -49,13 +34,17 @@ type PublicSurvey = {
   };
 };
 
-type PublicEmployee = { id: string; name: string; code: string | null; roleTitle: string | null };
+function codigoErro(err: unknown) {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: unknown } | string | null;
+    const msg = body && typeof body === 'object' ? body.message : body;
+    if (typeof msg === 'string') return msg;
+    if (Array.isArray(msg)) return msg.join(', ');
+  }
+  return err instanceof Error ? err.message : '';
+}
 
-type QuestionConfig = {
-  when?: { npsMin?: number; npsMax?: number };
-  requiredWhenVisible?: boolean;
-};
-
+/** Pesquisa pública que o cliente responde (link/QR Code da unidade), no visual do protótipo (responder.html). */
 export function PublicSurveyPage() {
   const params = useParams();
   const token = params.token ?? '';
@@ -64,639 +53,157 @@ export function PublicSurveyPage() {
     queryKey: ['publicSurvey', token],
     queryFn: () => apiFetch<PublicSurvey>(`/public/surveys/${token}`),
     enabled: Boolean(token),
+    retry: false,
   });
-
-  const questions = useMemo(() => (survey.data?.survey.questions ?? []).slice().sort((a, b) => a.order - b.order), [survey.data]);
-  const npsQuestion = useMemo(() => questions.find((q) => isPrimaryRatingType(q.type)) ?? null, [questions]);
-  const badScoreThreshold = useMemo(() => {
-    const v = survey.data?.settings?.badScoreThreshold;
-    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
-  }, [survey.data]);
-
-  const [answers, setAnswers] = useState<Record<string, unknown>>(() => ({}));
-  const [whys, setWhys] = useState<Record<string, string>>(() => ({}));
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [identify, setIdentify] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerDocument, setCustomerDocument] = useState('');
 
   const collectEmployee = Boolean(survey.data?.survey.collectEmployee);
-  const collectCustomer = Boolean(survey.data?.survey.collectCustomer);
-  const identityRequired = collectCustomer && survey.data?.survey.anonymousAllowed === false;
-  const [employeeSearch, setEmployeeSearch] = useState('');
-  const [employeeQuery, setEmployeeQuery] = useState('');
-  const [employeeOpen, setEmployeeOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<PublicEmployee | null>(null);
-
+  const [busca, setBusca] = useState('');
+  const [consulta, setConsulta] = useState('');
   useEffect(() => {
-    const t = setTimeout(() => setEmployeeQuery(employeeSearch), 250);
+    const t = setTimeout(() => setConsulta(busca), 250);
     return () => clearTimeout(t);
-  }, [employeeSearch]);
-
-  useEffect(() => {
-    if (identityRequired) setIdentify(true);
-  }, [identityRequired]);
-
-  useEffect(() => {
-    if (!employeeOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      if (!target.closest('[data-employee-box]')) setEmployeeOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [employeeOpen]);
+  }, [busca]);
 
   const employees = useQuery({
-    queryKey: ['publicSurveyEmployees', token, employeeQuery],
-    queryFn: () => apiFetch<PublicEmployee[]>(`/public/surveys/${token}/employees?q=${encodeURIComponent(employeeQuery)}`),
-    enabled: Boolean(token) && collectEmployee && !submitted,
+    queryKey: ['publicSurveyEmployees', token, consulta],
+    queryFn: () =>
+      apiFetch<AtendenteCliente[]>(`/public/surveys/${token}/employees?q=${encodeURIComponent(consulta)}`),
+    enabled: Boolean(token) && collectEmployee,
   });
 
-  const selectedNps = useMemo(() => {
-    if (!npsQuestion) return null;
-    const v = answers[npsQuestion.id];
-    if (typeof v === 'number' && Number.isFinite(v)) return v;
-    return null;
-  }, [answers, npsQuestion]);
-
-  const effectiveNpsForVisibility = selectedNps ?? 10;
-
-  const visibleQuestions = useMemo(() => {
-    return questions.filter((q) => {
-      const cfg = q.config as QuestionConfig | null | undefined;
-      const when = cfg?.when;
-      if (!when) return true;
-      if (typeof when.npsMin === 'number' && effectiveNpsForVisibility < when.npsMin) return false;
-      if (typeof when.npsMax === 'number' && effectiveNpsForVisibility > when.npsMax) return false;
-      return true;
-    });
-  }, [questions, effectiveNpsForVisibility]);
-
-  const otherVisibleQuestions = useMemo(() => {
-    return visibleQuestions.filter((q) => (npsQuestion ? q.id !== npsQuestion.id : true));
-  }, [visibleQuestions, npsQuestion]);
-
-  const steps = useMemo(() => {
-    const out: Array<{ key: string; type: 'employee' | 'nps' | 'question'; question?: PublicQuestion }> = [];
-    if (collectEmployee) out.push({ key: 'employee', type: 'employee' });
-    if (npsQuestion) out.push({ key: `nps:${npsQuestion.id}`, type: 'nps', question: npsQuestion });
-    for (const q of otherVisibleQuestions) out.push({ key: `q:${q.id}`, type: 'question', question: q });
-    return out;
-  }, [collectEmployee, npsQuestion, otherVisibleQuestions]);
-
-  const [stepIndex, setStepIndex] = useState(0);
-
+  const empresa = survey.data?.tradeName?.trim() || '';
   useEffect(() => {
-    if (stepIndex > steps.length - 1) setStepIndex(Math.max(steps.length - 1, 0));
-  }, [stepIndex, steps.length]);
+    if (survey.data) {
+      document.title = [survey.data.survey.name, empresa, survey.data.unit?.name].filter(Boolean).join(' — ');
+    }
+  }, [survey.data, empresa]);
 
-  const submit = useMutation({
-    mutationFn: async () => {
-      if (!npsQuestion) throw new Error('missing_nps');
-      const idempotencyKey = sessionStorage.getItem(`opaa_pub_${token}`) ?? randomId(16);
-      sessionStorage.setItem(`opaa_pub_${token}`, idempotencyKey);
-
-      const outAnswers: Array<{ questionId: string; value: unknown }> = [];
-      const nextAnswers: Record<string, unknown> = { ...answers };
-      const npsValue = nextAnswers[npsQuestion.id];
-      if (!isScaleScore(npsValue)) {
-        throw new Error('missing_required');
-      }
-      nextAnswers[npsQuestion.id] = npsValue;
-
-      for (const q of visibleQuestions) {
-        const cfg = q.config as QuestionConfig | null | undefined;
-        const required = Boolean(q.required || cfg?.requiredWhenVisible);
-        const v = nextAnswers[q.id];
-        const why = whys[q.id];
-        const missing = isScaleExtraQuestionType(q.type)
-          ? !isScaleScore(v)
-          : isStarsQuestionType(q.type)
-            ? !isStarsScore(v)
-            : isThumbsQuestionType(q.type)
-              ? !isThumbsValue(v)
-              : isAnswerMissing(v);
-
-        if (required && missing) {
-          throw new Error('missing_required');
-        }
-
-        if (missing) continue;
-
-        const label = isSingleChoiceQuestionType(q.type)
-          ? q.options.find((o) => o.value === v)?.label
-          : undefined;
-        const includeWhy = shouldShowWhyFollowUp({
-          type: q.type,
-          value: v,
-          options: q.options,
-        });
-        const packed = packAnswerValue(typeof v === 'string' ? v.trim() : v, {
-          why: includeWhy ? why : undefined,
-          label,
-        });
-        outAnswers.push({ questionId: q.id, value: packed });
-      }
-
-      const npsWhy =
-        npsQuestion &&
-        shouldShowWhyFollowUp({ type: npsQuestion.type, value: nextAnswers[npsQuestion.id] })
-          ? whys[npsQuestion.id]
-          : undefined;
-
-      const customer = identify || identityRequired
-        ? {
-            name: customerName.trim() || undefined,
-            email: customerEmail.trim() || undefined,
-            phone: customerPhone.trim() || undefined,
-            document: customerDocument.trim() || undefined,
-          }
-        : undefined;
-
-      const hasCustomerField = Boolean(customer?.name || customer?.email || customer?.phone || customer?.document);
-      if (identityRequired && !hasCustomerField) {
-        throw new Error('missing_identity');
-      }
-
-      return apiFetch<{ responseId: string; npsClass: string }>('/public/responses', {
+  async function enviar(envio: EnvioCliente) {
+    const chave = `opaa_pub_${token}`;
+    let idempotencyKey: string | null = null;
+    try {
+      idempotencyKey = sessionStorage.getItem(chave);
+    } catch {
+      /* sem armazenamento */
+    }
+    if (!idempotencyKey) idempotencyKey = randomId(16);
+    try {
+      sessionStorage.setItem(chave, idempotencyKey);
+    } catch {
+      /* ignora */
+    }
+    try {
+      await apiFetch<{ responseId: string; npsClass: string }>('/public/responses', {
         method: 'POST',
         json: {
           publicToken: token,
           idempotencyKey,
-          employeeId: selectedEmployee?.id ?? undefined,
-          complaint: npsWhy?.trim() || undefined,
-          answers: outAnswers,
-          customer: hasCustomerField ? customer : undefined,
+          employeeId: envio.employeeId,
+          complaint: envio.complaint,
+          answers: envio.answers,
+          customer: envio.customer,
           clientMetadata: { ua: navigator.userAgent },
         },
       });
-    },
-    onSuccess: () => {
-      setFormError(null);
-      setSubmitted(true);
-      sessionStorage.removeItem(`opaa_pub_${token}`);
-    },
-  });
-
-  function setAnswer(questionId: string, value: unknown) {
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-  }
-
-  function setWhy(questionId: string, value: string) {
-    setWhys((prev) => ({ ...prev, [questionId]: value }));
-  }
-
-  function isQuestionAnswered(q: PublicQuestion, value: unknown) {
-    if (isScaleExtraQuestionType(q.type) || isPrimaryRatingType(q.type)) return isScaleScore(value);
-    if (isStarsQuestionType(q.type)) return isStarsScore(value);
-    if (isThumbsQuestionType(q.type)) return isThumbsValue(value);
-    return !isAnswerMissing(value);
-  }
-
-  function canGoNext() {
-    const step = steps[stepIndex];
-    if (!step) return false;
-    if (step.type === 'employee') return true;
-    if (step.type === 'nps') return isScaleScore(selectedNps);
-    if (step.type === 'question' && step.question) {
-      const q = step.question;
-      const cfg = q.config as QuestionConfig | null | undefined;
-      const required = Boolean(q.required || cfg?.requiredWhenVisible);
-      const v = answers[q.id];
-      return required ? isQuestionAnswered(q, v) : true;
+    } catch (err) {
+      const code = codigoErro(err);
+      if (code === 'customer_identity_required') throw new Error(code);
+      throw new Error('Falha ao enviar. Tente novamente.');
     }
-    return true;
+    try {
+      sessionStorage.removeItem(chave);
+    } catch {
+      /* ignora */
+    }
   }
 
-  if (survey.isLoading) {
-    return <div className="flex min-h-full items-center justify-center bg-slate-50 p-6 text-sm text-slate-600">Carregando...</div>;
+  const rodape = (
+    <p className="pub__rodape">
+      <img src="/icon-opiina.png" alt="" width={16} height={16} />
+      Pesquisa feita com Opiina
+      <span aria-hidden="true">·</span>
+      Desenvolvido por{' '}
+      <a href="https://devmais.com" target="_blank" rel="noreferrer">
+        Dev+
+      </a>
+    </p>
+  );
+
+  if (survey.isLoading || !token || survey.isError || !survey.data) {
+    const carregando = survey.isLoading;
+    return (
+      <div className="painel pub">
+        <main className="pub__pagina">
+          <div className="pub__cartao">
+            <div className="cli">
+              <div className="cli__marca">
+                <img src="/icon-opiina.png" alt="" width={22} height={22} />
+                Opiina
+              </div>
+              {carregando ? (
+                <p className="cli__desc" role="status">
+                  Carregando a pesquisa…
+                </p>
+              ) : (
+                <div className="cli__fim">
+                  <span className="cli__fim-icone pub__aviso-icone" aria-hidden="true">
+                    <Icone nome="alerta" />
+                  </span>
+                  <h1 className="cli__titulo">Pesquisa não encontrada</h1>
+                  <p className="cli__desc">
+                    Confira o link ou aponte a câmera de novo para o QR Code. Se não der certo, avise a equipe da casa.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          {rodape}
+        </main>
+      </div>
+    );
   }
 
-  if (survey.isError || !survey.data) {
-    return <div className="flex min-h-full items-center justify-center bg-slate-50 p-6 text-sm text-rose-700">Pesquisa não encontrada</div>;
-  }
+  const d = survey.data;
+  const threshold =
+    typeof d.settings?.badScoreThreshold === 'number' && Number.isFinite(d.settings.badScoreThreshold)
+      ? Math.round(d.settings.badScoreThreshold)
+      : 6;
+  const coletarCliente = Boolean(d.survey.collectCustomer);
 
   return (
-    <div className="min-h-full bg-slate-50 p-4 md:p-10">
-      <div className={['mx-auto flex w-full max-w-xl flex-col gap-6', collectCustomer ? 'pb-44' : 'pb-8'].join(' ')}>
-        <div className="text-center">
-          <img
-            src="/logo-opiina.png"
-            alt="Opiina"
-            className="mx-auto mb-4 h-20 drop-shadow-sm md:h-28"
-            onError={(e) => {
-              const el = e.currentTarget;
-              if (el.src.endsWith('/logo.svg')) return;
-              el.src = '/logo.svg';
-            }}
-          />
-          <div className="text-xl font-semibold text-slate-900">{survey.data.survey.name}</div>
-          {survey.data.survey.description && <div className="text-sm text-slate-600">{survey.data.survey.description}</div>}
-        </div>
-
-        {submitted ? (
-          <Card title="Obrigado!" description="Sua resposta foi registrada.">
-            <div className="text-sm text-slate-700">{survey.data.survey.outroMessage ?? 'Você pode fechar esta página.'}</div>
-            {typeof selectedNps === 'number' &&
-              selectedNps > badScoreThreshold &&
-              survey.data.unit?.googleBusinessUrl &&
-              survey.data.unit.googleBusinessUrl.trim().length > 0 && (
-                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="text-sm font-semibold text-emerald-900">Nos ajude com um comentário no Google</div>
-                  <div className="mt-1 text-sm text-emerald-800">
-                    Se você teve uma boa experiência, deixe um comentário no Google Meu Negócio da unidade.
-                  </div>
-                  <a
-                    className="mt-3 inline-flex h-10 items-center justify-center rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
-                    href={survey.data.unit.googleBusinessUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Avaliar no Google
-                  </a>
-                </div>
-              )}
-          </Card>
-        ) : (
-          <Card>
-            <div className="grid gap-4">
-              {survey.data.survey.introMessage && stepIndex === 0 && (
-                <div className="text-sm text-slate-700">{survey.data.survey.introMessage}</div>
-              )}
-
-              {(() => {
-                const step = steps[stepIndex];
-                if (!step) return null;
-
-                if (step.type === 'employee') {
-                  return (
-                    <div className="relative" data-employee-box>
-                      <div className="mb-2 text-sm font-medium text-slate-800">Atendente (opcional)</div>
-                      <input
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                        value={employeeSearch}
-                        onChange={(e) => {
-                          setEmployeeSearch(e.target.value);
-                          setEmployeeOpen(true);
-                          setSelectedEmployee(null);
-                        }}
-                        onFocus={() => setEmployeeOpen(true)}
-                        placeholder="Digite o nome do atendente"
-                      />
-                      {selectedEmployee && (
-                        <div className="mt-2 text-xs text-slate-600">
-                          Selecionado: <span className="font-medium text-slate-900">{selectedEmployee.name}</span>
-                        </div>
-                      )}
-                      {employeeOpen && (
-                        <div className="absolute z-10 mt-2 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
-                          {employees.isLoading && <div className="px-3 py-2 text-sm text-slate-600">Carregando...</div>}
-                          {employees.isError && (
-                            <div className="px-3 py-2 text-sm text-rose-700">Falha ao carregar atendentes</div>
-                          )}
-                          {employees.data && employees.data.length === 0 && (
-                            <div className="px-3 py-2 text-sm text-slate-600">Nenhum atendente encontrado</div>
-                          )}
-                          {employees.data && employees.data.length > 0 && (
-                            <div className="max-h-60 overflow-auto">
-                              {employees.data.map((e) => (
-                                <button
-                                  key={e.id}
-                                  type="button"
-                                  className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                                  onClick={() => {
-                                    setSelectedEmployee(e);
-                                    setEmployeeSearch(e.name);
-                                    setEmployeeOpen(false);
-                                  }}
-                                >
-                                  <div>
-                                    <div className="font-medium text-slate-900">{e.name}</div>
-                                    {(e.roleTitle || e.code) && (
-                                      <div className="text-xs text-slate-500">{[e.roleTitle, e.code].filter(Boolean).join(' • ')}</div>
-                                    )}
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="border-t border-slate-100 px-3 py-2">
-                            <button
-                              type="button"
-                              className="text-xs font-medium text-slate-600 hover:underline"
-                              onClick={() => {
-                                setSelectedEmployee(null);
-                                setEmployeeSearch('');
-                                setEmployeeOpen(false);
-                              }}
-                            >
-                              Limpar seleção
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                if (step.type === 'nps' && step.question) {
-                  const q = step.question;
-                  const cfg = q.config as QuestionConfig | null | undefined;
-                  const required = Boolean(q.required || cfg?.requiredWhenVisible);
-                  const label = required ? `${q.title} *` : q.title;
-                  return (
-                    <div>
-                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <Scale1to10 value={selectedNps} onChange={(value) => setAnswer(q.id, value)} />
-                      {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                      {shouldShowWhyFollowUp({ type: q.type, value: selectedNps }) && (
-                        <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
-                      )}
-                    </div>
-                  );
-                }
-
-                if (step.type === 'question' && step.question) {
-                  const q = step.question;
-                  const cfg = q.config as QuestionConfig | null | undefined;
-                  const required = Boolean(q.required || cfg?.requiredWhenVisible);
-                  const label = required ? `${q.title} *` : q.title;
-
-                  if (isScaleExtraQuestionType(q.type)) {
-                    const raw = answers[q.id];
-                    const v = isScaleScore(raw) ? raw : null;
-                    return (
-                      <div>
-                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <Scale1to10 value={v} onChange={(value) => setAnswer(q.id, value)} />
-                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                        {shouldShowWhyFollowUp({ type: q.type, value: raw }) && (
-                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
-                        )}
-                      </div>
-                    );
-                  }
-
-                  if (isThumbsQuestionType(q.type)) {
-                    const raw = answers[q.id];
-                    const v = isThumbsValue(raw) ? raw : null;
-                    return (
-                      <div>
-                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <ThumbsChoice value={v} onChange={(value) => setAnswer(q.id, value)} />
-                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                        {shouldShowWhyFollowUp({ type: q.type, value: raw }) && (
-                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
-                        )}
-                      </div>
-                    );
-                  }
-
-                  if (isStarsQuestionType(q.type)) {
-                    const raw = answers[q.id];
-                    const v = isStarsScore(raw) ? raw : null;
-                    return (
-                      <div>
-                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <Stars1to5 value={v} onChange={(value) => setAnswer(q.id, value)} />
-                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                        {shouldShowWhyFollowUp({ type: q.type, value: raw }) && (
-                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
-                        )}
-                      </div>
-                    );
-                  }
-
-                  if (q.type === 'text_short') {
-                    const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
-                    return (
-                      <div>
-                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <input
-                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                          value={v}
-                          onChange={(e) => setAnswer(q.id, e.target.value)}
-                          placeholder="Digite aqui"
-                        />
-                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                      </div>
-                    );
-                  }
-
-                  if (q.type === 'text_long') {
-                    const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
-                    return (
-                      <div>
-                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <textarea
-                          className="min-h-28 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                          value={v}
-                          onChange={(e) => setAnswer(q.id, e.target.value)}
-                          placeholder="Escreva aqui"
-                        />
-                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                      </div>
-                    );
-                  }
-
-                  if (isSingleChoiceQuestionType(q.type) && q.options.length > 0) {
-                    const v = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
-                    const options = q.options.slice().sort((a, b) => a.order - b.order);
-                    return (
-                      <div>
-                        <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                        <div className="grid gap-2">
-                          {options.map((o) => (
-                            <label
-                              key={o.id}
-                              className={[
-                                'flex items-center gap-3 rounded-md border px-3 py-2 text-sm',
-                                v === o.value
-                                  ? 'border-sky-600 bg-sky-50 text-slate-900'
-                                  : 'border-slate-200 bg-white text-slate-700',
-                              ].join(' ')}
-                            >
-                              <input
-                                type="radio"
-                                name={`q-${q.id}`}
-                                className="h-4 w-4 border-slate-300 text-sky-600"
-                                checked={v === o.value}
-                                onChange={() => setAnswer(q.id, o.value)}
-                              />
-                              {o.label}
-                            </label>
-                          ))}
-                        </div>
-                        {q.description && <div className="mt-2 text-xs text-slate-500">{q.description}</div>}
-                        {shouldShowWhyFollowUp({ type: q.type, value: v, options }) && (
-                          <WhyFollowUp value={whys[q.id] ?? ''} onChange={(value) => setWhy(q.id, value)} />
-                        )}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div>
-                      <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
-                      <div className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                        Tipo de pergunta não suportado: {q.type}
-                      </div>
-                    </div>
-                  );
-                }
-
-                return null;
-              })()}
-
-              <div className="flex items-center justify-between gap-3">
-                <Button
-                  variant="secondary"
-                  disabled={stepIndex === 0}
-                  onClick={() => {
-                    setFormError(null);
-                    setStepIndex((i) => Math.max(0, i - 1));
-                  }}
-                >
-                  Voltar
-                </Button>
-
-                {stepIndex < steps.length - 1 ? (
-                  <Button
-                    disabled={!canGoNext()}
-                    onClick={() => {
-                      if (!canGoNext()) {
-                        setFormError('Preencha os campos obrigatórios para continuar.');
-                        return;
-                      }
-                      setFormError(null);
-                      setStepIndex((i) => Math.min(steps.length - 1, i + 1));
-                    }}
-                  >
-                    Próximo
-                  </Button>
-                ) : (
-                  <Button
-                    disabled={submit.isPending || !canGoNext()}
-                    onClick={() => {
-                      const hasIdentityField = Boolean(
-                        customerName.trim() || customerEmail.trim() || customerPhone.trim() || customerDocument.trim(),
-                      );
-                      if (identityRequired && !hasIdentityField) {
-                        setFormError('Informe nome, e-mail ou telefone para se identificar.');
-                        return;
-                      }
-                      setFormError(null);
-                      submit.mutate(undefined, {
-                        onError: (err) => {
-                          const code = err instanceof Error ? err.message : '';
-                          if (code === 'missing_required') {
-                            setFormError('Preencha os campos obrigatórios para continuar.');
-                            return;
-                          }
-                          if (code === 'missing_identity' || code === 'customer_identity_required') {
-                            setFormError('Informe nome, e-mail ou telefone para se identificar.');
-                            return;
-                          }
-                          setFormError('Falha ao enviar. Tente novamente.');
-                        },
-                      });
-                    }}
-                  >
-                    {submit.isPending ? 'Enviando...' : 'Enviar'}
-                  </Button>
-                )}
-              </div>
-
-              {formError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{formError}</div>}
-            </div>
-          </Card>
+    <div className="painel pub">
+      <FormularioCliente
+        empresa={empresa}
+        unidade={d.unit?.name ?? null}
+        nome={d.survey.name}
+        descricao={d.survey.description}
+        introMessage={d.survey.introMessage}
+        outroMessage={d.survey.outroMessage}
+        perguntas={d.survey.questions.map((q) => ({
+          ...q,
+          options: q.options.slice().sort((a, b) => a.order - b.order),
+        }))}
+        coletarAtendente={collectEmployee}
+        coletarCliente={coletarCliente}
+        clienteObrigatorio={coletarCliente && d.survey.anonymousAllowed === false}
+        googleUrl={d.unit?.googleBusinessUrl ?? null}
+        badScoreThreshold={threshold}
+        atendentes={employees.data}
+        atendentesCarregando={employees.isLoading}
+        atendentesErro={employees.isError}
+        onBuscarAtendente={setBusca}
+        onEnviar={enviar}
+      >
+        {({ conteudo, pop, popAberto }) => (
+          <>
+            <main className="pub__pagina" inert={popAberto || undefined}>
+              <div className="pub__cartao">{conteudo}</div>
+              {rodape}
+            </main>
+            {pop}
+          </>
         )}
-        <footer className="pt-6 text-center text-xs text-slate-500">
-          Desenvolvido por{' '}
-          <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">
-            Dev+
-          </a>
-        </footer>
-      </div>
-
-      {!submitted && collectCustomer && (
-        <div className="fixed bottom-4 left-1/2 w-[min(640px,calc(100%-2rem))] -translate-x-1/2">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-slate-900">
-                  {identityRequired ? 'Identificação (obrigatória)' : 'Identificação (opcional)'}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {identityRequired
-                    ? 'Informe ao menos um dos campos abaixo para enviar a pesquisa.'
-                    : 'Você pode se identificar em qualquer momento.'}
-                </div>
-              </div>
-              {!identityRequired && (
-                <button
-                  type="button"
-                  className={[
-                    'h-10 rounded-md border px-4 text-sm font-medium',
-                    identify ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                  ].join(' ')}
-                  onClick={() => setIdentify((v) => !v)}
-                >
-                  {identify ? 'Não quero me identificar' : 'Quero me identificar'}
-                </button>
-              )}
-            </div>
-
-            {(identify || identityRequired) && (
-              <div className="mt-4 grid gap-3">
-                <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">Nome</div>
-                  <input
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
-                    <input
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      inputMode="email"
-                    />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
-                    <input
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      inputMode="tel"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-1 text-sm font-medium text-slate-700">CPF (se não tiver telefone)</div>
-                  <input
-                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                    value={customerDocument}
-                    onChange={(e) => setCustomerDocument(e.target.value)}
-                    inputMode="numeric"
-                    placeholder="Somente se o telefone não for informado"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      </FormularioCliente>
     </div>
   );
 }

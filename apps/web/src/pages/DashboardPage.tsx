@@ -1,138 +1,175 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { useNavigate } from 'react-router-dom';
-import { sentimentLabel, sentimentThemeLabel } from '../lib/labels';
+import { Icone } from '../components/painel/Icone';
+import { useAuthMe, usePode } from '../components/painel/usePainel';
+import { GraficoTendencia, type SemanaNps } from '../components/painel/dashboard/GraficoTendencia';
+import { AvaliacoesExternas, type ReviewPlatformCard } from '../components/painel/dashboard/AvaliacoesExternas';
+import { PrecisaAtencao, type CasesSummary, type CasoUrgente } from '../components/painel/dashboard/PrecisaAtencao';
+import { ElogiosReclamacoes, TemasIA, type SentimentSummary } from '../components/painel/dashboard/AnaliseSentimento';
+import {
+  classeVariacao,
+  dataLonga,
+  diasEntre,
+  npsDe,
+  numero,
+  percentuaisNps,
+  somarDias,
+  textoVariacao,
+  toIsoDate,
+} from '../components/painel/dashboard/util';
+import '../styles/painel-dashboard.css';
 
 type Unit = { id: string; name: string };
-type AuthMe = { name: string };
 type NpsSummary = { total: number; promoters: number; passives: number; detractors: number; nps: number | null };
-type NpsByUnitRow = NpsSummary & { unitId: string | null; unitName: string | null };
-type NpsByUnit = { units: NpsByUnitRow[] };
 type NpsByDayPoint = NpsSummary & { date: string };
 type NpsByDay = { points: NpsByDayPoint[] };
-type CasesSummary = {
-  totals: { total: number; open: number; closed: number };
-  assignees: { unassigned: number; assigned: number };
-  due: { overdue: number; today: number; next7: number; noDue: number };
-  byStatus: Record<string, number>;
-  byPriority: Record<string, number>;
+type RankingUnitRow = {
+  rank: number;
+  unitId: string | null;
+  unitName: string;
+  total: number;
+  nps: number | null;
+  promoterPct: number | null;
+  detractorPct: number | null;
+  cases: { open: number };
 };
+type RankingSummary = { units: RankingUnitRow[] };
 
-type SentimentCounts = { elogio: number; reclamacao: number; neutro: number };
-type SentimentThemeRow = SentimentCounts & { theme: string; total: number };
-type SentimentSummary = {
-  responses: number;
-  classified: number;
-  unclassified: number;
-  counts: SentimentCounts;
-  percents: SentimentCounts;
-  byTheme: SentimentThemeRow[];
-  groqConfigured: boolean;
-};
+const PERIODOS: Record<number, string> = { 7: 'Últimos 7 dias', 30: 'Últimos 30 dias', 90: 'Últimos 90 dias' };
+const SEMANAS = 12;
 
-type ReviewPlatform = 'google' | 'ifood' | 'tripadvisor' | 'reclameaqui';
-type ReviewPlatformCard = {
-  platform: ReviewPlatform;
-  averageRating: number;
-  totalReviews: number;
-  lastSyncAt: string | null;
-  syncStatus: string | null;
-  publicUrl: string | null;
-};
+const FAIXAS = [
+  { chave: 'promotores', classe: 'promoter', nome: 'Promotores', faixa: '9–10', cor: 'var(--promotor)', campo: 'promoters' },
+  { chave: 'passivos', classe: 'passive', nome: 'Passivos', faixa: '7–8', cor: 'var(--passivo)', campo: 'passives' },
+  { chave: 'detratores', classe: 'detractor', nome: 'Detratores', faixa: '1–6', cor: 'var(--detrator)', campo: 'detractors' },
+] as const;
 
-const REVIEW_CARD_META: Record<ReviewPlatform, { label: string; color: string; icon: string }> = {
-  google:      { label: 'Google',        color: 'from-sky-500 to-blue-600', icon: '🔍' },
-  ifood:       { label: 'iFood',         color: 'from-rose-500 to-red-600', icon: '🍔' },
-  tripadvisor: { label: 'Tripadvisor',   color: 'from-emerald-500 to-teal-600', icon: '✈️' },
-  reclameaqui: { label: 'Reclame Aqui',  color: 'from-amber-500 to-orange-600', icon: '📣' },
-};
+function qs(params: Record<string, string | undefined>) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) p.set(k, v);
+  return p.toString();
+}
 
-function toIsoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+/** Agrupa os pontos diários em semanas que terminam hoje (a última é "esta semana"). */
+function agruparPorSemana(points: NpsByDayPoint[], hoje: string): SemanaNps[] {
+  const semanas = Array.from({ length: SEMANAS }, (_, i) => ({
+    fim: somarDias(hoje, -7 * (SEMANAS - 1 - i)),
+    total: 0,
+    promoters: 0,
+    detractors: 0,
+  }));
+  for (const p of points) {
+    const atras = diasEntre(p.date, hoje);
+    if (atras < 0) continue;
+    const idx = SEMANAS - 1 - Math.floor(atras / 7);
+    if (idx < 0) continue;
+    semanas[idx].total += p.total;
+    semanas[idx].promoters += p.promoters;
+    semanas[idx].detractors += p.detractors;
+  }
+  return semanas.map((s) => ({ fim: s.fim, total: s.total, nps: npsDe(s) }));
+}
+
+/** Variação: NPS das últimas 4 semanas contra o das 4 semanas anteriores. */
+function variacao4Semanas(points: NpsByDayPoint[], hoje: string) {
+  const soma = (de: number, ate: number) =>
+    points.reduce(
+      (acc, p) => {
+        const atras = diasEntre(p.date, hoje);
+        if (atras >= de && atras < ate) {
+          acc.total += p.total;
+          acc.promoters += p.promoters;
+          acc.detractors += p.detractors;
+        }
+        return acc;
+      },
+      { total: 0, promoters: 0, detractors: 0 },
+    );
+  const recente = npsDe(soma(0, 28));
+  const anterior = npsDe(soma(28, 56));
+  if (recente === null || anterior === null) return null;
+  return recente - anterior;
 }
 
 export function DashboardPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const pode = usePode();
+  const me = useAuthMe();
   const [rangeDays, setRangeDays] = useState(30);
-  const [unitId, setUnitId] = useState<string>('');
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [unitId, setUnitId] = useState('');
 
-  const me = useQuery({ queryKey: ['authMe'], queryFn: () => apiFetch<AuthMe>('/auth/me') });
+  const canReviewRead = pode('review:read');
+  const canManage = pode('feedback:manage');
+  const podeConectar = pode('tenant:settings:manage');
 
-  const permissionCodes = useQuery({
-    queryKey: ['authMePermissions'],
-    queryFn: () => apiFetch<{ permissionCodes: string[] }>('/auth/me').then((r) => r.permissionCodes).catch(() => [] as string[]),
-    staleTime: 60 * 1000,
-  });
-
-  const canReviewRead = (permissionCodes.data ?? [] as string[]).includes('review:read');
-
-  const units = useQuery({
-    queryKey: ['units'],
-    queryFn: () => apiFetch<Unit[]>('/units'),
-  });
+  const units = useQuery({ queryKey: ['units'], queryFn: () => apiFetch<Unit[]>('/units') });
 
   const { from, to } = useMemo(() => {
     const now = new Date();
     const fromDate = new Date(now.getTime() - (rangeDays - 1) * 24 * 60 * 60 * 1000);
     return { from: toIsoDate(fromDate), to: toIsoDate(now) };
   }, [rangeDays]);
+  const hoje = to;
+  const inicio12 = somarDias(hoje, -(SEMANAS * 7 - 1));
 
   const reviewCards = useQuery({
     queryKey: ['metrics', 'reviews', 'platformCards', from, to, unitId],
-    queryFn: () =>
-      apiFetch<{ cards: ReviewPlatformCard[] }>(
-        `/metrics/reviews/platform-cards?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${unitId ? `&unitId=${encodeURIComponent(unitId)}` : ''}`,
-      ),
+    queryFn: () => apiFetch<{ cards: ReviewPlatformCard[] }>(`/metrics/reviews/platform-cards?${qs({ from, to, unitId })}`),
     enabled: canReviewRead,
   });
 
   const summary = useQuery({
     queryKey: ['metrics', 'npsSummary', from, to, unitId],
-    queryFn: () =>
-      apiFetch<NpsSummary>(
-        `/metrics/nps/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${
-          unitId ? `&unitId=${encodeURIComponent(unitId)}` : ''
-        }`,
-      ),
+    queryFn: () => apiFetch<NpsSummary>(`/metrics/nps/summary?${qs({ from, to, unitId })}`),
   });
 
   const byDay = useQuery({
-    queryKey: ['metrics', 'npsByDay', from, to, unitId],
-    queryFn: () =>
-      apiFetch<NpsByDay>(
-        `/metrics/nps/by-day?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${
-          unitId ? `&unitId=${encodeURIComponent(unitId)}` : ''
-        }`,
-      ),
+    queryKey: ['metrics', 'npsByDay', inicio12, hoje, unitId],
+    queryFn: () => apiFetch<NpsByDay>(`/metrics/nps/by-day?${qs({ from: inicio12, to: hoje, unitId })}`),
   });
 
   const casesSummary = useQuery({
-    queryKey: ['metrics', 'casesSummary', unitId],
-    queryFn: () =>
-      apiFetch<CasesSummary>(`/metrics/cases/summary${unitId ? `?unitId=${encodeURIComponent(unitId)}` : ''}`),
+    queryKey: ['metrics', 'casesSummary', from, to, unitId],
+    queryFn: () => apiFetch<CasesSummary>(`/metrics/cases/summary?${qs({ from, to, unitId })}`),
+    enabled: canManage,
   });
 
+  // Tabela por unidade: sempre todas as unidades do escopo (a selecionada fica destacada)
   const byUnit = useQuery({
-    queryKey: ['metrics', 'npsByUnit', from, to],
-    queryFn: () => apiFetch<NpsByUnit>(`/metrics/nps/by-unit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-    enabled: !unitId,
+    queryKey: ['metrics', 'rankingSummary', from, to, ''],
+    queryFn: () => apiFetch<RankingSummary>(`/metrics/ranking/summary?${qs({ from, to })}`),
   });
 
   const sentiment = useQuery({
     queryKey: ['metrics', 'sentimentSummary', from, to, unitId],
-    queryFn: () =>
-      apiFetch<SentimentSummary>(
-        `/metrics/sentiment/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${
-          unitId ? `&unitId=${encodeURIComponent(unitId)}` : ''
-        }`,
-      ),
+    queryFn: () => apiFetch<SentimentSummary>(`/metrics/sentiment/summary?${qs({ from, to, unitId })}`),
   });
 
+  // "Precisa de atenção": casos abertos vencidos, vencendo hoje ou sem responsável (estado atual)
+  const urgentes = useQuery({
+    queryKey: ['dashboard', 'urgentes', unitId],
+    enabled: canManage,
+    queryFn: async () => {
+      const base = { case: 'open', take: '6', unitId };
+      const [vencidas, hojeL, semResp] = await Promise.all([
+        apiFetch<CasoUrgente[]>(`/feedbacks?${qs({ ...base, due: 'overdue' })}`),
+        apiFetch<CasoUrgente[]>(`/feedbacks?${qs({ ...base, due: 'today' })}`),
+        apiFetch<CasoUrgente[]>(`/feedbacks?${qs({ ...base, assignee: 'unassigned' })}`),
+      ]);
+      const vistos = new Set<string>();
+      const todos = [...vencidas, ...hojeL, ...semResp].filter((it) => {
+        if (vistos.has(it.id)) return false;
+        vistos.add(it.id);
+        return true;
+      });
+      const prazo = (it: CasoUrgente) => (it.feedbackCase?.dueAt ? Date.parse(it.feedbackCase.dueAt) : Number.POSITIVE_INFINITY);
+      return todos.sort((a, b) => prazo(a) - prazo(b)).slice(0, 4);
+    },
+  });
+
+  // Classificação de sentimento em segundo plano (mantido do dashboard anterior)
   useEffect(() => {
     let cancelled = false;
     apiFetch<{ processed: number }>('/metrics/sentiment/backfill', { method: 'POST', json: { limit: 5 } })
@@ -147,628 +184,333 @@ export function DashboardPage() {
     };
   }, [from, to, unitId, queryClient]);
 
-  function goFeedbacks(extra?: Record<string, string>) {
-    const params = new URLSearchParams();
-    params.set('case', 'all');
-    params.set('from', from);
-    params.set('to', to);
-    if (unitId) params.set('unitId', unitId);
-    for (const [k, v] of Object.entries(extra ?? {})) {
-      if (v) params.set(k, v);
-    }
-    navigate(`/app/feedbacks?${params.toString()}`);
+  function linkFeedbacks(extra?: Record<string, string>) {
+    return `/app/feedbacks?${qs({ case: 'all', from, to, unitId, ...extra })}`;
+  }
+  function linkKanban(extra?: Record<string, string>) {
+    return `/app/feedbacks/kanban?${qs({ case: 'open', ...extra })}`;
   }
 
-  function goKanban(extra?: Record<string, string>) {
-    const params = new URLSearchParams();
-    params.set('case', 'open');
-    for (const [k, v] of Object.entries(extra ?? {})) {
-      if (v) params.set(k, v);
-    }
-    navigate(`/app/feedbacks/kanban?${params.toString()}`);
-  }
+  const semanas = useMemo(() => agruparPorSemana(byDay.data?.points ?? [], hoje), [byDay.data, hoje]);
+  const variacao = useMemo(() => (byDay.data ? variacao4Semanas(byDay.data.points, hoje) : null), [byDay.data, hoje]);
+
+  const nomeUnidade = unitId ? (units.data?.find((u) => u.id === unitId)?.name ?? 'Unidade selecionada') : 'Todas as unidades';
+  const contexto = `${PERIODOS[rangeDays]} · ${nomeUnidade}`;
+  const hora = new Date().getHours();
+  const primeiroNome = me.data?.name?.trim() ? me.data.name.trim().split(' ')[0] : null;
+  const saudacao = `${hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'}${primeiroNome ? `, ${primeiroNome}` : ''}`;
+
+  const s = summary.data;
+  const pct = s ? percentuaisNps(s) : { promotores: 0, passivos: 0, detratores: 0 };
+  const cs = casesSummary.data;
+  const linhasUnidade = useMemo(
+    () =>
+      [...(byUnit.data?.units ?? [])].sort((a, b) => {
+        if (a.nps === null && b.nps !== null) return 1;
+        if (a.nps !== null && b.nps === null) return -1;
+        return (b.nps ?? 0) - (a.nps ?? 0) || b.total - a.total;
+      }),
+    [byUnit.data],
+  );
+
+  let ordem = 6;
+  const proxima = () => ordem++;
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <div className="text-xl font-semibold">
-          {(() => {
-            const h = new Date().getHours();
-            const greet = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
-            const name = me.data?.name?.trim() ? me.data.name.trim().split(' ')[0] : null;
-            return `${greet}${name ? `, ${name}` : ''}. Que bom ter você de volta.`;
-          })()}
+    <>
+      <div className="cabeca anima-entrada" style={{ ['--ordem' as string]: 1 }}>
+        <div>
+          <h1 className="cabeca__titulo">{saudacao}</h1>
+          <p className="cabeca__desc">
+            {contexto}
+          </p>
         </div>
-        <div className="text-sm text-slate-600">Resumo e navegação rápida por métricas</div>
+        <form className="filtros-topo" aria-label="Filtros do dashboard" onSubmit={(e) => e.preventDefault()}>
+          <div className="campo">
+            <label htmlFor="filtro-periodo">Período</label>
+            <select id="filtro-periodo" value={String(rangeDays)} onChange={(e) => setRangeDays(Number(e.target.value))}>
+              <option value="7">Últimos 7 dias</option>
+              <option value="30">Últimos 30 dias</option>
+              <option value="90">Últimos 90 dias</option>
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-unidade">Unidade</label>
+            <select id="filtro-unidade" value={unitId} onChange={(e) => setUnitId(e.target.value)} disabled={units.isLoading}>
+              <option value="">Todas as unidades</option>
+              {units.data?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </form>
       </div>
 
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-base font-semibold text-slate-900">Filtros</div>
-            <div className="text-sm text-slate-600">Período e unidade</div>
-          </div>
-          <Button variant="secondary" onClick={() => setFiltersOpen((v) => !v)}>
-            {filtersOpen ? 'Recolher' : 'Abrir'}
-          </Button>
-        </div>
-
-        {filtersOpen && (
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Período</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={String(rangeDays)}
-                onChange={(e) => setRangeDays(Number(e.target.value))}
-              >
-                <option value="7">Últimos 7 dias</option>
-                <option value="30">Últimos 30 dias</option>
-                <option value="90">Últimos 90 dias</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Unidade</div>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={unitId}
-                onChange={(e) => setUnitId(e.target.value)}
-                disabled={units.isLoading}
-              >
-                <option value="">Todas</option>
-                {units.data?.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+      {/* Números principais: cada cartão leva para a tela que explica o número */}
+      <section className="kpis" aria-label="Números principais">
+        <article className="kpi anima-entrada" style={{ ['--ordem' as string]: 2 }}>
+          <Link className="kpi__rotulo kpi__link" to="/app/ranking">
+            NPS
+          </Link>
+          <p className="kpi__valor">{typeof s?.nps === 'number' ? s.nps : '—'}</p>
+          <p className="kpi__nota">
+            {variacao === null ? (
+              'Sem base para comparar as últimas 4 semanas'
+            ) : variacao === 0 ? (
+              'Estável nas últimas 4 semanas'
+            ) : (
+              <>
+                <strong className={classeVariacao(variacao)}>{textoVariacao(variacao)}</strong> nas últimas 4 semanas
+              </>
+            )}
+          </p>
+        </article>
+        <article className="kpi anima-entrada" style={{ ['--ordem' as string]: 3 }}>
+          <Link className="kpi__rotulo kpi__link" to={linkFeedbacks()}>
+            Respostas
+          </Link>
+          <p className="kpi__valor">{numero(s?.total ?? 0)}</p>
+          <p className="kpi__nota">{s?.total ? `${pct.promotores}% deram nota 9 ou 10` : 'Nenhuma resposta no período'}</p>
+        </article>
+        {canManage && (
+          <article className="kpi anima-entrada" style={{ ['--ordem' as string]: 4 }}>
+            <Link className="kpi__rotulo kpi__link" to={linkKanban()}>
+              Ocorrências abertas
+            </Link>
+            <p className="kpi__valor">{numero(cs?.totals.open ?? 0)}</p>
+            <p className="kpi__nota">{cs ? `${numero(cs.assignees.unassigned)} sem responsável · criadas no período` : ' '}</p>
+          </article>
         )}
-      </Card>
+        {canManage && (
+          <article
+            className={`kpi anima-entrada${cs && cs.due.overdue > 0 ? ' kpi--alerta' : ''}`}
+            style={{ ['--ordem' as string]: 5 }}
+          >
+            <Link className="kpi__rotulo kpi__link" to={linkKanban({ due: 'overdue' })}>
+              Vencidas
+            </Link>
+            <p className="kpi__valor">{numero(cs?.due.overdue ?? 0)}</p>
+            <p className="kpi__nota">
+              {cs ? (cs.due.overdue ? 'Passaram do prazo. Resolva primeiro.' : 'Nenhuma fora do prazo') : ' '}
+            </p>
+          </article>
+        )}
+        <article className="kpi anima-entrada" style={{ ['--ordem' as string]: 5 }}>
+          <p className="kpi__rotulo">Unidades</p>
+          <p className="kpi__valor">{numero(units.data?.length ?? 0)}</p>
+          <p className="kpi__nota">Acesso por permissão e vínculo</p>
+        </article>
+      </section>
 
-      {canReviewRead && (
-        <Card title="Avaliações por plataforma" description={`Período ${from} → ${to} · ${unitId ? 'Filtrado por unidade selecionada' : 'Todas as unidades'}`}>
-          {reviewCards.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-          {reviewCards.isError && <div className="text-sm text-rose-700">Falha ao carregar avaliações</div>}
-          {reviewCards.data?.cards && (
-            <div className="grid gap-4 md:grid-cols-4">
-              {reviewCards.data.cards.map((card) => {
-                const meta = REVIEW_CARD_META[card.platform];
-                const rating = typeof card.averageRating === 'number' ? card.averageRating : 0;
-                const total = card.totalReviews ?? 0;
-                const colorStar = rating >= 4.5 ? 'text-amber-500' : rating >= 4 ? 'text-yellow-500' : rating >= 3 ? 'text-orange-500' : rating > 0 ? 'text-rose-500' : 'text-slate-400';
-                const ratingFmt = rating > 0 || total > 0 ? rating.toFixed(1) : '0,0';
-                return (
-                  <div
-                    key={card.platform}
-                    className="grid gap-3 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={['flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-xl text-white shadow-sm', meta.color].join(' ')}>
-                        {meta.icon}
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">{meta.label}</div>
-                        <div className="flex items-center gap-1 text-xs text-slate-500">
-                          <span className="text-slate-400">Último sync:</span>
-                          {card.lastSyncAt
-                            ? new Date(card.lastSyncAt).toLocaleString('pt-BR')
-                            : 'Pendente'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className={['text-3xl font-bold', colorStar].join(' ')}>★ {ratingFmt}</span>
-                      <span className="text-xs text-slate-500">/ 5,0</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-600">{total.toLocaleString('pt-BR')} avaliações</span>
-                      {card.publicUrl && (
-                        <a className="text-xs text-sky-700 hover:underline" href={card.publicUrl} target="_blank" rel="noreferrer">
-                          Ver ↗
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+      <div className="grade-dash">
+        <section className="cartao anima-entrada" style={{ ['--ordem' as string]: proxima() }} aria-labelledby="t-tendencia">
+          <div className="cartao__topo">
+            <div>
+              <h2 className="cartao__titulo" id="t-tendencia">
+                Evolução do NPS
+              </h2>
+              <p className="cartao__sub">Por semana, nas últimas 12 semanas</p>
+            </div>
+            <Link className="cartao__link" to={`/app/feedbacks?${qs({ case: 'all', from: inicio12, to: hoje, unitId })}`}>
+              Ver respostas
+              <Icone nome="seta" />
+            </Link>
+          </div>
+          {byDay.isLoading && <p className="cartao__sub">Carregando…</p>}
+          {byDay.isError && <p className="campo__erro">Falha ao carregar a evolução.</p>}
+          {byDay.data && <GraficoTendencia semanas={semanas} />}
+        </section>
+
+        <section className="cartao anima-entrada" style={{ ['--ordem' as string]: proxima() }} aria-labelledby="t-distribuicao">
+          <div className="cartao__topo">
+            <div>
+              <h2 className="cartao__titulo" id="t-distribuicao">
+                Como os clientes avaliam
+              </h2>
+              <p className="cartao__sub">Nota de 1 a 10 para "recomendaria?"</p>
+            </div>
+          </div>
+          {summary.isLoading && <p className="cartao__sub">Carregando…</p>}
+          {summary.isError && <p className="campo__erro">Falha ao carregar a distribuição.</p>}
+          {s && (
+            <div className="distribuicao">
+              <p className="distribuicao__nps">
+                <strong>{typeof s.nps === 'number' ? s.nps : '—'}</strong>
+                <span>NPS = % promotores − % detratores</span>
+              </p>
+              <div className="barra-nps" aria-hidden="true">
+                {FAIXAS.map((f) => (
+                  <span key={f.chave} style={{ width: `${pct[f.chave]}%`, background: f.cor }} />
+                ))}
+              </div>
+              <ul className="legenda">
+                {FAIXAS.map((f) => (
+                  <li key={f.chave}>
+                    <Link className="dash-legenda" to={linkFeedbacks({ npsClass: f.classe })}>
+                      <span className="legenda__cor" style={{ background: f.cor }} aria-hidden="true" />
+                      <span>
+                        {f.nome} <span className="legenda__faixa">(nota {f.faixa})</span>
+                      </span>
+                      <span className="legenda__valor">
+                        {pct[f.chave]}% · {numero(s[f.campo])}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <p className="temas__nota">Total: {numero(s.total)} respostas</p>
             </div>
           )}
-        </Card>
-      )}
+        </section>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card title="Unidades" description="Acesso por permissão e vínculo">
-          <div className="text-2xl font-semibold">{units.data?.length ?? 0}</div>
-        </Card>
-        <button type="button" className="text-left" onClick={() => goFeedbacks()}>
-          <Card title="Respostas" description={`${from} → ${to}`}>
-            <div className="text-2xl font-semibold">{summary.data?.total ?? 0}</div>
-          </Card>
-        </button>
-        <Card title="NPS" description="Promotores - Detratores">
-          <div className="text-2xl font-semibold">{typeof summary.data?.nps === 'number' ? summary.data.nps : '—'}</div>
-        </Card>
-        <button type="button" className="text-left" onClick={() => goKanban()}>
-          <Card title="Casos abertos" description="Ocorrências em andamento">
-            <div className="text-2xl font-semibold">{casesSummary.data?.totals.open ?? 0}</div>
-          </Card>
-        </button>
-      </div>
-
-      <Card
-        title="Análise de feedback"
-        description={`Elogios vs reclamações no período ${from} → ${to}`}
-      >
-        {sentiment.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {sentiment.isError && <div className="text-sm text-rose-700">Falha ao carregar análise</div>}
-        {sentiment.data && (
-          <SentimentAnalysis
-            data={sentiment.data}
-            onSelectSentiment={(label) => goFeedbacks({ sentiment: label })}
-            onSelectTheme={(theme, sentiment) =>
-              goFeedbacks(sentiment ? { theme, sentiment } : { theme })
-            }
+        {canManage && (
+          <PrecisaAtencao
+            itens={urgentes.data ?? []}
+            carregando={urgentes.isLoading}
+            erro={urgentes.isError}
+            resumo={cs}
+            linkKanban={linkKanban}
+            ordem={proxima()}
           />
         )}
-      </Card>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <button type="button" className="text-left" onClick={() => goKanban({ due: 'overdue' })}>
-          <Card title="Vencidos" description="Casos abertos com prazo estourado">
-            <div className="text-2xl font-semibold">{casesSummary.data?.due.overdue ?? 0}</div>
-          </Card>
-        </button>
-        <button type="button" className="text-left" onClick={() => goKanban({ due: 'today' })}>
-          <Card title="Vencem hoje" description="Casos abertos com prazo hoje">
-            <div className="text-2xl font-semibold">{casesSummary.data?.due.today ?? 0}</div>
-          </Card>
-        </button>
-        <button type="button" className="text-left" onClick={() => goKanban({ due: 'next7' })}>
-          <Card title="Próx. 7 dias" description="Casos abertos vencendo em breve">
-            <div className="text-2xl font-semibold">{casesSummary.data?.due.next7 ?? 0}</div>
-          </Card>
-        </button>
-        <button type="button" className="text-left" onClick={() => goKanban({ assignee: 'unassigned' })}>
-          <Card title="Sem responsável" description="Casos abertos não atribuídos">
-            <div className="text-2xl font-semibold">{casesSummary.data?.assignees.unassigned ?? 0}</div>
-          </Card>
-        </button>
-      </div>
+        <TemasIA
+          dados={sentiment.data}
+          carregando={sentiment.isLoading}
+          erro={sentiment.isError}
+          linkFeedbacks={linkFeedbacks}
+          ordem={proxima()}
+        />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card title="Tendência de NPS" description={`${from} → ${to}`}>
-          {byDay.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-          {byDay.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-          {byDay.data && (
-            <button type="button" className="block w-full text-left" onClick={() => goFeedbacks()}>
-              <NpsLine points={byDay.data.points} />
-            </button>
+        <ElogiosReclamacoes
+          dados={sentiment.data}
+          carregando={sentiment.isLoading}
+          erro={sentiment.isError}
+          linkFeedbacks={linkFeedbacks}
+          ordem={proxima()}
+        />
+
+        <section className="cartao grade-dash__largo anima-entrada" style={{ ['--ordem' as string]: proxima() }} aria-labelledby="t-unidades">
+          <div className="cartao__topo">
+            <div>
+              <h2 className="cartao__titulo" id="t-unidades">
+                NPS por unidade
+              </h2>
+              <p className="cartao__sub">
+                Da maior para a menor nota · {dataLonga(from)} a {dataLonga(to)}. Clique numa unidade para filtrar o dashboard.
+              </p>
+            </div>
+            <Link className="cartao__link" to="/app/ranking">
+              Ver ranking completo
+              <Icone nome="seta" />
+            </Link>
+          </div>
+          {byUnit.isLoading && <p className="cartao__sub">Carregando…</p>}
+          {byUnit.isError && <p className="campo__erro">Falha ao carregar as unidades.</p>}
+          {byUnit.data && linhasUnidade.length === 0 && (
+            <p className="vazio">
+              <strong>Sem unidades no seu acesso</strong>
+            </p>
           )}
-        </Card>
-
-        <Card title="Distribuição NPS" description="Promotores / Passivos / Detratores">
-          {summary.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-          {summary.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-          {summary.data && (
-            <NpsDistribution
-              summary={summary.data}
-              onSelect={(cls) => {
-                goFeedbacks({ npsClass: cls });
-              }}
-            />
-          )}
-        </Card>
-
-        <Card title="Fila operacional" description="Atribuição e prazos">
-          {casesSummary.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-          {casesSummary.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-          {casesSummary.data && <CasesQuickStats data={casesSummary.data} />}
-        </Card>
-      </div>
-
-      {!unitId && (
-        <Card title="NPS por unidade" description={`${from} → ${to}`}>
-          {byUnit.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-          {byUnit.isError && <div className="text-sm text-rose-700">Falha ao carregar</div>}
-          {byUnit.data && (
-            <div className="overflow-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-slate-500">
+          {linhasUnidade.length > 0 && (
+            <div className="tabela-rolagem">
+              <table className="tabela">
+                <thead>
                   <tr>
-                    <th className="py-2 pr-3 font-medium">Unidade</th>
-                    <th className="py-2 pr-3 font-medium">Respostas</th>
-                    <th className="py-2 pr-3 font-medium">NPS</th>
-                    <th className="py-2 pr-3 font-medium">Prom.</th>
-                    <th className="py-2 pr-3 font-medium">Detr.</th>
+                    <th scope="col">Unidade</th>
+                    <th scope="col" className="num">
+                      Respostas
+                    </th>
+                    <th scope="col" className="num">
+                      NPS
+                    </th>
+                    <th scope="col" className="num">
+                      Promotores
+                    </th>
+                    <th scope="col" className="num">
+                      Detratores
+                    </th>
+                    {canManage && (
+                      <th scope="col" className="num">
+                        Abertas
+                      </th>
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {byUnit.data.units.map((row) => (
+                <tbody>
+                  {linhasUnidade.map((u) => (
                     <tr
-                      key={row.unitId ?? 'none'}
-                      className={row.unitId ? 'cursor-pointer hover:bg-slate-50' : ''}
+                      key={u.unitId ?? 'none'}
+                      data-destaque={unitId && u.unitId === unitId ? '' : undefined}
+                      className={u.unitId ? 'dash-linha-clicavel' : undefined}
                       onClick={() => {
-                        if (!row.unitId) return;
-                        setUnitId(row.unitId);
-                        setFiltersOpen(true);
+                        if (u.unitId) setUnitId(u.unitId === unitId ? '' : u.unitId);
                       }}
                     >
-                      <td className="py-2 pr-3">{row.unitName ?? '—'}</td>
-                      <td className="py-2 pr-3">{row.total}</td>
-                      <td className="py-2 pr-3">{typeof row.nps === 'number' ? row.nps : '—'}</td>
-                      <td className="py-2 pr-3">{row.promoters}</td>
-                      <td className="py-2 pr-3">{row.detractors}</td>
+                      <th scope="row">
+                        {u.unitId ? (
+                          <button
+                            type="button"
+                            className="dash-unidade"
+                            aria-pressed={u.unitId === unitId}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setUnitId(u.unitId === unitId ? '' : (u.unitId ?? ''));
+                            }}
+                          >
+                            {u.unitName}
+                            <span className="visualmente-oculto">: filtrar o dashboard por esta unidade</span>
+                          </button>
+                        ) : (
+                          u.unitName
+                        )}
+                      </th>
+                      <td className="num">{numero(u.total)}</td>
+                      <td className="num">
+                        <strong>{typeof u.nps === 'number' ? u.nps : '—'}</strong>
+                        <span className="mini-barra" aria-hidden="true">
+                          <span style={{ width: `${Math.max(u.nps ?? 0, 0)}%` }} />
+                        </span>
+                      </td>
+                      <td className="num">{typeof u.promoterPct === 'number' ? `${u.promoterPct}%` : '—'}</td>
+                      <td className="num">{typeof u.detractorPct === 'number' ? `${u.detractorPct}%` : '—'}</td>
+                      {canManage && (
+                        <td className="num">
+                          {u.unitId ? (
+                            <Link
+                              className="cartao__link dash-abertas"
+                              to={`/app/feedbacks?${qs({ case: 'open', from, to, unitId: u.unitId })}`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {numero(u.cases.open)}
+                              <span className="visualmente-oculto"> ocorrências abertas em {u.unitName}</span>
+                            </Link>
+                          ) : (
+                            numero(u.cases.open)
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-        </Card>
-      )}
-    </div>
-  );
-}
+        </section>
 
-function SentimentAnalysis(props: {
-  data: SentimentSummary;
-  onSelectSentiment?: (label: keyof SentimentCounts) => void;
-  onSelectTheme?: (theme: string, sentiment?: keyof SentimentCounts) => void;
-}) {
-  const data = props.data;
-  const classified = data.classified;
-  const empty = classified === 0;
-
-  return (
-    <div className="grid gap-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <SentimentStat
-          label={sentimentLabel('elogio')}
-          value={data.counts.elogio}
-          percent={data.percents.elogio}
-          colorClass="text-emerald-600"
-          barClass="bg-emerald-500"
-          onClick={props.onSelectSentiment ? () => props.onSelectSentiment!('elogio') : undefined}
-        />
-        <SentimentStat
-          label={sentimentLabel('reclamacao')}
-          value={data.counts.reclamacao}
-          percent={data.percents.reclamacao}
-          colorClass="text-rose-600"
-          barClass="bg-rose-500"
-          onClick={props.onSelectSentiment ? () => props.onSelectSentiment!('reclamacao') : undefined}
-        />
-        <SentimentStat
-          label={sentimentLabel('neutro')}
-          value={data.counts.neutro}
-          percent={data.percents.neutro}
-          colorClass="text-slate-600"
-          barClass="bg-slate-500"
-          onClick={props.onSelectSentiment ? () => props.onSelectSentiment!('neutro') : undefined}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="grid gap-3">
-          <div className="text-sm font-medium text-slate-900">Composição</div>
-          {empty ? (
-            <div className="text-sm text-slate-600">Sem respostas classificadas no período</div>
-          ) : (
-            <SentimentDonut
-              counts={data.counts}
-              percents={data.percents}
-              classified={classified}
-              onSelect={props.onSelectSentiment}
-            />
-          )}
-        </div>
-
-        <div className="grid gap-3">
-          <div className="text-sm font-medium text-slate-900">Temas mais citados</div>
-          {data.byTheme.length === 0 ? (
-            <div className="text-sm text-slate-600">Nenhum tema extraído ainda</div>
-          ) : (
-            <div className="grid gap-2">
-              {data.byTheme.slice(0, 8).map((row) => (
-                <ThemeBar
-                  key={row.theme}
-                  row={row}
-                  max={data.byTheme[0]?.total || 1}
-                  onSelect={props.onSelectTheme}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-        <span>
-          {data.classified} classificadas de {data.responses} respostas
-          {data.unclassified > 0 ? ` · ${data.unclassified} aguardando análise` : ''}
-        </span>
-        {!data.groqConfigured && (
-          <span>GROQ_API_KEY não configurada — notas sem comentário usam o NPS</span>
+        {canReviewRead && (
+          <AvaliacoesExternas
+            cards={reviewCards.data?.cards}
+            carregando={reviewCards.isLoading}
+            erro={reviewCards.isError}
+            contexto={contexto}
+            podeConectar={podeConectar}
+            ordem={proxima()}
+          />
         )}
       </div>
-    </div>
-  );
-}
-
-function SentimentStat(props: {
-  label: string;
-  value: number;
-  percent: number;
-  colorClass: string;
-  barClass: string;
-  onClick?: () => void;
-}) {
-  const content = (
-    <div
-      className={[
-        'grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4',
-        props.onClick ? 'transition-colors hover:border-slate-300 hover:bg-white hover:shadow-sm' : '',
-      ].join(' ')}
-    >
-      <div className="text-sm text-slate-600">{props.label}</div>
-      <div className="flex items-baseline gap-2">
-        <div className={['text-2xl font-semibold', props.colorClass].join(' ')}>{props.value}</div>
-        <div className="text-sm text-slate-500">{props.percent}%</div>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
-        <div className={['h-full', props.barClass].join(' ')} style={{ width: `${props.percent}%` }} />
-      </div>
-    </div>
-  );
-
-  if (!props.onClick) return content;
-
-  return (
-    <button type="button" className="w-full text-left" onClick={props.onClick}>
-      {content}
-    </button>
-  );
-}
-
-function SentimentDonut(props: {
-  counts: SentimentCounts;
-  percents: SentimentCounts;
-  classified: number;
-  onSelect?: (label: keyof SentimentCounts) => void;
-}) {
-  const radius = 16;
-  const circumference = 2 * Math.PI * radius;
-  const segments: Array<{ key: keyof SentimentCounts; color: string }> = [
-    { key: 'elogio', color: '#10b981' },
-    { key: 'reclamacao', color: '#f43f5e' },
-    { key: 'neutro', color: '#64748b' },
-  ];
-  let offset = 0;
-  const arcs = segments.map((seg) => {
-    const fraction = props.classified > 0 ? props.counts[seg.key] / props.classified : 0;
-    const length = fraction * circumference;
-    const dashOffset = -offset;
-    offset += length;
-    return { ...seg, length, dashOffset, fraction };
-  });
-
-  return (
-    <div className="flex flex-wrap items-center gap-5">
-      <svg viewBox="0 0 48 48" className="h-28 w-28 shrink-0">
-        <circle cx="24" cy="24" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="7" />
-        {arcs.map((arc) =>
-          arc.length > 0 ? (
-            <circle
-              key={arc.key}
-              cx="24"
-              cy="24"
-              r={radius}
-              fill="none"
-              stroke={arc.color}
-              strokeWidth="7"
-              strokeDasharray={`${arc.length} ${circumference - arc.length}`}
-              strokeDashoffset={arc.dashOffset}
-              strokeLinecap="butt"
-              transform="rotate(-90 24 24)"
-              pointerEvents="stroke"
-              className={props.onSelect ? 'cursor-pointer hover:opacity-80' : undefined}
-              onClick={props.onSelect ? () => props.onSelect!(arc.key) : undefined}
-            >
-              <title>{sentimentLabel(arc.key)}</title>
-            </circle>
-          ) : null,
-        )}
-      </svg>
-      <div className="grid gap-1.5 text-sm">
-        {segments.map((seg) => {
-          const row = (
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-slate-700">{sentimentLabel(seg.key)}</span>
-              <span className="text-slate-500">
-                {props.counts[seg.key]} ({props.percents[seg.key]}%)
-              </span>
-            </div>
-          );
-          if (!props.onSelect) return <div key={seg.key}>{row}</div>;
-          return (
-            <button
-              key={seg.key}
-              type="button"
-              className="rounded-md px-1 py-0.5 text-left hover:bg-slate-50"
-              onClick={() => props.onSelect!(seg.key)}
-            >
-              {row}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ThemeBar(props: {
-  row: SentimentThemeRow;
-  max: number;
-  onSelect?: (theme: string, sentiment?: keyof SentimentCounts) => void;
-}) {
-  const width = props.max > 0 ? Math.round((props.row.total / props.max) * 100) : 0;
-  const elogioPct = props.row.total > 0 ? (props.row.elogio / props.row.total) * 100 : 0;
-  const reclamacaoPct = props.row.total > 0 ? (props.row.reclamacao / props.row.total) * 100 : 0;
-  const neutroPct = props.row.total > 0 ? (props.row.neutro / props.row.total) * 100 : 0;
-  const segments: Array<{ key: keyof SentimentCounts; pct: number; colorClass: string }> = [
-    { key: 'elogio', pct: elogioPct, colorClass: 'bg-emerald-500' },
-    { key: 'reclamacao', pct: reclamacaoPct, colorClass: 'bg-rose-500' },
-    { key: 'neutro', pct: neutroPct, colorClass: 'bg-slate-500' },
-  ];
-
-  const label = (
-    <div className="flex items-center justify-between gap-3 text-sm">
-      <div className="font-medium text-slate-900">{sentimentThemeLabel(props.row.theme)}</div>
-      <div className="text-slate-600">{props.row.total}</div>
-    </div>
-  );
-
-  return (
-    <div className="grid gap-1">
-      {props.onSelect ? (
-        <button type="button" className="w-full rounded-md text-left hover:bg-slate-50" onClick={() => props.onSelect!(props.row.theme)}>
-          {label}
-        </button>
-      ) : (
-        label
-      )}
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100" style={{ maxWidth: `${Math.max(width, 12)}%` }}>
-        {segments.map((seg) =>
-          seg.pct > 0 ? (
-            props.onSelect ? (
-              <button
-                key={seg.key}
-                type="button"
-                title={`${sentimentLabel(seg.key)} · ${sentimentThemeLabel(props.row.theme)}`}
-                className={['block h-full min-h-0 min-w-0 border-0 p-0 hover:opacity-80', seg.colorClass].join(' ')}
-                style={{ width: `${seg.pct}%` }}
-                onClick={() => props.onSelect!(props.row.theme, seg.key)}
-              />
-            ) : (
-              <div key={seg.key} className={['h-full', seg.colorClass].join(' ')} style={{ width: `${seg.pct}%` }} />
-            )
-          ) : null,
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NpsLine(props: { points: NpsByDayPoint[] }) {
-  const points = props.points;
-  if (!points.length) return <div className="text-sm text-slate-600">Sem dados</div>;
-
-  const width = 100;
-  const height = 32;
-  const padX = 3;
-  const padY = 4;
-
-  const values = points.map((p) => (typeof p.nps === 'number' ? p.nps : 0));
-  const min = -100;
-  const max = 100;
-
-  const xAt = (i: number) => {
-    if (values.length === 1) return width / 2;
-    return padX + (i / (values.length - 1)) * (width - padX * 2);
-  };
-  const yAt = (v: number) => {
-    const ratio = (max - v) / (max - min);
-    return padY + ratio * (height - padY * 2);
-  };
-
-  const polyline = values.map((v, i) => `${xAt(i).toFixed(2)},${yAt(v).toFixed(2)}`).join(' ');
-  const baselineY = yAt(0);
-  const last = points[points.length - 1];
-  const lastNps = typeof last.nps === 'number' ? last.nps : null;
-
-  return (
-    <div className="grid gap-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="text-2xl font-semibold">{typeof lastNps === 'number' ? lastNps : '—'}</div>
-        <div className="text-xs text-slate-500">{points[0].date} → {last.date}</div>
-      </div>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-24 w-full">
-          <line x1="0" x2={String(width)} y1={String(baselineY)} y2={String(baselineY)} stroke="#cbd5e1" strokeWidth="0.7" />
-          <polyline points={polyline} fill="none" stroke="#0284c7" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function NpsDistribution(props: { summary: NpsSummary; onSelect?: (npsClass: 'promoter' | 'passive' | 'detractor') => void }) {
-  const total = props.summary.total || 0;
-  const p = props.summary.promoters;
-  const pa = props.summary.passives;
-  const d = props.summary.detractors;
-
-  const pct = (v: number) => (total > 0 ? Math.round((v / total) * 100) : 0);
-
-  return (
-    <div className="grid gap-3">
-      <div className="grid gap-2">
-        <BarRow label="Promotores" value={p} percent={pct(p)} colorClass="bg-emerald-500" onClick={props.onSelect ? () => props.onSelect!('promoter') : undefined} />
-        <BarRow label="Passivos" value={pa} percent={pct(pa)} colorClass="bg-slate-500" onClick={props.onSelect ? () => props.onSelect!('passive') : undefined} />
-        <BarRow label="Detratores" value={d} percent={pct(d)} colorClass="bg-rose-500" onClick={props.onSelect ? () => props.onSelect!('detractor') : undefined} />
-      </div>
-      <div className="text-xs text-slate-500">Total: {total}</div>
-    </div>
-  );
-}
-
-function BarRow(props: { label: string; value: number; percent: number; colorClass: string; onClick?: () => void }) {
-  const content = (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <div className="font-medium text-slate-900">{props.label}</div>
-        <div className="text-slate-600">
-          {props.value} ({props.percent}%)
-        </div>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-        <div className={['h-full', props.colorClass].join(' ')} style={{ width: `${props.percent}%` }} />
-      </div>
-    </div>
-  );
-
-  if (!props.onClick) return content;
-
-  return (
-    <button type="button" className="text-left" onClick={props.onClick}>
-      {content}
-    </button>
-  );
-}
-
-function CasesQuickStats(props: { data: CasesSummary }) {
-  const data = props.data;
-  return (
-    <div className="grid gap-2 text-sm">
-      <div className="flex items-center justify-between">
-        <div className="text-slate-600">Abertos</div>
-        <div className="font-medium text-slate-900">{data.totals.open}</div>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="text-slate-600">Encerrados</div>
-        <div className="font-medium text-slate-900">{data.totals.closed}</div>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="text-slate-600">Sem prazo</div>
-        <div className="font-medium text-slate-900">{data.due.noDue}</div>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="text-slate-600">Atribuídos</div>
-        <div className="font-medium text-slate-900">{data.assignees.assigned}</div>
-      </div>
-    </div>
+    </>
   );
 }

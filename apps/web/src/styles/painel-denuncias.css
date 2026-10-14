@@ -1,0 +1,48 @@
+/* Denúncias (painel) e canal de ética público — complementos ao painel.css, sempre sob .painel */
+
+/* Botões desabilitados nesta tela */
+.painel .filtros__rodape .btn:disabled,
+.painel .gaveta .btn:disabled,
+.painel .den-detalhe .btn:disabled,
+.painel .canal .cli__enviar:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Lista: nome/contato de quem se identificou, abaixo do selo */
+.painel .den-ident-celula { display: grid; gap: 2px; }
+.painel .den-ident-celula .den-contato { font-size: 13px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Gaveta/detalhe: campos que ocupam a linha toda e textos longos */
+.painel .dados .den-dados__largo { grid-column: 1 / -1; }
+.painel .dados .den-dados__texto { white-space: pre-line; overflow-wrap: anywhere; }
+.painel .dados dd a { color: var(--link); }
+.painel .den-dados--uma { grid-template-columns: minmax(0, 1fr); }
+.painel .den-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+.painel .den-quebra { word-break: break-all; }
+
+/* Histórico: nota que acompanha a mudança */
+.painel .den-hist__texto { overflow-wrap: anywhere; white-space: pre-line; }
+.painel .den-hist__nota { display: block; margin-top: 2px; color: var(--texto); font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; opacity: .85; }
+
+/* Divulgar: QR */
+.painel .den-qr__imagem img { display: block; width: 100%; height: auto; }
+.painel .den-qr__vazio { width: 100%; aspect-ratio: 1; border-radius: 6px; background: var(--bg-suave); }
+.painel .gaveta .campo__dica a { color: var(--link); overflow-wrap: anywhere; }
+
+/* Página de detalhe */
+.painel .den-voltar { justify-self: start; margin-left: -12px; }
+.painel .den-voltar__icone { transform: rotate(180deg); }
+.painel .den-detalhe { display: grid; gap: 20px; align-items: start; }
+@media (min-width: 960px) { .painel .den-detalhe { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); } }
+.painel .den-detalhe__principal, .painel .den-detalhe__lateral { display: grid; gap: 20px; min-width: 0; }
+.painel .den-cartao { display: grid; gap: 18px; }
+
+/* Canal público */
+.painel .canal .den-mais { display: grid; gap: 12px; min-width: 0; border: 0; }
+.painel .canal .den-mais legend { margin-bottom: 4px; }
+.painel .canal__form .den-mais .campo textarea { min-height: 88px; }
+.painel .canal .den-identificacao { display: grid; gap: 12px; }
+.painel .canal .den-aceite { font-size: 14px; color: var(--texto); }
+.painel .canal .den-lgpd { padding: 12px 14px; border: 1px solid var(--linha); border-radius: 12px; font-size: 14px; color: var(--mudo); }
+.painel .canal .den-lgpd summary { color: var(--texto); font-weight: 600; cursor: pointer; }
+.painel .canal .den-lgpd > div { display: grid; gap: 8px; margin-top: 10px; line-height: 1.5; }
+.painel .canal .den-recebida { font-weight: 500 !important; }
+.painel .pub__rodape a { color: inherit; text-decoration: underline; }

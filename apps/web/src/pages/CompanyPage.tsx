@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
-import { Card } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { env } from '../lib/env';
 import { SubscriptionCard } from '../components/billing/SubscriptionCard';
+import { ConfigLayout } from '../components/painel/ConfigTabs';
+import { useAvisar } from '../components/painel/config/hooks';
+import { descr, mensagemDoErro } from '../components/painel/config/erros';
+import '../styles/painel-config.css';
 
 type TenantMe = {
   id: string;
@@ -22,23 +24,46 @@ type TenantMe = {
   createdAt: string;
 };
 
+const SEGMENTOS = [
+  'Restaurante',
+  'Bar',
+  'Cafeteria',
+  'Padaria',
+  'Clínica',
+  'Odontologia',
+  'Academia',
+  'Estética',
+  'Oficina',
+  'Varejo',
+  'Hotelaria',
+  'Educação',
+  'Serviços',
+];
+
+const ERROS_EMPRESA: Record<string, string> = {
+  invalid_document: 'Confira o CNPJ ou CPF: o número não é válido.',
+  cnpj_lookup_failed: 'Não conseguimos consultar esse CNPJ na Receita Federal agora. Confira o número ou tente de novo.',
+  validation: 'Confira os campos destacados.',
+};
+
+const emailValido = (v: string) => /^\S+@\S+\.\S+$/.test(v);
+const corValida = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
+
+type Form = {
+  legalName: string;
+  tradeName: string;
+  document: string;
+  email: string;
+  phone: string;
+  segment: string;
+  primaryColor: string;
+  secondaryColor: string;
+  threshold: string;
+};
+
 export function CompanyPage() {
   const qc = useQueryClient();
-  const segmentPresets = useMemo(
-    () => [
-      'Restaurante',
-      'Clínica',
-      'Odontologia',
-      'Academia',
-      'Estética',
-      'Oficina',
-      'Varejo',
-      'Hotelaria',
-      'Educação',
-      'Serviços',
-    ],
-    [],
-  );
+  const [avisar, aviso] = useAvisar();
 
   const tenant = useQuery({
     queryKey: ['tenantMe'],
@@ -50,234 +75,327 @@ export function CompanyPage() {
     return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 6;
   }, [tenant.data]);
 
-  const [legalName, setLegalName] = useState('');
-  const [tradeName, setTradeName] = useState('');
-  const [document, setDocument] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [segment, setSegment] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('');
-  const [secondaryColor, setSecondaryColor] = useState('');
-  const [thresholdText, setThresholdText] = useState('6');
-
-  useEffect(() => {
-    if (!tenant.data) return;
-    setLegalName(tenant.data.legalName ?? '');
-    setTradeName(tenant.data.tradeName ?? '');
-    setDocument(tenant.data.document ?? '');
-    setEmail(tenant.data.email ?? '');
-    setPhone(tenant.data.phone ?? '');
-    setSegment(tenant.data.segment ?? '');
-    setPrimaryColor(tenant.data.primaryColor ?? '');
-    setSecondaryColor(tenant.data.secondaryColor ?? '');
-    setThresholdText(String(badScoreThreshold));
+  const inicial = useMemo<Form | null>(() => {
+    const t = tenant.data;
+    if (!t) return null;
+    return {
+      legalName: t.legalName ?? '',
+      tradeName: t.tradeName ?? '',
+      document: t.document ?? '',
+      email: t.email ?? '',
+      phone: t.phone ?? '',
+      segment: t.segment ?? '',
+      primaryColor: t.primaryColor ?? '',
+      secondaryColor: t.secondaryColor ?? '',
+      threshold: String(badScoreThreshold),
+    };
   }, [tenant.data, badScoreThreshold]);
 
+  const [form, setForm] = useState<Form | null>(null);
+  const [alterado, setAlterado] = useState(false);
+  const [tentou, setTentou] = useState(false);
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    if (!inicial) return;
+    setForm(inicial);
+    setAlterado(false);
+  }, [inicial]);
+
+  // Sair da página com alterações não salvas: o navegador pergunta antes
+  useEffect(() => {
+    if (!alterado) return;
+    const aviso = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', aviso);
+    return () => window.removeEventListener('beforeunload', aviso);
+  }, [alterado]);
+
+  const mudar = (campo: keyof Form, valor: string) => {
+    setForm((f) => (f ? { ...f, [campo]: valor } : f));
+    setAlterado(true);
+    setStatus('Alterações não salvas');
+  };
+
+  const fantasiaRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const notaRef = useRef<HTMLInputElement>(null);
+
+  const thresholdNum = Number(form?.threshold);
+  const erros = form
+    ? {
+        tradeName: !form.tradeName.trim(),
+        email: Boolean(form.email.trim()) && !emailValido(form.email.trim()),
+        threshold: !Number.isInteger(thresholdNum) || thresholdNum < 1 || thresholdNum > 10,
+      }
+    : { tradeName: false, email: false, threshold: false };
+
   const updateTenant = useMutation({
-    mutationFn: async () => {
-      const threshold = Number(thresholdText);
+    mutationFn: async (f: Form) => {
+      const threshold = Number(f.threshold);
       return apiFetch<TenantMe>('/tenant/me', {
         method: 'PATCH',
         json: {
-          legalName: legalName.trim() || undefined,
-          tradeName: tradeName.trim() || undefined,
-          document: document.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          segment: segment.trim() || undefined,
-          primaryColor: primaryColor.trim() || undefined,
-          secondaryColor: secondaryColor.trim() || undefined,
+          legalName: f.legalName.trim() || undefined,
+          tradeName: f.tradeName.trim() || undefined,
+          document: f.document.trim() || undefined,
+          email: f.email.trim() || undefined,
+          phone: f.phone.trim() || undefined,
+          segment: f.segment.trim() || undefined,
+          primaryColor: f.primaryColor.trim() || undefined,
+          secondaryColor: f.secondaryColor.trim() || undefined,
           badScoreThreshold: Number.isFinite(threshold) ? threshold : undefined,
         },
       });
     },
     onSuccess: async () => {
+      setAlterado(false);
+      setStatus('');
+      avisar('Dados da empresa salvos');
       await qc.invalidateQueries({ queryKey: ['tenantMe'] });
       await qc.invalidateQueries({ queryKey: ['surveys'] });
     },
+    onError: (err) => setStatus(mensagemDoErro(err, ERROS_EMPRESA, 'Não foi possível salvar. Tente de novo.')),
   });
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form) return;
+    setTentou(true);
+    if (erros.tradeName) return fantasiaRef.current?.focus();
+    if (erros.email) return emailRef.current?.focus();
+    if (erros.threshold) return notaRef.current?.focus();
+    updateTenant.mutate(form);
+  }
 
-  const changePassword = useMutation({
-    mutationFn: () =>
-      apiFetch<{ ok: boolean }>('/auth/change-password', {
-        method: 'POST',
-        json: { currentPassword, newPassword },
-      }),
-    onSuccess: () => {
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setPasswordError(null);
-    },
-  });
+  const enderecoPainel = tenant.data
+    ? env.appBaseDomain
+      ? `${tenant.data.slug}.${env.appBaseDomain}`
+      : tenant.data.slug
+    : '';
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <div className="text-xl font-semibold">Empresa</div>
-        <div className="text-sm text-slate-600">Cadastro do tenant, configurações e segurança</div>
-      </div>
+    <ConfigLayout>
+      <div className="cfg__pilha">
+        <SubscriptionCard />
 
-      <SubscriptionCard />
-
-      <Card title="Cadastro do tenant">
-        {tenant.isLoading && <div className="text-sm text-slate-600">Carregando...</div>}
-        {tenant.isError && <div className="text-sm text-rose-700">Falha ao carregar dados da empresa</div>}
-        {tenant.data && (
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Subdomínio</div>
-              <Input value={tenant.data.slug} disabled />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Nome fantasia</div>
-              <Input value={tradeName} onChange={(e) => setTradeName(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Razão social</div>
-              <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Documento</div>
-              <Input value={document} onChange={(e) => setDocument(e.target.value)} placeholder="CNPJ/CPF (opcional)" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Segmento</div>
-              <Input
-                value={segment}
-                onChange={(e) => setSegment(e.target.value)}
-                placeholder="Segmento (opcional)"
-                list="opaa_segments"
-              />
-              <datalist id="opaa_segments">
-                {segmentPresets.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">E-mail</div>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="E-mail (opcional)" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Telefone</div>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="Telefone (opcional)" />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Cor primária</div>
-              <div className="flex items-center gap-3">
-                <input
-                  className="h-10 w-12 rounded-md border border-slate-200 bg-white p-1"
-                  type="color"
-                  value={primaryColor && primaryColor.trim() ? primaryColor : '#0ea5e9'}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                />
-                <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} placeholder="#0ea5e9 (opcional)" />
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium text-slate-700">Cor secundária</div>
-              <div className="flex items-center gap-3">
-                <input
-                  className="h-10 w-12 rounded-md border border-slate-200 bg-white p-1"
-                  type="color"
-                  value={secondaryColor && secondaryColor.trim() ? secondaryColor : '#0f172a'}
-                  onChange={(e) => setSecondaryColor(e.target.value)}
-                />
-                <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} placeholder="#0f172a (opcional)" />
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-slate-700">Nota considerada ruim (1..10)</div>
-              <Input value={thresholdText} onChange={(e) => setThresholdText(e.target.value)} inputMode="numeric" />
-              <div className="mt-1 text-xs text-slate-500">
-                Notas ≤ {badScoreThreshold} abrem reclamação na pesquisa pública e podem criar caso automaticamente.
-              </div>
-            </div>
-            <div className="md:col-span-2 flex items-center justify-end gap-2">
-              <Button
-                variant="secondary"
-                disabled={updateTenant.isPending}
-                onClick={() => {
-                  if (!tenant.data) return;
-                  setLegalName(tenant.data.legalName ?? '');
-                  setTradeName(tenant.data.tradeName ?? '');
-                  setDocument(tenant.data.document ?? '');
-                  setEmail(tenant.data.email ?? '');
-                  setPhone(tenant.data.phone ?? '');
-                  setSegment(tenant.data.segment ?? '');
-                  setPrimaryColor(tenant.data.primaryColor ?? '');
-                  setSecondaryColor(tenant.data.secondaryColor ?? '');
-                  setThresholdText(String(badScoreThreshold));
-                }}
-              >
-                Resetar
-              </Button>
-              <Button disabled={updateTenant.isPending} onClick={() => updateTenant.mutate()}>
-                {updateTenant.isPending ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </div>
-            {updateTenant.isError && (
-              <div className="md:col-span-2 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                Falha ao salvar. Verifique permissões e tente novamente.
-              </div>
-            )}
+        {tenant.isLoading && (
+          <div className="cartao cfg__cartao">
+            <p className="mudo">Carregando os dados da empresa…</p>
           </div>
         )}
-      </Card>
+        {tenant.isError && (
+          <div className="cartao cfg__cartao">
+            <p className="campo__erro" role="alert">
+              Não foi possível carregar os dados da empresa.
+            </p>
+          </div>
+        )}
 
-      <Card title="Segurança" description="Troque sua senha">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <div className="mb-1 text-sm font-medium text-slate-700">Senha atual</div>
-            <Input value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} type="password" />
-          </div>
-          <div>
-            <div className="mb-1 text-sm font-medium text-slate-700">Nova senha</div>
-            <Input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" />
-          </div>
-          <div>
-            <div className="mb-1 text-sm font-medium text-slate-700">Confirmar nova senha</div>
-            <Input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" />
-          </div>
-          <div className="md:col-span-2 flex items-center justify-end gap-2">
-            <Button
-              disabled={changePassword.isPending}
-              onClick={() => {
-                if (newPassword.trim().length < 8) {
-                  setPasswordError('A nova senha precisa ter pelo menos 8 caracteres.');
-                  return;
-                }
-                if (newPassword !== confirmPassword) {
-                  setPasswordError('A confirmação da senha não confere.');
-                  return;
-                }
-                setPasswordError(null);
-                changePassword.mutate(undefined, {
-                  onError: () => setPasswordError('Falha ao alterar senha. Verifique a senha atual.'),
-                });
-              }}
-            >
-              {changePassword.isPending ? 'Alterando...' : 'Alterar senha'}
-            </Button>
-          </div>
-          {(passwordError || changePassword.isSuccess) && (
-            <div
-              className={[
-                'md:col-span-2 rounded-md px-3 py-2 text-sm',
-                passwordError ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700',
-              ].join(' ')}
-            >
-              {passwordError ?? 'Senha alterada com sucesso.'}
+        {form && tenant.data && (
+          <form className="cfg__pilha" noValidate onSubmit={salvar} aria-labelledby="t-empresa">
+            <div className="cartao cfg__cartao">
+              <div className="cfg__topo">
+                <div>
+                  <h2 className="cartao__titulo" id="t-empresa">
+                    Dados da empresa
+                  </h2>
+                  <p className="cartao__sub">Aparecem para a equipe no painel. O nome fantasia também aparece na pesquisa.</p>
+                </div>
+              </div>
+
+              <div className="campo">
+                <label htmlFor="e-documento">
+                  CNPJ ou CPF <span className="opcional">(opcional)</span>
+                </label>
+                <input
+                  id="e-documento"
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="00.000.000/0000-00"
+                  aria-describedby="e-documento-dica"
+                  value={form.document}
+                  onChange={(e) => mudar('document', e.target.value)}
+                />
+                <p className="campo__dica" id="e-documento-dica">
+                  Ao salvar um CNPJ, buscamos a razão social e o nome fantasia nos dados públicos da Receita Federal
+                  (só preenchemos o que estiver vazio).
+                </p>
+              </div>
+
+              <div className="cfg__grade">
+                <div className="campo">
+                  <label htmlFor="e-fantasia">
+                    Nome fantasia <span className="obrigatorio" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    ref={fantasiaRef}
+                    id="e-fantasia"
+                    required
+                    aria-invalid={tentou && erros.tradeName}
+                    aria-describedby={descr('e-fantasia', false, true)}
+                    value={form.tradeName}
+                    onChange={(e) => mudar('tradeName', e.target.value)}
+                  />
+                  <p className="campo__erro" id="e-fantasia-erro" hidden={!(tentou && erros.tradeName)}>
+                    Escreva o nome fantasia.
+                  </p>
+                </div>
+                <div className="campo">
+                  <label htmlFor="e-razao">
+                    Razão social <span className="opcional">(opcional)</span>
+                  </label>
+                  <input id="e-razao" value={form.legalName} onChange={(e) => mudar('legalName', e.target.value)} />
+                </div>
+                <div className="campo">
+                  <label htmlFor="e-segmento">
+                    Segmento <span className="opcional">(opcional)</span>
+                  </label>
+                  <input
+                    id="e-segmento"
+                    list="cfg-segmentos"
+                    placeholder="Ex.: Restaurante"
+                    value={form.segment}
+                    onChange={(e) => mudar('segment', e.target.value)}
+                  />
+                  <datalist id="cfg-segmentos">
+                    {SEGMENTOS.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="campo">
+                  <label htmlFor="e-email">
+                    E-mail de contato <span className="opcional">(opcional)</span>
+                  </label>
+                  <input
+                    ref={emailRef}
+                    id="e-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="contato@suaempresa.com.br"
+                    aria-invalid={tentou && erros.email}
+                    aria-describedby={descr('e-email', false, true)}
+                    value={form.email}
+                    onChange={(e) => mudar('email', e.target.value)}
+                  />
+                  <p className="campo__erro" id="e-email-erro" hidden={!(tentou && erros.email)}>
+                    Confira o e-mail (ex.: contato@suaempresa.com.br).
+                  </p>
+                </div>
+                <div className="campo">
+                  <label htmlFor="e-telefone">
+                    Telefone <span className="opcional">(opcional)</span>
+                  </label>
+                  <input
+                    id="e-telefone"
+                    type="tel"
+                    autoComplete="tel"
+                    placeholder="(00) 00000-0000"
+                    value={form.phone}
+                    onChange={(e) => mudar('phone', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="cfg__fixo">
+                <span className="cfg__fixo-rotulo">Endereço do painel</span>
+                <strong>{enderecoPainel}</strong>
+                <span className="campo__dica">Definido no cadastro da conta. Não muda por aqui.</span>
+              </div>
             </div>
-          )}
-        </div>
-      </Card>
+
+            <div className="cartao cfg__cartao">
+              <div className="cfg__topo">
+                <div>
+                  <h2 className="cartao__titulo">Pesquisa e identidade visual</h2>
+                  <p className="cartao__sub">Cores usadas na pesquisa pública e a nota que abre reclamação.</p>
+                </div>
+              </div>
+              <div className="cfg__grade">
+                <CampoCor
+                  id="e-cor1"
+                  rotulo="Cor primária"
+                  valor={form.primaryColor}
+                  padrao="#0ea5e9"
+                  onChange={(v) => mudar('primaryColor', v)}
+                />
+                <CampoCor
+                  id="e-cor2"
+                  rotulo="Cor secundária"
+                  valor={form.secondaryColor}
+                  padrao="#0f172a"
+                  onChange={(v) => mudar('secondaryColor', v)}
+                />
+                <div className="campo">
+                  <label htmlFor="e-nota">Nota considerada ruim (1 a 10)</label>
+                  <input
+                    ref={notaRef}
+                    id="e-nota"
+                    inputMode="numeric"
+                    aria-invalid={tentou && erros.threshold}
+                    aria-describedby={descr('e-nota', true, true)}
+                    value={form.threshold}
+                    onChange={(e) => mudar('threshold', e.target.value)}
+                  />
+                  <p className="campo__dica" id="e-nota-dica">
+                    Notas até {badScoreThreshold} abrem reclamação na pesquisa pública e podem criar caso automaticamente.
+                  </p>
+                  <p className="campo__erro" id="e-nota-erro" hidden={!(tentou && erros.threshold)}>
+                    Use um número inteiro de 1 a 10.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="cfg__salvar">
+              <p className="cfg__salvar-status" role="status">
+                {status}
+              </p>
+              {alterado && (
+                <button
+                  className="btn btn--fantasma"
+                  type="button"
+                  disabled={updateTenant.isPending}
+                  onClick={() => {
+                    if (inicial) setForm(inicial);
+                    setAlterado(false);
+                    setTentou(false);
+                    setStatus('Alterações descartadas');
+                  }}
+                >
+                  Descartar alterações
+                </button>
+              )}
+              <button className="btn btn--primario" type="submit" disabled={updateTenant.isPending}>
+                {updateTenant.isPending ? 'Salvando…' : 'Salvar alterações'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+      {aviso}
+    </ConfigLayout>
+  );
+}
+
+function CampoCor(props: { id: string; rotulo: string; valor: string; padrao: string; onChange: (v: string) => void }) {
+  const { id, rotulo, valor, padrao, onChange } = props;
+  const valorSeletor = valor.trim() && corValida(valor.trim()) ? valor.trim() : padrao;
+  return (
+    <div className="campo">
+      <label htmlFor={id}>
+        {rotulo} <span className="opcional">(opcional)</span>
+      </label>
+      <div className="cfg-cor">
+        <input
+          type="color"
+          className="cfg-cor__seletor"
+          aria-label={`${rotulo}: escolher no seletor`}
+          value={valorSeletor}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <input id={id} value={valor} placeholder={`${padrao} (opcional)`} onChange={(e) => onChange(e.target.value)} />
+      </div>
     </div>
   );
 }

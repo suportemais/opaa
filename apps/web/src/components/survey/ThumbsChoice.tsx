@@ -1,36 +1,31 @@
+import { Icone } from '../painel/Icone';
+
 type Props = {
   value: 'up' | 'down' | null;
   onChange: (value: 'up' | 'down') => void;
+  labelledBy?: string;
 };
 
-export function ThumbsChoice({ value, onChange }: Props) {
+export function ThumbsChoice({ value, onChange, labelledBy }: Props) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="cli__polegares" role="group" aria-labelledby={labelledBy}>
       <button
         type="button"
-        aria-label="Polegar para cima"
-        className={[
-          'flex h-16 items-center justify-center rounded-md border text-3xl',
-          value === 'up'
-            ? 'border-sky-600 bg-sky-600 text-white'
-            : 'border-slate-200 bg-white hover:bg-slate-50',
-        ].join(' ')}
+        className="cli__opcao"
+        aria-label="Gostei"
+        aria-pressed={value === 'up'}
         onClick={() => onChange('up')}
       >
-        👍
+        <Icone nome="polegar" />
       </button>
       <button
         type="button"
-        aria-label="Polegar para baixo"
-        className={[
-          'flex h-16 items-center justify-center rounded-md border text-3xl',
-          value === 'down'
-            ? 'border-sky-600 bg-sky-600 text-white'
-            : 'border-slate-200 bg-white hover:bg-slate-50',
-        ].join(' ')}
+        className="cli__opcao"
+        aria-label="Não gostei"
+        aria-pressed={value === 'down'}
         onClick={() => onChange('down')}
       >
-        👎
+        <Icone nome="polegar" />
       </button>
     </div>
   );
