@@ -1,222 +1,243 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { Button } from '../ui/Button';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { setAccessToken } from '../../lib/auth-store';
 import { apiFetch } from '../../lib/api';
 import { TenantBillingPrompts } from '../billing/TenantBillingPrompts';
 import { BillingBlockedScreen } from '../billing/BillingBlockedScreen';
 import { useBillingReturn } from '../../lib/billing';
 import type { TenantBilling } from '../../lib/billing-access';
-
-type AuthMe = {
-  name: string;
-  permissionCodes: string[];
-};
+import { Icone, type NomeIcone } from '../painel/Icone';
+import { iniciais, nomePerfil, useAuthMe, useTemaPainel } from '../painel/usePainel';
+import { primeiraTelaDeConfiguracoes } from '../painel/ConfigTabs';
 
 type TenantMe = {
+  tradeName?: string | null;
+  legalName?: string | null;
   billing?: TenantBilling;
 };
 
+type CasesSummary = { due?: { overdue?: number } };
+
+type ItemMenu = { to: string; rotulo: string; icone: NomeIcone; end?: boolean; ativoEm?: string[]; selo?: number };
+
+// Rotas de Configurações (o item do menu fica ativo em todas)
+const ROTAS_CONFIG = ['/app/company', '/app/units', '/app/employees', '/app/users', '/app/integracoes', '/app/conta'];
+
 export function AppShell() {
   const navigate = useNavigate();
-  const me = useQuery({ queryKey: ['authMe'], queryFn: () => apiFetch<AuthMe>('/auth/me') });
+  const location = useLocation();
+  const me = useAuthMe();
   const tenant = useQuery({
     queryKey: ['tenantMe'],
-    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ billing: undefined })),
+    queryFn: () => apiFetch<TenantMe>('/tenant/me').catch(() => ({ billing: undefined }) as TenantMe),
     staleTime: 60 * 1000,
   });
-
+  const { escuro, alternar } = useTemaPainel();
   const [billingNotice, dismissBillingNotice] = useBillingReturn();
 
   const permissionCodes = me.data?.permissionCodes ?? [];
-  const canManageTenant = permissionCodes.includes('tenant:settings:manage');
-  const canManageUsers = permissionCodes.includes('user:manage');
-  const canManageUnits = permissionCodes.includes('unit:manage');
-  const canReadUnits = permissionCodes.includes('unit:read') || canManageUnits;
-  const canReadEmployees = permissionCodes.includes('employee:read') || permissionCodes.includes('employee:manage');
-  const canManageEmployees = permissionCodes.includes('employee:manage') || canManageUnits;
+  const pode = (c: string) => permissionCodes.includes(c);
+  const canManageTenant = pode('tenant:settings:manage');
+  const canManageFeedback = pode('feedback:manage');
 
-  const location = useLocation();
-  const settingsActive = [
-    '/app/company',
-    '/app/units',
-    '/app/employees',
-    '/app/users',
-    '/app/integracoes',
-  ].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  // Selo de vencidas no item Feedbacks: só para quem trata ocorrências
+  const casos = useQuery({
+    queryKey: ['shellCasesSummary'],
+    queryFn: () => apiFetch<CasesSummary>('/metrics/cases/summary'),
+    enabled: canManageFeedback,
+    staleTime: 60 * 1000,
+  });
+  const vencidas = canManageFeedback ? (casos.data?.due?.overdue ?? 0) : 0;
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const grupos: { titulo?: string; itens: ItemMenu[] }[] = [
+    {
+      titulo: 'Visão geral',
+      itens: [
+        { to: '/app', rotulo: 'Dashboard', icone: 'dashboard', end: true },
+        { to: '/app/ranking', rotulo: 'Ranking', icone: 'ranking' },
+      ],
+    },
+    {
+      titulo: 'Atendimento',
+      itens: [
+        { to: '/app/feedbacks', rotulo: 'Feedbacks', icone: 'feedbacks', selo: vencidas },
+        ...(canManageTenant ? [{ to: '/app/whistleblower', rotulo: 'Denúncias', icone: 'denuncias' as const }] : []),
+      ],
+    },
+    {
+      titulo: 'Pesquisa e clientes',
+      itens: [
+        { to: '/app/surveys', rotulo: 'Pesquisas', icone: 'pesquisas' },
+        { to: '/app/customers', rotulo: 'Clientes', icone: 'clientes' },
+        { to: '/app/premios', rotulo: 'Prêmios', icone: 'premios' },
+      ],
+    },
+    {
+      itens: [
+        {
+          to: primeiraTelaDeConfiguracoes(permissionCodes),
+          rotulo: 'Configurações',
+          icone: 'config',
+          ativoEm: ROTAS_CONFIG,
+        },
+      ],
+    },
+  ];
 
+  const ativo = (item: ItemMenu) => {
+    const p = location.pathname;
+    if (item.ativoEm) return item.ativoEm.some((r) => p === r || p.startsWith(`${r}/`));
+    if (item.end) return p === item.to || p === `${item.to}/`;
+    return p === item.to || p.startsWith(`${item.to}/`);
+  };
+
+  // Menu lateral no celular
+  const [menuAberto, setMenuAberto] = useState(false);
+  const botaoAbrir = useRef<HTMLButtonElement>(null);
+  useEffect(() => setMenuAberto(false), [location.pathname]);
   useEffect(() => {
-    if (!settingsOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      if (!target.closest('[data-settings-menu]')) setSettingsOpen(false);
+    if (!menuAberto) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuAberto(false);
     };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [settingsOpen]);
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [menuAberto]);
 
-  const navClass = (isActive: boolean) =>
-    [
-      'rounded-md px-3 py-2 text-sm',
-      isActive ? 'bg-slate-100 font-medium text-slate-900' : 'text-slate-600 hover:bg-slate-50',
-    ].join(' ');
+  const sair = () => {
+    setAccessToken(null);
+    navigate('/login');
+  };
+
+  const nome = me.data?.name ?? '';
+  const empresa = tenant.data?.tradeName || tenant.data?.legalName || '';
 
   return (
-    <div className="flex h-full flex-col bg-opiina-bg text-opiina-navy">
-      <header className="bg-white">
-        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 md:flex-nowrap md:px-8">
-          <Link to="/app" className="inline-flex shrink-0 items-center gap-2">
-            <img
-              src="/icon-opiina.png"
-              alt="Opiina"
-              className="h-9 w-9 drop-shadow-sm"
-              onError={(e) => {
-                const el = e.currentTarget;
-                if (el.src.endsWith('/favicon.svg')) return;
-                el.src = '/favicon.svg';
-              }}
-            />
+    <div className="painel" data-tema={escuro ? 'escuro' : undefined}>
+      <a className="pular" href="#conteudo">
+        Pular para o conteúdo
+      </a>
+      <div className="app">
+        <header className="barra-movel" inert={menuAberto || undefined}>
+          <button
+            ref={botaoAbrir}
+            className="botao-icone"
+            type="button"
+            aria-label="Abrir menu"
+            aria-expanded={menuAberto}
+            aria-controls="menu-lateral"
+            onClick={() => setMenuAberto(true)}
+          >
+            <Icone nome="menu" />
+          </button>
+          <Link className="marca" to="/app">
+            <img src="/site/icons/logo-opiina-256.png" alt="" width={256} height={256} />
+            Opiina
           </Link>
+        </header>
 
-          <nav className="order-last flex w-full flex-wrap items-center gap-1 md:order-none md:w-auto md:flex-1">
-            <NavLink to="/app" end className={({ isActive }) => navClass(isActive)}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/app/ranking" className={({ isActive }) => navClass(isActive)}>
-              Ranking
-            </NavLink>
-            <NavLink to="/app/surveys" className={({ isActive }) => navClass(isActive)}>
-              Pesquisas
-            </NavLink>
-            <NavLink to="/app/premios" className={({ isActive }) => navClass(isActive)}>
-              Prêmios
-            </NavLink>
-            <NavLink to="/app/customers" className={({ isActive }) => navClass(isActive)}>
-              Clientes
-            </NavLink>
-            {canManageTenant && (
-              <NavLink to="/app/whistleblower" className={({ isActive }) => navClass(isActive)}>
-                Denúncias
-              </NavLink>
-            )}
-            <NavLink to="/app/feedbacks" className={({ isActive }) => navClass(isActive)}>
-              Feedbacks
-            </NavLink>
-            <NavLink to="/app/feedbacks/kanban" className={({ isActive }) => navClass(isActive)}>
-              Kanban
-            </NavLink>
-          </nav>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="relative" data-settings-menu>
-              <button
-                type="button"
-                className={[
-                  'inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium',
-                  settingsActive
-                    ? 'border-slate-200 bg-slate-100 font-medium text-slate-900'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                ].join(' ')}
-                onClick={() => setSettingsOpen((v) => !v)}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" />
-                  <path d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1l-.4-2.6H9.1L8.7 7a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 13a7.9 7.9 0 0 0-.1 1c0 .3 0 .7.1 1l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1l.4 2.6h5.8l.4-2.6a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z" />
-                </svg>
-                <span>Configurações</span>
-              </button>
-
-              {settingsOpen && (
-                <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
-                  <div className="px-3 py-2 text-xs font-medium text-slate-500">Cadastro</div>
-                  {canManageTenant && (
-                    <NavLink
-                      to="/app/company"
-                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
-                      onClick={() => setSettingsOpen(false)}
-                    >
-                      Empresa
-                    </NavLink>
-                  )}
-                  {canReadUnits && (
-                    <NavLink
-                      to="/app/units"
-                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
-                      onClick={() => setSettingsOpen(false)}
-                    >
-                      Unidades
-                    </NavLink>
-                  )}
-                  {(canManageEmployees || canReadEmployees) && (
-                    <NavLink
-                      to="/app/employees"
-                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
-                      onClick={() => setSettingsOpen(false)}
-                    >
-                      Atendentes
-                    </NavLink>
-                  )}
-                  {canManageUsers && (
-                    <NavLink
-                      to="/app/users"
-                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
-                      onClick={() => setSettingsOpen(false)}
-                    >
-                      Usuários
-                    </NavLink>
-                  )}
-                  {canManageTenant && (
-                    <NavLink
-                      to="/app/integracoes"
-                      className={({ isActive }) => ['block px-3 py-2 text-sm', isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'].join(' ')}
-                      onClick={() => setSettingsOpen(false)}
-                    >
-                      Integrações
-                    </NavLink>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <Button
-              variant="secondary"
+        <aside
+          className="lateral"
+          id="menu-lateral"
+          aria-label="Menu do painel"
+          data-aberto={menuAberto ? '' : undefined}
+        >
+          <div className="lateral__topo">
+            <Link className="marca" to="/app">
+              <img src="/site/icons/logo-opiina-256.png" alt="" width={256} height={256} />
+              Opiina
+            </Link>
+            <button
+              className="botao-icone lateral__fechar"
+              type="button"
+              aria-label="Fechar menu"
               onClick={() => {
-                setAccessToken(null);
-                navigate('/login');
+                setMenuAberto(false);
+                botaoAbrir.current?.focus();
               }}
             >
-              Sair
-            </Button>
+              <Icone nome="fechar" />
+            </button>
           </div>
-        </div>
-        <div className="h-0.5 bg-gradient-to-r from-opiina-cyan to-opiina-violet" />
-      </header>
+          {empresa && <span className="marca__empresa">{empresa}</span>}
 
-      <main className="flex-1 overflow-auto">
-        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-4 md:p-8">
-          <TenantBillingPrompts
-            billing={tenant.data?.billing}
-            canManage={canManageTenant}
-            notice={billingNotice}
-            onDismissNotice={dismissBillingNotice}
-          />
-          {tenant.data?.billing?.accessBlocked ? (
-            <BillingBlockedScreen billing={tenant.data.billing} canManage={canManageTenant} />
-          ) : (
-            <Outlet />
-          )}
-          <footer className="border-t border-slate-200 pt-6 text-center text-xs text-slate-500">
-            Desenvolvido por{' '}
-            <a className="text-sky-700 hover:underline" href="https://devmais.com" target="_blank" rel="noreferrer">
-              Dev+
-            </a>
-          </footer>
-        </div>
-      </main>
+          <nav className="nav" aria-label="Principal">
+            {grupos.map((g, i) => (
+              <div className="nav__grupo" key={g.titulo ?? i}>
+                {g.titulo && <p className="nav__titulo">{g.titulo}</p>}
+                {g.itens.map((item) => (
+                  <Link
+                    key={item.rotulo}
+                    to={item.to}
+                    className="nav__item"
+                    aria-current={ativo(item) ? 'page' : undefined}
+                  >
+                    <Icone nome={item.icone} />
+                    {item.rotulo}
+                    {!!item.selo && (
+                      <span className="nav__selo">
+                        <span aria-hidden="true">{item.selo}</span>
+                        <span className="visualmente-oculto">
+                          , {item.selo} {item.selo === 1 ? 'vencida' : 'vencidas'}
+                        </span>
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </nav>
+
+          <button className="tema" type="button" aria-pressed={escuro} onClick={alternar}>
+            <span className="tema__icone" aria-hidden="true">
+              <Icone nome={escuro ? 'sol' : 'lua'} />
+            </span>
+            Modo escuro
+            <span className="tema__chave" aria-hidden="true" />
+          </button>
+
+          <div className="conta">
+            <span className="avatar" aria-hidden="true">
+              {iniciais(nome)}
+            </span>
+            <Link className="conta__texto" to="/app/conta" title="Minha conta">
+              <span className="conta__nome">{nome}</span>
+              <span className="conta__perfil">{nomePerfil(me.data)}</span>
+            </Link>
+            <button className="conta__sair" type="button" aria-label="Sair" title="Sair" onClick={sair}>
+              <Icone nome="sair" />
+            </button>
+          </div>
+        </aside>
+        <div className="lateral-fundo" onClick={() => setMenuAberto(false)} />
+
+        <main className="principal" id="conteudo" inert={menuAberto || undefined}>
+          <div className="principal__conteudo">
+            <TenantBillingPrompts
+              billing={tenant.data?.billing}
+              canManage={canManageTenant}
+              notice={billingNotice}
+              onDismissNotice={dismissBillingNotice}
+            />
+            {tenant.data?.billing?.accessBlocked ? (
+              <BillingBlockedScreen billing={tenant.data.billing} canManage={canManageTenant} />
+            ) : (
+              <Outlet />
+            )}
+            <footer className="rodape-painel">
+              Desenvolvido por{' '}
+              <a href="https://devmais.com" target="_blank" rel="noreferrer">
+                Dev+
+              </a>
+            </footer>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
