@@ -285,6 +285,24 @@ describe('BillingService checkout', () => {
     );
   });
 
+  it('sends the onboarding checkout back to the tenant login, even when signing up on the root domain', async () => {
+    const { service, stripe } = setup([baseTenant()]);
+    jest.spyOn(stripe.customers, 'create').mockResolvedValue({ id: 'cus_new' } as any);
+    const sessions = jest
+      .spyOn(stripe.checkout.sessions, 'create')
+      .mockResolvedValue({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' } as any);
+
+    const result = await service.createOnboardingCheckoutSession('tenant-1', 'user-1', 'plano-pro', {
+      headers: { origin: 'https://opiina.test' },
+    } as any);
+
+    expect(result).toEqual({ url: 'https://checkout.stripe.test/cs_1' });
+    expect(sessions.mock.calls[0][0]).toMatchObject({
+      success_url: 'https://acme.opiina.test/login?billing=success',
+      cancel_url: 'https://acme.opiina.test/login?billing=cancelled',
+    });
+  });
+
   it('falls back to the tenant subdomain of APP_BASE_URL for foreign origins', () => {
     const { service } = setup([baseTenant()]);
     expect(service.tenantAppUrl('acme', { headers: { origin: 'https://evil.example' } } as any)).toBe(

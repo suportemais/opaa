@@ -320,6 +320,29 @@
 .site .demo__foto { overflow: hidden; border-radius: 22px; background: var(--bg-suave); }
 .site .demo__foto img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
 
+/* Canal de denúncias */
+.site .denuncia { display: grid; grid-template-columns: 5fr 6fr; align-items: center; gap: 56px; }
+.site .denuncia__texto .sub { margin-bottom: 28px; }
+.site .denuncia__rotulo { margin-bottom: 10px; color: var(--texto); font-size: 14px; font-weight: 600; }
+.site .denuncia__categorias { display: flex; flex-wrap: wrap; gap: 8px; }
+.site .denuncia__categorias li { padding: 6px 12px; border: 1px solid var(--linha); border-radius: 999px; background: var(--bg-suave); color: var(--mudo); font-size: 14px; font-weight: 500; }
+.site .denuncia__lista { display: grid; gap: 12px; }
+.site .denuncia__item {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 22px 24px;
+  border: 1px solid var(--linha);
+  border-radius: 14px;
+  background: #fff;
+  transition: border-color .35s, transform .35s var(--suave), box-shadow .35s;
+}
+.site .denuncia__item:hover { border-color: rgba(28, 123, 255, .5); transform: translateY(-4px); box-shadow: 0 18px 40px -22px rgba(28, 123, 255, .5); }
+.site .denuncia__item svg {
+  flex: none; width: 44px; height: 44px; padding: 10px;
+  border-radius: 10px; background: var(--grad);
+  fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.site .denuncia__item h3 { margin-bottom: 4px; font-size: 18px; }
+.site .denuncia__item p { color: var(--mudo); font-size: 15px; line-height: 1.55; }
 
 /* Benefícios */
 .site .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -508,7 +531,7 @@
 }
 
 @media (max-width: 1099px) {
-  .site .demo { grid-template-columns: 1fr; gap: 40px; }
+  .site .demo, .site .denuncia { grid-template-columns: 1fr; gap: 40px; }
 }
 
 @media (max-width: 900px) {
@@ -1016,14 +1039,48 @@
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+/* Aviso no login depois do pagamento na Stripe */
+.site .formulario__aviso {
+  margin-top: 20px;
+  padding: 12px 14px;
+  border: 1px solid rgba(28, 123, 255, .2);
+  border-radius: 12px;
+  background: #EAF2FF;
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 500;
+}
+.site .formulario__aviso--ok { border-color: rgba(22, 163, 74, .25); background: #F0FDF4; color: #166534; }
 /* Botão enquanto envia */
 .site .btn:disabled { opacity: .6; cursor: progress; }
 .site .btn:disabled::after { display: none; }
 /* Cadastro concluído */
-.site .onb__resultado { display: grid; gap: 10px; margin: 28px 0; }
-.site .onb__resultado > div { padding: 14px 16px; border-radius: 12px; background: var(--bg-suave); }
-.site .onb__resultado dt { color: var(--mudo); font-size: 13px; font-weight: 500; }
-.site .onb__resultado dd { margin-top: 2px; color: var(--texto); font-weight: 600; overflow-wrap: anywhere; }
+/* Sucesso (depois de "Criar conta") */
+.site .onb__sucesso { display: grid; gap: 20px; animation: onb-entra .45s cubic-bezier(.16, 1, .3, 1); }
+.site .onb__sucesso .modal__icone { margin-bottom: 0; }
+.site .onb__sucesso .login__titulo:focus { outline: none; }
+.site .onb__sucesso .login__sub { margin-top: -10px; }
+.site .onb__resumo { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--linha); border-radius: 14px; background: var(--linha); }
+.site .onb__resumo div { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 14px 18px; background: var(--bg-suave); }
+.site .onb__resumo dt { color: var(--mudo); font-size: 14px; }
+.site .onb__resumo dd { color: var(--texto); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .site .onb__resumo div { grid-template-columns: 1fr; gap: 2px; } }
+.site .onb__passos-titulo { font-size: 17px; font-weight: 600; }
+.site .onb__passos { display: grid; gap: 10px; margin-top: -8px; counter-reset: passo; }
+.site .onb__passos li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; color: var(--mudo); font-size: 15px; line-height: 1.5; counter-increment: passo; }
+.site .onb__passos li::before {
+  content: counter(passo);
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 50%; background: var(--grad); color: #fff; font-size: 13px; font-weight: 600;
+}
+.site .onb__passos strong { color: var(--texto); font-weight: 600; }
+.site .onb__pagar { display: grid; gap: 10px; margin-top: 4px; }
+.site .onb__pagar .btn { gap: 10px; }
+.site .onb__pagar .btn[aria-disabled] { opacity: .7; pointer-events: none; }
+.site .onb__pagar .btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.site .onb__pagar-nota { color: var(--mudo); font-size: 14px; text-align: center; }
+@keyframes onb-entra { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { .site .onb__sucesso { animation: none; } }
 /* Campos lado a lado alinhados pelo topo: a mensagem de erro de um não empurra o vizinho */
 .site .campos-2 { align-items: start; }
 /* Linha do teste grátis nos cards de plano (dias vêm do plano cadastrado) */

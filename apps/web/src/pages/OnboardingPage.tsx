@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
@@ -6,7 +6,14 @@ import { FALLBACK_PUBLIC_PLANS, formatPlanPrice, type PublicPlan } from '../lib/
 import { CreditoDev, Marca, Selo, SpriteBrilho } from '../components/site/SiteBits';
 import { planoEmDestaque, usePublicPlans } from '../components/site/site-utils';
 
-type Result = { tenantId: string; tenantSlug: string; adminUserId: string; unitId: string };
+type Result = {
+  tenantId: string;
+  tenantSlug: string;
+  adminUserId: string;
+  unitId: string;
+  /** Checkout da Stripe do plano escolhido; null quando a Stripe está fora ou o plano não tem preço. */
+  checkoutUrl?: string | null;
+};
 
 function slugify(value: string) {
   const raw = (value ?? '').trim();
@@ -145,7 +152,6 @@ export function OnboardingPage() {
         },
       });
       setResult(created);
-      window.scrollTo({ top: 0 });
     } catch (err) {
       if (err instanceof ApiError) {
         const msg =
@@ -182,40 +188,23 @@ export function OnboardingPage() {
         <main className="login__principal onb__principal" id="conteudo">
           <div className="onb__topo">
             <Marca className="login__marca-mobile" />
-            <p className="onb__entrar">
-              Já tem conta? <Link to="/login">Entrar</Link>
-            </p>
+            {!result && (
+              <p className="onb__entrar">
+                Já tem conta? <Link to="/login">Entrar</Link>
+              </p>
+            )}
           </div>
 
           {result ? (
-            <div className="login__cartao onb__cartao">
-              <h1 className="login__titulo">Conta criada</h1>
-              <p className="login__sub">Acesse pelo endereço do painel da sua empresa.</p>
-              <dl className="onb__resultado">
-                <div>
-                  <dt>Endereço do painel</dt>
-                  <dd>
-                    https://{result.tenantSlug}.{baseDomain}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Administrador</dt>
-                  <dd>{adminEmail}</dd>
-                </div>
-              </dl>
-              <div className="onb__acoes">
-                <button
-                  className="btn btn--solido btn--grande"
-                  type="button"
-                  onClick={() => {
-                    const protocol = window.location.protocol || 'https:';
-                    window.location.href = `${protocol}//${result.tenantSlug}.${baseDomain}/login`;
-                  }}
-                >
-                  Ir para login
-                </button>
-              </div>
-            </div>
+            <ContaCriada
+              result={result}
+              baseDomain={baseDomain}
+              plan={selectedPlan}
+              adminName={adminName}
+              adminEmail={adminEmail}
+              empresa={tradeName || legalName}
+              unitName={unitName}
+            />
           ) : (
             <div className="login__cartao onb__cartao">
               <h1 className="login__titulo">Crie sua conta</h1>
@@ -513,6 +502,126 @@ export function OnboardingPage() {
           <CreditoDev mobile />
         </main>
       </div>
+    </div>
+  );
+}
+
+/** Sucesso depois de "Criar conta": resumo, próximos passos e o pagamento na Stripe (ou o login). */
+function ContaCriada({
+  result,
+  baseDomain,
+  plan,
+  adminName,
+  adminEmail,
+  empresa,
+  unitName,
+}: {
+  result: Result;
+  baseDomain: string;
+  plan: PublicPlan | null;
+  adminName: string;
+  adminEmail: string;
+  empresa: string;
+  unitName: string;
+}) {
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+  const [indoPagar, setIndoPagar] = useState(false);
+  const protocol = typeof window !== 'undefined' ? window.location.protocol || 'https:' : 'https:';
+  const enderecoPainel = `${protocol}//${result.tenantSlug}.${baseDomain}`;
+  const checkoutUrl = result.checkoutUrl ?? null;
+  // Mesma regra da API: dias de teste do plano, ou 14.
+  const diasTeste = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 14;
+  const nome = adminName.trim().split(/\s+/)[0];
+
+  useEffect(() => {
+    const anterior = document.title;
+    document.title = 'Conta criada — Opiina';
+    window.scrollTo({ top: 0 });
+    tituloRef.current?.focus();
+    return () => {
+      document.title = anterior;
+    };
+  }, []);
+
+  return (
+    <div className="login__cartao onb__cartao onb__sucesso">
+      <span className="modal__icone modal__icone--ok" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </span>
+      <h1 className="login__titulo" tabIndex={-1} ref={tituloRef}>
+        Conta criada!
+      </h1>
+      <p className="login__sub">
+        {nome ? `${nome}, a` : 'A'} conta{empresa.trim() ? ` de ${empresa.trim()}` : ''} no Opiina foi criada.{' '}
+        {checkoutUrl
+          ? `Você tem ${diasTeste} dias de teste grátis: cadastre o pagamento agora e a cobrança só começa quando o teste acabar.`
+          : `Você tem ${diasTeste} dias de teste grátis.`}
+      </p>
+
+      <dl className="onb__resumo">
+        {plan && (
+          <div>
+            <dt>Plano</dt>
+            <dd>
+              {plan.name} · {formatPlanPrice(plan.priceCents, plan.currency)} por mês
+            </dd>
+          </div>
+        )}
+        <div>
+          <dt>Endereço do painel</dt>
+          <dd>{enderecoPainel}</dd>
+        </div>
+        <div>
+          <dt>E-mail de acesso</dt>
+          <dd>{adminEmail}</dd>
+        </div>
+        <div>
+          <dt>Primeira unidade</dt>
+          <dd>{unitName.trim() || 'Unidade 1'}</dd>
+        </div>
+      </dl>
+
+      <h2 className="onb__passos-titulo">Próximos passos</h2>
+      <ol className="onb__passos">
+        {checkoutUrl && (
+          <li>
+            <span>
+              <strong>Cadastre o pagamento na Stripe.</strong> Você sai desta página e vai para a página de pagamento. A
+              primeira cobrança só acontece depois dos {diasTeste} dias de teste.
+            </span>
+          </li>
+        )}
+        <li>Entre no painel com o e-mail e a senha que você acabou de criar.</li>
+        <li>Monte a primeira pesquisa NPS da unidade.</li>
+      </ol>
+
+      {checkoutUrl ? (
+        <div className="onb__pagar">
+          <a
+            className="btn btn--solido btn--grande btn--largo"
+            href={checkoutUrl}
+            aria-disabled={indoPagar || undefined}
+            onClick={() => setIndoPagar(true)}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+              <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+            </svg>
+            {indoPagar ? 'Abrindo a Stripe...' : 'Ir para o pagamento'}
+          </a>
+          <p className="onb__pagar-nota">
+            O pagamento é feito na página da <strong>Stripe</strong>.
+          </p>
+        </div>
+      ) : (
+        <div className="onb__pagar">
+          <a className="btn btn--solido btn--grande btn--largo" href={`${enderecoPainel}/login`}>
+            Ir para login
+          </a>
+        </div>
+      )}
     </div>
   );
 }

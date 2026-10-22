@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
 import { setAccessToken, setTenantId } from '../lib/auth-store';
@@ -24,6 +24,9 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [tentouEnviar, setTentouEnviar] = useState(false);
   const [recuperacaoAberta, setRecuperacaoAberta] = useState(false);
+  // Volta da Stripe logo depois do cadastro (?billing=success|cancelled); o webhook confirma a assinatura.
+  const [searchParams] = useSearchParams();
+  const retornoPagamento = searchParams.get('billing');
 
   const emailRef = useRef<HTMLInputElement>(null);
   const senhaRef = useRef<HTMLInputElement>(null);
@@ -124,6 +127,16 @@ export function LoginPage() {
           <div className="login__cartao">
             <h1 className="login__titulo">Entrar</h1>
             <p className="login__sub">Acesse o painel</p>
+            {retornoPagamento === 'success' && (
+              <p className="formulario__aviso formulario__aviso--ok" role="status">
+                Pagamento cadastrado. Entre com o e-mail e a senha que você criou.
+              </p>
+            )}
+            {retornoPagamento === 'cancelled' && (
+              <p className="formulario__aviso" role="status">
+                Pagamento não concluído. Você pode assinar depois, pelo painel, durante o teste grátis.
+              </p>
+            )}
 
             <form className="formulario" noValidate onSubmit={onSubmit}>
               {isRootDomain ? (

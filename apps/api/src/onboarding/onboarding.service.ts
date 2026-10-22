@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,8 @@ import { RbacService } from '../rbac/rbac.service';
 import { normalizeEmail } from '../common/normalize';
 import { AuditService } from '../audit/audit.service';
 import { normalizeBrDocument } from '../common/br-document';
+import { BillingService } from '../billing/billing.service';
+import { StripeService } from '../billing/stripe.service';
 import type { Request } from 'express';
 import type { CreateTenantDto } from './dto/create-tenant.dto';
 
@@ -22,10 +24,14 @@ function slugify(value: string) {
 
 @Injectable()
 export class OnboardingService {
+  private readonly logger = new Logger(OnboardingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rbac: RbacService,
     private readonly audit: AuditService,
+    private readonly billing: BillingService,
+    private readonly stripe: StripeService,
   ) {}
 
   async createTenant(dto: CreateTenantDto, req?: Request) {
@@ -134,7 +140,10 @@ export class OnboardingService {
           };
         });
 
-        return result;
+        const checkoutUrl = plan
+          ? await this.checkoutUrl(result, dto.planSlug, req)
+          : null;
+        return { ...result, checkoutUrl };
       } catch (e) {
         if (
           e instanceof Prisma.PrismaClientKnownRequestError &&
@@ -149,5 +158,31 @@ export class OnboardingService {
     }
 
     throw new ConflictException('Subdomínio indisponível.');
+  }
+
+  /**
+   * Link do Checkout da Stripe para a tela de sucesso. A conta já existe: se a
+   * Stripe estiver fora ou o plano não tiver preço, a tela oferece o login.
+   */
+  private async checkoutUrl(
+    created: { tenantId: string; adminUserId: string },
+    planSlug: string | undefined,
+    req?: Request,
+  ): Promise<string | null> {
+    if (!this.stripe.isConfigured()) return null;
+    try {
+      const { url } = await this.billing.createOnboardingCheckoutSession(
+        created.tenantId,
+        created.adminUserId,
+        planSlug,
+        req,
+      );
+      return url;
+    } catch (e) {
+      this.logger.warn(
+        `Checkout do cadastro indisponível (${created.tenantId}): ${(e as Error).message}`,
+      );
+      return null;
+    }
   }
 }

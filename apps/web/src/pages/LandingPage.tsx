@@ -39,6 +39,7 @@ function Landing() {
         <Demo />
         <Beneficios />
         <ComoFunciona />
+        <CanalDenuncias />
         <ParaQuem />
         <Planos />
         <Duvidas />
@@ -53,6 +54,7 @@ function Landing() {
         <nav className="rodape__nav" aria-label="Rodapé">
           <a href="#beneficios">Benefícios</a>
           <a href="#como-funciona">Como funciona</a>
+          <a href="#denuncias">Denúncias</a>
           <a href="#planos">Planos</a>
           <a href="#duvidas">Dúvidas</a>
           <Link to="/login">Entrar</Link>
@@ -136,6 +138,7 @@ function Cabecalho() {
       >
         <a href="#beneficios">Benefícios</a>
         <a href="#como-funciona">Como funciona</a>
+        <a href="#denuncias">Denúncias</a>
         <a href="#planos">Planos</a>
         <a href="#duvidas">Dúvidas</a>
         <Link className="nav__entrar" to="/login">
@@ -379,6 +382,101 @@ function ComoFunciona() {
             </li>
           ))}
         </ol>
+      </div>
+    </section>
+  );
+}
+
+// Exemplos das 16 categorias de WhistleblowerCategory e das etapas de WhistleblowerStatus.
+const CATEGORIAS_DENUNCIA = [
+  'Assédio moral',
+  'Assédio sexual',
+  'Discriminação',
+  'Racismo',
+  'Fraude',
+  'Segurança do trabalho',
+  'LGPD e privacidade',
+  'Conduta inadequada',
+];
+
+const ITENS_DENUNCIA = [
+  {
+    icone: 'd-anonimo',
+    titulo: 'Anônimo ou com nome',
+    texto: 'Quem relata escolhe se quer se identificar.',
+  },
+  {
+    icone: 'd-qr',
+    titulo: 'Link e QR Code por unidade',
+    texto: 'Fácil de divulgar no mural, no vestiário ou no grupo da equipe.',
+  },
+  {
+    icone: 'd-protocolo',
+    titulo: 'Protocolo para cada relato',
+    texto: 'Cada denúncia ganha um número próprio e fica registrada.',
+  },
+  {
+    icone: 'd-etapas',
+    titulo: 'Acompanhamento até a conclusão',
+    texto:
+      'Situação e prioridade em cada caso: recebida, em análise, em investigação, aguardando informações, concluída.',
+  },
+];
+
+function CanalDenuncias() {
+  return (
+    <section className="sec" id="denuncias" aria-labelledby="denuncias-titulo">
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
+        <defs>
+          <symbol id="d-anonimo" viewBox="0 0 24 24">
+            <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+            <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5M12 14.5v2" />
+          </symbol>
+          <symbol id="d-qr" viewBox="0 0 24 24">
+            <rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1" />
+            <rect x="14" y="3.5" width="6.5" height="6.5" rx="1" />
+            <rect x="3.5" y="14" width="6.5" height="6.5" rx="1" />
+            <path d="M14 14h2.5v2.5H14zM18 18h2.5v2.5H18zM18 14h2.5M14 18v2.5" />
+          </symbol>
+          <symbol id="d-protocolo" viewBox="0 0 24 24">
+            <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z" />
+            <path d="M14 3.5v4h4M9 12h6M9 15.5h4" />
+          </symbol>
+          <symbol id="d-etapas" viewBox="0 0 24 24">
+            <path d="M4 6.5l1.8 1.8L9 5M4 12.5l1.8 1.8L9 11M12.5 7h7.5M12.5 13h7.5M12.5 19h7.5M4.5 18.5h4" />
+          </symbol>
+        </defs>
+      </svg>
+      <div className="sec__in denuncia">
+        <div className="denuncia__texto">
+          <span className="tag revelar">Canal de denúncias</span>
+          <h2 className="revelar" id="denuncias-titulo">
+            Um canal pra equipe <em>relatar o que vê</em>
+          </h2>
+          <p className="sub revelar">
+            Cada unidade tem um link só pra isso, separado da pesquisa de clientes. A equipe relata o que acontece no
+            trabalho, e a gestão acompanha cada caso no painel. Canal alinhado às obrigações trabalhistas.
+          </p>
+          <p className="denuncia__rotulo revelar">16 categorias, entre elas:</p>
+          <ul className="denuncia__categorias revelar" aria-label="Exemplos de categorias">
+            {CATEGORIAS_DENUNCIA.map((categoria) => (
+              <li key={categoria}>{categoria}</li>
+            ))}
+          </ul>
+        </div>
+        <ul className="denuncia__lista">
+          {ITENS_DENUNCIA.map((item, i) => (
+            <li key={item.icone} className="denuncia__item revelar" style={i ? atraso(i * 0.08) : undefined}>
+              <svg aria-hidden="true">
+                <use href={`#${item.icone}`} />
+              </svg>
+              <div>
+                <h3>{item.titulo}</h3>
+                <p>{item.texto}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

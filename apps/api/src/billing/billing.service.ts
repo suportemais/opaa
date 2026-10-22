@@ -67,8 +67,39 @@ export class BillingService {
   // ---------------------------------------------------------------- checkout
 
   async createCheckoutSession(user: AuthUser, planSlug: string | undefined, req?: Request) {
+    const appUrl = (slug: string) => this.tenantAppUrl(slug, req);
+    return this.startCheckout(user.tenantId, user.userId, planSlug, req, (slug) => ({
+      success_url: `${appUrl(slug)}/app/company?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl(slug)}/app/company?billing=cancelled`,
+    }));
+  }
+
+  /**
+   * Checkout aberto logo depois do cadastro, ainda sem sessão no painel. A Stripe
+   * devolve para o login do subdomínio; o webhook sincroniza a assinatura.
+   */
+  async createOnboardingCheckoutSession(
+    tenantId: string,
+    adminUserId: string,
+    planSlug: string | undefined,
+    req?: Request,
+  ) {
+    const appUrl = (slug: string) => this.tenantAppUrl(slug, req, { forceSubdomain: true });
+    return this.startCheckout(tenantId, adminUserId, planSlug, req, (slug) => ({
+      success_url: `${appUrl(slug)}/login?billing=success`,
+      cancel_url: `${appUrl(slug)}/login?billing=cancelled`,
+    }));
+  }
+
+  private async startCheckout(
+    tenantId: string,
+    actorUserId: string,
+    planSlug: string | undefined,
+    req: Request | undefined,
+    returnUrls: (slug: string) => { success_url: string; cancel_url: string },
+  ) {
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
-      where: { id: user.tenantId },
+      where: { id: tenantId },
       include: { plan: true },
     });
     if (tenant.isPlatform) throw new ForbiddenException('platform_tenant');
@@ -101,7 +132,6 @@ export class BillingService {
         ? Math.floor(tenant.trialEndsAt.getTime() / 1000)
         : undefined;
 
-    const appUrl = this.tenantAppUrl(tenant.slug, req);
     const metadata = { tenantId: tenant.id, planId: plan.id, planSlug: plan.slug };
 
     const session = await stripe.checkout.sessions.create({
@@ -117,14 +147,13 @@ export class BillingService {
       allow_promotion_codes: true,
       billing_address_collection: 'auto',
       locale: 'pt-BR',
-      success_url: `${appUrl}/app/company?billing=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/app/company?billing=cancelled`,
+      ...returnUrls(tenant.slug),
     });
 
     await this.audit.log({
       tenantId: tenant.id,
       actorType: 'user',
-      actorUserId: user.userId,
+      actorUserId,
       action: 'billing.checkout_started',
       entity: 'Tenant',
       entityId: tenant.id,
@@ -420,14 +449,20 @@ export class BillingService {
   }
 
   /** URL do painel do tenant, para onde a Stripe devolve o usuário. */
-  tenantAppUrl(slug: string, req?: Request) {
+  tenantAppUrl(slug: string, req?: Request, opts: { forceSubdomain?: boolean } = {}) {
     const base = baseDomain();
     const origin = typeof req?.headers?.origin === 'string' ? req.headers.origin : '';
     if (origin && base) {
       try {
         const url = new URL(origin);
         const host = url.hostname.toLowerCase();
-        if (host === `${slug}.${base}` || host === base) return url.origin;
+        if (host === `${slug}.${base}`) return url.origin;
+        if (host === base) {
+          // O cadastro roda no domínio raiz, mas o login da empresa fica no subdomínio.
+          if (!opts.forceSubdomain) return url.origin;
+          url.hostname = `${slug}.${base}`;
+          return url.origin;
+        }
       } catch {}
     }
 
