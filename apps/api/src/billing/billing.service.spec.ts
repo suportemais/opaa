@@ -298,7 +298,7 @@ describe('BillingService checkout', () => {
 
     expect(result).toEqual({ url: 'https://checkout.stripe.test/cs_1' });
     expect(sessions.mock.calls[0][0]).toMatchObject({
-      success_url: 'https://acme.opiina.test/login?billing=success',
+      success_url: 'https://acme.opiina.test/login?billing=success&plan=plano-pro&session_id={CHECKOUT_SESSION_ID}',
       cancel_url: 'https://acme.opiina.test/login?billing=cancelled',
     });
   });

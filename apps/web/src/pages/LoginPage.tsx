@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
 import { setAccessToken, setTenantId } from '../lib/auth-store';
 import { isPlatformOperator } from '../lib/billing-access';
+import { trackMetaEvent } from '../lib/metaPixelEvents';
+import { usePublicPlans } from '../components/site/site-utils';
 import { CreditoDev, Marca, Selo, SpriteBrilho } from '../components/site/SiteBits';
 import { RecuperarSenhaModal } from '../components/site/RecuperarSenhaModal';
 
@@ -27,6 +29,7 @@ export function LoginPage() {
   // Volta da Stripe logo depois do cadastro (?billing=success|cancelled); o webhook confirma a assinatura.
   const [searchParams] = useSearchParams();
   const retornoPagamento = searchParams.get('billing');
+  usePixelInicioTeste(retornoPagamento === 'success', searchParams.get('plan'), searchParams.get('session_id'));
 
   const emailRef = useRef<HTMLInputElement>(null);
   const senhaRef = useRef<HTMLInputElement>(null);
@@ -265,4 +268,26 @@ export function LoginPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Conversão do Meta Pixel na volta da Stripe: o cartão foi cadastrado e o teste grátis começou
+ * (a cobrança só vem no fim dele). Espera os planos para mandar o valor; um evento por sessão do Checkout.
+ */
+function usePixelInicioTeste(ativo: boolean, planSlug: string | null, sessionId: string | null) {
+  const { plans } = usePublicPlans();
+  const enviado = useRef(false);
+
+  useEffect(() => {
+    if (!ativo || !plans || enviado.current) return;
+    enviado.current = true;
+    const chave = sessionId ? `opiina:pixel-start-trial:${sessionId}` : null;
+    try {
+      if (chave && sessionStorage.getItem(chave)) return;
+      if (chave) sessionStorage.setItem(chave, '1');
+    } catch {}
+    const plan = plans.find((p) => p.slug === planSlug);
+    const valor = plan ? { content_name: plan.name, value: plan.priceCents / 100, currency: plan.currency } : undefined;
+    trackMetaEvent('StartTrial', valor, sessionId ?? undefined);
+  }, [ativo, plans, planSlug, sessionId]);
 }

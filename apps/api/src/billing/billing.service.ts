@@ -76,7 +76,8 @@ export class BillingService {
 
   /**
    * Checkout aberto logo depois do cadastro, ainda sem sessão no painel. A Stripe
-   * devolve para o login do subdomínio; o webhook sincroniza a assinatura.
+   * devolve para o login do subdomínio; o webhook sincroniza a assinatura. O plano
+   * e a sessão no retorno servem ao evento de conversão do Meta Pixel.
    */
   async createOnboardingCheckoutSession(
     tenantId: string,
@@ -85,8 +86,8 @@ export class BillingService {
     req?: Request,
   ) {
     const appUrl = (slug: string) => this.tenantAppUrl(slug, req, { forceSubdomain: true });
-    return this.startCheckout(tenantId, adminUserId, planSlug, req, (slug) => ({
-      success_url: `${appUrl(slug)}/login?billing=success`,
+    return this.startCheckout(tenantId, adminUserId, planSlug, req, (slug, plan) => ({
+      success_url: `${appUrl(slug)}/login?billing=success&plan=${encodeURIComponent(plan)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl(slug)}/login?billing=cancelled`,
     }));
   }
@@ -96,7 +97,7 @@ export class BillingService {
     actorUserId: string,
     planSlug: string | undefined,
     req: Request | undefined,
-    returnUrls: (slug: string) => { success_url: string; cancel_url: string },
+    returnUrls: (slug: string, planSlug: string) => { success_url: string; cancel_url: string },
   ) {
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
@@ -147,7 +148,7 @@ export class BillingService {
       allow_promotion_codes: true,
       billing_address_collection: 'auto',
       locale: 'pt-BR',
-      ...returnUrls(tenant.slug),
+      ...returnUrls(tenant.slug, plan.slug),
     });
 
     await this.audit.log({
