@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../lib/api';
 import { env } from '../lib/env';
+import { trackMetaEvent } from '../lib/metaPixelEvents';
 import { FALLBACK_PUBLIC_PLANS, formatPlanPrice, type PublicPlan } from '../lib/public-plans';
 import { CreditoDev, Marca, Selo, SpriteBrilho } from '../components/site/SiteBits';
 import { planoEmDestaque, usePublicPlans } from '../components/site/site-utils';
@@ -532,6 +533,17 @@ function ContaCriada({
   // Mesma regra da API: dias de teste do plano, ou 14.
   const diasTeste = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 14;
   const nome = adminName.trim().split(/\s+/)[0];
+  const pixelPlano = plan
+    ? { content_name: plan.name, value: plan.priceCents / 100, currency: plan.currency }
+    : undefined;
+  // Um evento por conta criada, mesmo com o efeito rodando duas vezes no StrictMode.
+  const cadastroRegistrado = useRef(false);
+
+  useEffect(() => {
+    if (cadastroRegistrado.current) return;
+    cadastroRegistrado.current = true;
+    trackMetaEvent('CompleteRegistration', pixelPlano);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const anterior = document.title;
@@ -603,7 +615,10 @@ function ContaCriada({
             className="btn btn--solido btn--grande btn--largo"
             href={checkoutUrl}
             aria-disabled={indoPagar || undefined}
-            onClick={() => setIndoPagar(true)}
+            onClick={() => {
+              if (!indoPagar) trackMetaEvent('InitiateCheckout', pixelPlano);
+              setIndoPagar(true);
+            }}
           >
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
