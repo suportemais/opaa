@@ -203,7 +203,7 @@ function Topo() {
               </Link>
             </div>
             <p className="fino surgir s-suave" style={atraso(0.9)}>
-              Teste grátis por 14 dias. Sem cartão. · <a href="#como-funciona">Ver como funciona</a>
+              <a href="#como-funciona">Ver como funciona</a>
             </p>
           </div>
         </section>
@@ -611,10 +611,6 @@ const DUVIDAS = [
   {
     q: 'Serve pra uma casa só ou pra rede?',
     a: 'Os dois. Start e Pro são para uma unidade. Redes cobre todas as unidades, com métricas por casa.',
-  },
-  {
-    q: 'Tem teste grátis?',
-    a: 'Sim. São 14 dias grátis, sem cartão: escolha o plano, crie a conta e comece a usar.',
   },
   { q: 'Preciso treinar a equipe toda?', a: 'Não. O fluxo é o de sempre: pergunta, vê a nota, trata a ocorrência.' },
 ];

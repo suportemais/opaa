@@ -1,7 +1,6 @@
 export const PLAN_SECTION_TITLE = 'Planos pra sua operação';
 export const PLAN_SECTION_SUBTITLE =
   'Preços claros pra rede e restaurante. Sem surpresa na fatura.';
-export const PLAN_TRIAL_LABEL = 'Teste grátis por 14 dias';
 export const PLAN_CTA_LABEL = 'Assinar';
 
 export type PlanFeature = {
@@ -58,7 +57,7 @@ export const OPIINA_PLANS: PlanCatalogItem[] = [
     amountCents: 14700,
     currency: 'BRL',
     billingInterval: 'MONTH',
-    trialDays: 14,
+    trialDays: 0,
     features: [
       { key: 'nps', label: 'Pesquisa NPS', included: true },
       { key: 'occurrences', label: 'Ocorrências', included: true },
@@ -81,7 +80,7 @@ export const OPIINA_PLANS: PlanCatalogItem[] = [
     amountCents: 29700,
     currency: 'BRL',
     billingInterval: 'MONTH',
-    trialDays: 14,
+    trialDays: 0,
     features: [
       { key: 'nps', label: 'Pesquisa NPS', included: true },
       { key: 'occurrences', label: 'Ocorrências', included: true },
@@ -107,7 +106,7 @@ export const OPIINA_PLANS: PlanCatalogItem[] = [
     amountCents: 69700,
     currency: 'BRL',
     billingInterval: 'MONTH',
-    trialDays: 14,
+    trialDays: 0,
     features: [
       { key: 'nps', label: 'Pesquisa NPS', included: true },
       { key: 'occurrences', label: 'Ocorrências', included: true },
@@ -261,7 +260,7 @@ export function toPublicPlan(row: {
         ? row.shortDescription.trim()
         : null,
     features: normalizeFeatures(row.features),
-    trialDays: asInt(row.trialDays, 14),
+    trialDays: asInt(row.trialDays, 0),
     ctaLabel:
       typeof row.ctaLabel === 'string' && row.ctaLabel.trim()
         ? row.ctaLabel.trim()

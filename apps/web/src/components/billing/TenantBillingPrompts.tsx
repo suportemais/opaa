@@ -59,11 +59,14 @@ export function TenantBillingPrompts(props: {
     const days = daysUntil(billing.trialEndsAt);
     body = (
       <Banner tone="info" testId="stripe-trial-hint">
-        <span>
-          Você está no período de teste
-          {days !== null && <> — {days === 0 ? 'termina hoje' : `faltam ${days} ${days === 1 ? 'dia' : 'dias'}`}</>}.
-          {' '}Assine para continuar usando sem interrupção; a cobrança só começa quando o teste acabar.
-        </span>
+        {days ? (
+          <span>
+            Você está no período de teste — faltam {days} {days === 1 ? 'dia' : 'dias'}.
+            {' '}Assine para continuar usando sem interrupção; a cobrança só começa quando o teste acabar.
+          </span>
+        ) : (
+          <span>Sua assinatura ainda não está ativa. Assine para ativar o plano.</span>
+        )}
         {canManage && (
           <Button onClick={() => redirect.startCheckout()} disabled={redirect.pending}>
             Assinar agora

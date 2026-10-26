@@ -76,7 +76,7 @@ export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
     currency: 'BRL',
     features: ['Pesquisa NPS', 'Ocorrências', '1 unidade'],
     ctaLabel: 'Assinar',
-    trialDays: 14,
+    trialDays: 0,
     sortOrder: 1,
   },
   {
@@ -88,7 +88,7 @@ export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
     currency: 'BRL',
     features: ['Pesquisa NPS', 'Ocorrências', 'Dashboard', 'Kanban de atendimento', '5 usuários', '1 unidade'],
     ctaLabel: 'Assinar',
-    trialDays: 14,
+    trialDays: 0,
     sortOrder: 2,
   },
   {
@@ -108,7 +108,7 @@ export const FALLBACK_PUBLIC_PLANS: PublicPlan[] = [
       '20 usuários',
     ],
     ctaLabel: 'Assinar',
-    trialDays: 14,
+    trialDays: 0,
     sortOrder: 3,
   },
 ];

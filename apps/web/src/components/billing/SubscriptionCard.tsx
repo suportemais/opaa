@@ -61,6 +61,8 @@ export function SubscriptionCard() {
   }
 
   const trialDays = data.status === 'trial' ? daysUntil(data.trialEndsAt) : null;
+  // Conta criada sem teste grátis: fica em "trial" até a Stripe ativar a assinatura.
+  const emTeste = Boolean(trialDays);
 
   return (
     <section className="cartao cfg__cartao" aria-labelledby="t-assinatura">
@@ -99,15 +101,15 @@ export function SubscriptionCard() {
         <div>
           <dt>Situação</dt>
           <dd>
-            {STATUS_LABELS[data.status] ?? data.status}
+            {data.status === 'trial' && !emTeste ? 'Aguardando assinatura' : (STATUS_LABELS[data.status] ?? data.status)}
             {data.cancelAtPeriodEnd && ' · cancelamento agendado'}
           </dd>
         </div>
         <div>
-          <dt>{data.status === 'trial' ? 'Teste até' : 'Próxima renovação'}</dt>
+          <dt>{emTeste ? 'Teste até' : 'Próxima renovação'}</dt>
           <dd>
-            {data.status === 'trial' ? fmt(data.trialEndsAt) : fmt(data.currentPeriodEnd)}
-            {trialDays !== null && <span className="mudo"> ({trialDays} {trialDays === 1 ? 'dia' : 'dias'})</span>}
+            {emTeste ? fmt(data.trialEndsAt) : fmt(data.currentPeriodEnd)}
+            {emTeste && <span className="mudo"> ({trialDays} {trialDays === 1 ? 'dia' : 'dias'})</span>}
           </dd>
         </div>
       </dl>

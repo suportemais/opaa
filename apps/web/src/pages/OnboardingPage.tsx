@@ -530,8 +530,8 @@ function ContaCriada({
   const protocol = typeof window !== 'undefined' ? window.location.protocol || 'https:' : 'https:';
   const enderecoPainel = `${protocol}//${result.tenantSlug}.${baseDomain}`;
   const checkoutUrl = result.checkoutUrl ?? null;
-  // Mesma regra da API: dias de teste do plano, ou 14.
-  const diasTeste = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 14;
+  // Mesma regra da API: dias de teste só se o plano tiver; hoje nenhum tem.
+  const diasTeste = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 0;
   const nome = adminName.trim().split(/\s+/)[0];
   const pixelPlano = plan
     ? { content_name: plan.name, value: plan.priceCents / 100, currency: plan.currency }
@@ -567,9 +567,13 @@ function ContaCriada({
       </h1>
       <p className="login__sub">
         {nome ? `${nome}, a` : 'A'} conta{empresa.trim() ? ` de ${empresa.trim()}` : ''} no Opiina foi criada.{' '}
-        {checkoutUrl
-          ? `Você tem ${diasTeste} dias de teste grátis: cadastre o pagamento agora e a cobrança só começa quando o teste acabar.`
-          : `Você tem ${diasTeste} dias de teste grátis.`}
+        {diasTeste > 0
+          ? checkoutUrl
+            ? `Você tem ${diasTeste} dias de teste grátis: cadastre o pagamento agora e a cobrança só começa quando o teste acabar.`
+            : `Você tem ${diasTeste} dias de teste grátis.`
+          : checkoutUrl
+            ? 'Agora é só cadastrar o pagamento para ativar a assinatura.'
+            : ''}
       </p>
 
       <dl className="onb__resumo">
@@ -600,8 +604,8 @@ function ContaCriada({
         {checkoutUrl && (
           <li>
             <span>
-              <strong>Cadastre o pagamento na Stripe.</strong> Você sai desta página e vai para a página de pagamento. A
-              primeira cobrança só acontece depois dos {diasTeste} dias de teste.
+              <strong>Cadastre o pagamento na Stripe.</strong> Você sai desta página e vai para a página de pagamento.
+              {diasTeste > 0 && ` A primeira cobrança só acontece depois dos ${diasTeste} dias de teste.`}
             </span>
           </li>
         )}

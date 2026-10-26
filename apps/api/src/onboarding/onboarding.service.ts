@@ -48,7 +48,8 @@ export class OnboardingService {
           select: { id: true, trialDays: true },
         })
       : null;
-    const trialDays = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 14;
+    // Sem teste grátis: a conta fica pendente até a assinatura na Stripe ser ativada.
+    const trialDays = plan?.trialDays && plan.trialDays > 0 ? plan.trialDays : 0;
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const suffix =

@@ -1196,7 +1196,7 @@ model Plan {
   amountCents       Int
   currency          String   @default("BRL")
   billingInterval   String   @default("MONTH")
-  trialDays         Int      @default(14)
+  trialDays         Int      @default(0)
   features          Json
   maxUnits          Int?
   maxUsers          Int?

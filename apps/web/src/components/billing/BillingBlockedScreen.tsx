@@ -4,8 +4,8 @@ import { Button } from '../ui/Button';
 
 const TITLES: Record<string, { title: string; text: string }> = {
   trial_expired: {
-    title: 'Seu período de teste terminou',
-    text: 'Assine um plano para continuar acessando pesquisas, feedbacks e relatórios. Seus dados estão guardados.',
+    title: 'Sua assinatura ainda não está ativa',
+    text: 'Assine um plano para acessar pesquisas, feedbacks e relatórios. Seus dados estão guardados.',
   },
   subscription_cancelled: {
     title: 'Sua assinatura foi encerrada',

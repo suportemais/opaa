@@ -137,7 +137,7 @@ export function LoginPage() {
             )}
             {retornoPagamento === 'cancelled' && (
               <p className="formulario__aviso" role="status">
-                Pagamento não concluído. Você pode assinar depois, pelo painel, durante o teste grátis.
+                Pagamento não concluído. Você pode assinar depois, pelo painel.
               </p>
             )}
 
@@ -271,8 +271,7 @@ export function LoginPage() {
 }
 
 /**
- * Conversão do Meta Pixel na volta da Stripe: o cartão foi cadastrado e o teste grátis começou
- * (a cobrança só vem no fim dele). Espera os planos para mandar o valor; um evento por sessão do Checkout.
+ * Conversão do Meta Pixel na volta da Stripe: o pagamento foi cadastrado e a assinatura começou. Espera os planos para mandar o valor; um evento por sessão do Checkout.
  */
 function usePixelInicioTeste(ativo: boolean, planSlug: string | null, sessionId: string | null) {
   const { plans } = usePublicPlans();
